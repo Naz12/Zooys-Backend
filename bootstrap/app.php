@@ -18,6 +18,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // ✅ Aliases
         $middleware->alias([
             'check.usage' => \App\Http\Middleware\CheckUsageLimit::class,
+            'admin.auth' => \App\Http\Middleware\AdminAuth::class,
+            'admin.session' => \App\Http\Middleware\AdminSession::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

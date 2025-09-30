@@ -69,4 +69,55 @@ class PlanController extends Controller
             'message' => 'Plan deleted!'
         ]);
     }
+
+    public function show(Plan $plan)
+    {
+        return response()->json($plan);
+    }
+
+    public function activate(Plan $plan)
+    {
+        $plan->update(['is_active' => true]);
+        
+        return response()->json([
+            'message' => 'Plan activated successfully',
+            'plan' => $plan
+        ]);
+    }
+
+    public function deactivate(Plan $plan)
+    {
+        $plan->update(['is_active' => false]);
+        
+        return response()->json([
+            'message' => 'Plan deactivated successfully',
+            'plan' => $plan
+        ]);
+    }
+
+    public function subscriptions(Plan $plan)
+    {
+        $subscriptions = $plan->subscriptions()->with('user')->get();
+        
+        return response()->json([
+            'plan' => $plan,
+            'subscriptions' => $subscriptions
+        ]);
+    }
+
+    public function analytics(Plan $plan)
+    {
+        $totalSubscriptions = $plan->subscriptions()->count();
+        $activeSubscriptions = $plan->subscriptions()->where('active', true)->count();
+        $revenue = $plan->subscriptions()->where('active', true)->count() * $plan->price;
+        
+        return response()->json([
+            'plan' => $plan,
+            'analytics' => [
+                'total_subscriptions' => $totalSubscriptions,
+                'active_subscriptions' => $activeSubscriptions,
+                'revenue' => $revenue
+            ]
+        ]);
+    }
 }

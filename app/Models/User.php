@@ -22,6 +22,10 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'is_active',
+        'status',
+        'suspended_at',
+        'suspension_reason',
     ];
 
     /**

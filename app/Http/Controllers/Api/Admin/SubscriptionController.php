@@ -80,4 +80,161 @@ class SubscriptionController extends Controller
             'message' => 'Subscription deleted!'
         ]);
     }
+
+    public function show(Subscription $subscription)
+    {
+        return response()->json($subscription->load(['user', 'plan']));
+    }
+
+    public function activate(Subscription $subscription)
+    {
+        $subscription->update(['active' => true]);
+        
+        return response()->json([
+            'message' => 'Subscription activated successfully',
+            'subscription' => $subscription->load(['user', 'plan'])
+        ]);
+    }
+
+    public function pause(Subscription $subscription)
+    {
+        $subscription->update(['active' => false]);
+        
+        return response()->json([
+            'message' => 'Subscription paused successfully',
+            'subscription' => $subscription->load(['user', 'plan'])
+        ]);
+    }
+
+    public function resume(Subscription $subscription)
+    {
+        $subscription->update(['active' => true]);
+        
+        return response()->json([
+            'message' => 'Subscription resumed successfully',
+            'subscription' => $subscription->load(['user', 'plan'])
+        ]);
+    }
+
+    public function cancel(Subscription $subscription)
+    {
+        $subscription->update(['active' => false]);
+        
+        return response()->json([
+            'message' => 'Subscription cancelled successfully',
+            'subscription' => $subscription->load(['user', 'plan'])
+        ]);
+    }
+
+    public function upgrade(Request $request, Subscription $subscription)
+    {
+        $request->validate([
+            'plan_id' => 'required|exists:plans,id'
+        ]);
+
+        $subscription->update(['plan_id' => $request->plan_id]);
+        
+        return response()->json([
+            'message' => 'Subscription upgraded successfully',
+            'subscription' => $subscription->load(['user', 'plan'])
+        ]);
+    }
+
+    public function downgrade(Request $request, Subscription $subscription)
+    {
+        $request->validate([
+            'plan_id' => 'required|exists:plans,id'
+        ]);
+
+        $subscription->update(['plan_id' => $request->plan_id]);
+        
+        return response()->json([
+            'message' => 'Subscription downgraded successfully',
+            'subscription' => $subscription->load(['user', 'plan'])
+        ]);
+    }
+
+    public function analytics()
+    {
+        $totalSubscriptions = Subscription::count();
+        $activeSubscriptions = Subscription::where('active', true)->count();
+        $inactiveSubscriptions = Subscription::where('active', false)->count();
+        
+        $subscriptionsByPlan = Subscription::with('plan')
+            ->selectRaw('plan_id, COUNT(*) as count')
+            ->groupBy('plan_id')
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'plan_name' => $item->plan->name,
+                    'count' => $item->count
+                ];
+            });
+
+        return response()->json([
+            'analytics' => [
+                'total_subscriptions' => $totalSubscriptions,
+                'active_subscriptions' => $activeSubscriptions,
+                'inactive_subscriptions' => $inactiveSubscriptions,
+                'subscriptions_by_plan' => $subscriptionsByPlan
+            ]
+        ]);
+    }
+
+    public function revenue()
+    {
+        $revenue = Subscription::with('plan')
+            ->where('active', true)
+            ->get()
+            ->sum(function ($subscription) {
+                return $subscription->plan->price ?? 0;
+            });
+
+        return response()->json([
+            'revenue' => [
+                'total_revenue' => $revenue,
+                'currency' => 'USD'
+            ]
+        ]);
+    }
+
+    public function churn()
+    {
+        $totalSubscriptions = Subscription::count();
+        $cancelledSubscriptions = Subscription::where('active', false)->count();
+        $churnRate = $totalSubscriptions > 0 ? ($cancelledSubscriptions / $totalSubscriptions) * 100 : 0;
+
+        return response()->json([
+            'churn' => [
+                'churn_rate' => round($churnRate, 2),
+                'total_subscriptions' => $totalSubscriptions,
+                'cancelled_subscriptions' => $cancelledSubscriptions
+            ]
+        ]);
+    }
+
+    public function conversion()
+    {
+        $totalUsers = User::count();
+        $usersWithSubscriptions = User::whereHas('subscription')->count();
+        $conversionRate = $totalUsers > 0 ? ($usersWithSubscriptions / $totalUsers) * 100 : 0;
+
+        return response()->json([
+            'conversion' => [
+                'conversion_rate' => round($conversionRate, 2),
+                'total_users' => $totalUsers,
+                'users_with_subscriptions' => $usersWithSubscriptions
+            ]
+        ]);
+    }
+
+    public function export()
+    {
+        $subscriptions = Subscription::with(['user', 'plan'])->get();
+        
+        return response()->json([
+            'subscriptions' => $subscriptions,
+            'message' => 'Subscription data exported successfully'
+        ]);
+    }
 }
