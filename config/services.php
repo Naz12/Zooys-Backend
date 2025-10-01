@@ -40,5 +40,16 @@ return [
         'webhook_secret' => env('STRIPE_WEBHOOK_SECRET'),
     ],
 
+    'openai' => [
+        'api_key' => env('OPENAI_API_KEY'),
+        'url' => env('OPENAI_URL', 'https://api.openai.com/v1/chat/completions'),
+        'model' => env('OPENAI_MODEL', 'gpt-3.5-turbo'),
+        'max_tokens' => env('OPENAI_MAX_TOKENS', 1000),
+        'temperature' => env('OPENAI_TEMPERATURE', 0.7),
+    ],
+
+    'youtube' => [
+        'api_key' => env('YOUTUBE_API_KEY'),
+    ],
 
 ];

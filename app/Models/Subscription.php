@@ -32,4 +32,9 @@ class Subscription extends Model
     {
         return $this->belongsTo(Plan::class);
     }
+
+    public function histories()
+    {
+        return $this->hasMany(History::class, 'user_id', 'user_id');
+    }
 }

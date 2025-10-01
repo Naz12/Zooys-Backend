@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\Client\WriterController;
 use App\Http\Controllers\Api\Client\MathController;
 use App\Http\Controllers\Api\Client\FlashcardController;
 use App\Http\Controllers\Api\Client\DiagramController;
+use App\Http\Controllers\Api\Client\ChatController;
 
 // Admin Controllers
 use App\Http\Controllers\Api\Admin\AdminAuthController;
@@ -52,6 +53,10 @@ Route::middleware(['auth:sanctum', 'check.usage'])->group(function () {
     Route::post('/math/solve', [MathController::class, 'solve']);
     Route::post('/flashcards/generate', [FlashcardController::class, 'generate']);
     Route::post('/diagram/generate', [DiagramController::class, 'generate']);
+    
+    // AI Chat
+    Route::post('/chat', [ChatController::class, 'chat']);
+    Route::get('/chat/history', [ChatController::class, 'history']);
 });
 
 // 🔹 Admin Authentication (Public)

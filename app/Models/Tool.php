@@ -6,21 +6,16 @@ use Illuminate\Database\Eloquent\Model;
 
 class Tool extends Model
 {
-    //
+    protected $fillable = [
+        'name',
+        'slug',
+        'enabled',
+        'created_at',
+        'updated_at'
+    ];
+
     public function histories()
-{
-    return $this->hasMany(History::class);
-}
-
-public function tool()
-{
-    return $this->belongsTo(Tool::class);
-}
-
-public function user()
-{
-    return $this->belongsTo(User::class);
-}
-
-
+    {
+        return $this->hasMany(History::class);
+    }
 }
