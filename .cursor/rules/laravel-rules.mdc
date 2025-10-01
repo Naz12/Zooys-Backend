@@ -1,0 +1,26 @@
+---
+alwaysApply: true
+---
+Use Laravel’s MVC structure properly: keep controllers thin, move business logic to services.
+
+Always validate requests with Form Request classes.
+
+Use Resource classes (API Resources) for consistent JSON responses.
+
+Centralize common logic in Services, Traits, or Helpers instead of duplicating.
+
+Handle errors gracefully with custom exceptions + error response format.
+
+Always return proper HTTP status codes with messages.
+
+Secure environment variables with .env (never hardcode secrets).
+
+Optimize database queries: use Eloquent relationships, eager loading, pagination.
+
+Add logging with Laravel’s logger for important actions and errors.
+
+Write tests for controllers, services, and critical features (e.g., auth, payments, business logic).
+
+Use queues/events for long-running tasks instead of blocking requests.
+
+Follow Laravel coding style (PSR-12, naming conventions).

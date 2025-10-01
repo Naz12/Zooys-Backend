@@ -1,0 +1,12 @@
+---
+alwaysApply: true
+---
+Search for existing code before creating new functions or components.
+Refactor duplicated code into reusable components, hooks, or utilities.
+Follow consistent file/folder naming conventions.
+Keep solutions simple — avoid overengineering.
+Ensure proper error handling in all async logic (try/catch, error boundaries, logging).
+Always provide meaningful loading states for async actions.
+Validate inputs on both client and server.
+Avoid unnecessary dependencies — solve with the chosen stack first.
+Write lightweight tests for critical business logic and APIs.

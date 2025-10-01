@@ -27,9 +27,14 @@ class PlanController extends Controller
         $data = $request->validate([
             'name' => 'required|string|max:255',
             'price' => 'required|numeric|min:0',
-            'interval' => 'required|string',
+            'currency' => 'nullable|string|max:10',
+            'limit' => 'nullable|integer|min:0',
             'is_active' => 'boolean',
         ]);
+
+        // Set default values
+        $data['currency'] = $data['currency'] ?? 'USD';
+        $data['is_active'] = $data['is_active'] ?? true;
 
         $plan = Plan::create($data);
 
@@ -49,7 +54,8 @@ class PlanController extends Controller
         $data = $request->validate([
             'name' => 'required|string|max:255',
             'price' => 'required|numeric|min:0',
-            'interval' => 'required|string',
+            'currency' => 'nullable|string|max:10',
+            'limit' => 'nullable|integer|min:0',
             'is_active' => 'boolean',
         ]);
 

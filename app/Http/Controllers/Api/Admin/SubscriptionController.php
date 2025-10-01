@@ -33,8 +33,17 @@ class SubscriptionController extends Controller
         $data = $request->validate([
             'user_id' => 'required|exists:users,id',
             'plan_id' => 'required|exists:plans,id',
-            'active'  => 'boolean',
+            'stripe_id' => 'nullable|string',
+            'stripe_customer_id' => 'nullable|string',
+            'active' => 'boolean',
+            'starts_at' => 'nullable|date',
+            'ends_at' => 'nullable|date',
         ]);
+
+        // Set default values
+        $data['active'] = $data['active'] ?? true;
+        $data['starts_at'] = $data['starts_at'] ?? now();
+        $data['ends_at'] = $data['ends_at'] ?? now()->addMonth();
 
         $subscription = Subscription::create($data);
 
@@ -61,7 +70,11 @@ class SubscriptionController extends Controller
         $data = $request->validate([
             'user_id' => 'required|exists:users,id',
             'plan_id' => 'required|exists:plans,id',
-            'active'  => 'boolean',
+            'stripe_id' => 'nullable|string',
+            'stripe_customer_id' => 'nullable|string',
+            'active' => 'boolean',
+            'starts_at' => 'nullable|date',
+            'ends_at' => 'nullable|date',
         ]);
 
         $subscription->update($data);
