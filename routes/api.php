@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\Client\MathController;
 use App\Http\Controllers\Api\Client\FlashcardController;
 use App\Http\Controllers\Api\Client\DiagramController;
 use App\Http\Controllers\Api\Client\ChatController;
+use App\Http\Controllers\Api\Client\SummarizeController;
 
 // Admin Controllers
 use App\Http\Controllers\Api\Admin\AdminAuthController;
@@ -57,6 +58,11 @@ Route::middleware(['auth:sanctum', 'check.usage'])->group(function () {
     // AI Chat
     Route::post('/chat', [ChatController::class, 'chat']);
     Route::get('/chat/history', [ChatController::class, 'history']);
+    
+    // Content Summarization
+    Route::post('/summarize', [SummarizeController::class, 'summarize']);
+    Route::post('/summarize/upload', [SummarizeController::class, 'uploadFile']);
+    Route::get('/summarize/upload/{uploadId}/status', [SummarizeController::class, 'getUploadStatus']);
 });
 
 // 🔹 Admin Authentication (Public)
