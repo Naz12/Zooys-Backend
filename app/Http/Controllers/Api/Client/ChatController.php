@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api\Client;
 use App\Http\Controllers\Controller;
 use App\Models\History;
 use App\Models\Tool;
+use App\Models\ChatSession;
+use App\Models\ChatMessage;
 use App\Services\OpenAIService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -28,6 +30,7 @@ class ChatController extends Controller
             // Validate request
             $validator = Validator::make($request->all(), [
                 'message' => 'required|string|max:4000',
+                'session_id' => 'nullable|exists:chat_sessions,id',
                 'conversation_history' => 'array',
                 'conversation_history.*.role' => 'required|string|in:user,assistant',
                 'conversation_history.*.content' => 'required|string',
@@ -45,10 +48,16 @@ class ChatController extends Controller
 
             $user = $request->user();
             $message = $request->input('message');
+            $sessionId = $request->input('session_id');
             $conversationHistory = $request->input('conversation_history', []);
             $model = $request->input('model', 'gpt-3.5-turbo');
             $temperature = $request->input('temperature', 0.7);
             $maxTokens = $request->input('max_tokens', 1000);
+
+            // Handle session-based chat
+            if ($sessionId) {
+                return $this->handleSessionChat($user, $sessionId, $message, $conversationHistory, $model, $temperature, $maxTokens);
+            }
 
             // Get or create AI Chat tool
             $tool = Tool::firstOrCreate(
@@ -170,6 +179,134 @@ class ChatController extends Controller
         } catch (\Exception $e) {
             Log::error('Failed to store chat history: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Handle session-based chat
+     */
+    private function handleSessionChat($user, $sessionId, $message, $conversationHistory, $model, $temperature, $maxTokens)
+    {
+        try {
+            // Verify session belongs to user
+            $session = ChatSession::forUser($user->id)->find($sessionId);
+            if (!$session) {
+                return response()->json([
+                    'error' => 'Chat session not found'
+                ], 404);
+            }
+
+            // Store user message
+            $userMessage = ChatMessage::create([
+                'session_id' => $sessionId,
+                'role' => 'user',
+                'content' => $message,
+                'metadata' => [
+                    'tokens_used' => 0,
+                    'processing_time' => null
+                ]
+            ]);
+
+            // Build conversation messages
+            $messages = $this->buildConversationMessages($message, $conversationHistory);
+
+            // Generate AI response
+            $startTime = microtime(true);
+            $aiResponse = $this->generateAIResponse($messages, $model, $temperature, $maxTokens);
+            $processingTime = round((microtime(true) - $startTime) * 1000) / 1000;
+
+            if (!$aiResponse) {
+                return response()->json([
+                    'error' => 'Unable to generate response at this time'
+                ], 500);
+            }
+
+            // Store AI response
+            $aiMessage = ChatMessage::create([
+                'session_id' => $sessionId,
+                'role' => 'assistant',
+                'content' => $aiResponse,
+                'metadata' => [
+                    'tokens_used' => $this->estimateTokens($aiResponse),
+                    'processing_time' => $processingTime . 's'
+                ]
+            ]);
+
+            // Update session name if this is the first message
+            if ($session->messages()->count() <= 2) { // User + AI message
+                $newName = $session->generateNameFromMessage($message);
+                if ($newName !== $session->name) {
+                    $session->update(['name' => $newName]);
+                }
+            }
+
+            return response()->json([
+                'response' => $aiResponse,
+                'session_id' => $sessionId,
+                'model_used' => $model,
+                'timestamp' => now()->toISOString(),
+                'metadata' => [
+                    'tokens_used' => $aiMessage->tokens_used,
+                    'processing_time' => $aiMessage->processing_time
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Session chat error: ' . $e->getMessage());
+            return response()->json([
+                'error' => 'Unable to process session chat'
+            ], 500);
+        }
+    }
+
+    /**
+     * Create new chat session and send first message
+     */
+    public function createAndChat(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'message' => 'required|string|max:4000',
+                'name' => 'nullable|string|max:255',
+                'description' => 'nullable|string|max:1000'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'error' => 'Validation failed',
+                    'details' => $validator->errors()
+                ], 422);
+            }
+
+            $user = $request->user();
+            $message = $request->input('message');
+            $name = $request->input('name');
+            $description = $request->input('description');
+
+            // Create new session
+            $session = ChatSession::create([
+                'user_id' => $user->id,
+                'name' => $name ?: 'New Chat Session',
+                'description' => $description,
+                'is_active' => true
+            ]);
+
+            // Send message to new session
+            return $this->handleSessionChat($user, $session->id, $message, [], 'gpt-3.5-turbo', 0.7, 1000);
+
+        } catch (\Exception $e) {
+            Log::error('Create and chat error: ' . $e->getMessage());
+            return response()->json([
+                'error' => 'Unable to create session and chat'
+            ], 500);
+        }
+    }
+
+    /**
+     * Estimate token count
+     */
+    private function estimateTokens($text)
+    {
+        return ceil(strlen($text) / 4); // Rough estimation: 1 token ≈ 4 characters
     }
 
     /**

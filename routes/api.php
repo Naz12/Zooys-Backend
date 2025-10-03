@@ -14,6 +14,8 @@ use App\Http\Controllers\Api\Client\MathController;
 use App\Http\Controllers\Api\Client\FlashcardController;
 use App\Http\Controllers\Api\Client\DiagramController;
 use App\Http\Controllers\Api\Client\ChatController;
+use App\Http\Controllers\Api\Client\ChatSessionController;
+use App\Http\Controllers\Api\Client\ChatMessageController;
 use App\Http\Controllers\Api\Client\SummarizeController;
 use App\Http\Controllers\Api\Client\DocumentChatController;
 
@@ -58,7 +60,22 @@ Route::middleware(['auth:sanctum', 'check.usage'])->group(function () {
     
     // AI Chat
     Route::post('/chat', [ChatController::class, 'chat']);
+    Route::post('/chat/create-and-chat', [ChatController::class, 'createAndChat']);
     Route::get('/chat/history', [ChatController::class, 'history']);
+    
+    // Chat Sessions
+    Route::get('/chat/sessions', [ChatSessionController::class, 'index']);
+    Route::post('/chat/sessions', [ChatSessionController::class, 'store']);
+    Route::get('/chat/sessions/{sessionId}', [ChatSessionController::class, 'show']);
+    Route::put('/chat/sessions/{sessionId}', [ChatSessionController::class, 'update']);
+    Route::delete('/chat/sessions/{sessionId}', [ChatSessionController::class, 'destroy']);
+    Route::post('/chat/sessions/{sessionId}/archive', [ChatSessionController::class, 'archive']);
+    Route::post('/chat/sessions/{sessionId}/restore', [ChatSessionController::class, 'restore']);
+    
+    // Chat Messages
+    Route::post('/chat/sessions/{sessionId}/messages', [ChatMessageController::class, 'store']);
+    Route::get('/chat/sessions/{sessionId}/messages', [ChatMessageController::class, 'index']);
+    Route::get('/chat/sessions/{sessionId}/history', [ChatMessageController::class, 'history']);
     
     // Content Summarization
     Route::post('/summarize', [SummarizeController::class, 'summarize']);
