@@ -63,6 +63,12 @@ Route::middleware(['auth:sanctum', 'check.usage'])->group(function () {
     Route::post('/summarize', [SummarizeController::class, 'summarize']);
     Route::post('/summarize/upload', [SummarizeController::class, 'uploadFile']);
     Route::get('/summarize/upload/{uploadId}/status', [SummarizeController::class, 'getUploadStatus']);
+    
+    // RAG (Retrieval-Augmented Generation)
+    Route::post('/rag/process', [SummarizeController::class, 'processRAG']);
+    Route::post('/rag/summary', [SummarizeController::class, 'getRAGSummary']);
+    Route::get('/rag/status/{uploadId}', [SummarizeController::class, 'getRAGStatus']);
+    Route::delete('/rag/delete/{uploadId}', [SummarizeController::class, 'deleteRAGData']);
 });
 
 // 🔹 Admin Authentication (Public)

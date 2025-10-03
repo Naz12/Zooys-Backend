@@ -13,16 +13,27 @@ class ContentUpload extends Model
         'file_type',
         'file_size',
         'processing_status',
-        'metadata'
+        'metadata',
+        'rag_processed_at',
+        'chunk_count',
+        'rag_enabled'
     ];
 
     protected $casts = [
         'metadata' => 'array',
-        'file_size' => 'integer'
+        'file_size' => 'integer',
+        'rag_processed_at' => 'datetime',
+        'chunk_count' => 'integer',
+        'rag_enabled' => 'boolean'
     ];
 
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function chunks()
+    {
+        return $this->hasMany(DocumentChunk::class, 'upload_id');
     }
 }

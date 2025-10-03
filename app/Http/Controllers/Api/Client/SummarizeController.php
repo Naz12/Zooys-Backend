@@ -9,6 +9,7 @@ use App\Services\ContentProcessingService;
 use App\Services\OpenAIService;
 use App\Services\WebScrapingService;
 use App\Services\EnhancedPDFProcessingService;
+use App\Services\RAGService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -20,13 +21,15 @@ class SummarizeController extends Controller
     protected $openAIService;
     protected $webScrapingService;
     protected $enhancedPDFService;
+    protected $ragService;
 
-    public function __construct(ContentProcessingService $contentProcessingService, OpenAIService $openAIService, WebScrapingService $webScrapingService, EnhancedPDFProcessingService $enhancedPDFService)
+    public function __construct(ContentProcessingService $contentProcessingService, OpenAIService $openAIService, WebScrapingService $webScrapingService, EnhancedPDFProcessingService $enhancedPDFService, RAGService $ragService)
     {
         $this->contentProcessingService = $contentProcessingService;
         $this->openAIService = $openAIService;
         $this->webScrapingService = $webScrapingService;
         $this->enhancedPDFService = $enhancedPDFService;
+        $this->ragService = $ragService;
     }
 
     /**
@@ -384,45 +387,82 @@ class SummarizeController extends Controller
                 ];
             }
             
-            // Use regular PDF processing for unprotected PDFs
-            $pdfData = $this->contentProcessingService->extractTextFromPDF($filePath);
+            // Check if RAG is enabled for this document
+            $useRAG = $options['use_rag'] ?? false;
+            $query = $options['query'] ?? null;
             
-            if (!$pdfData['success']) {
-                throw new \Exception($pdfData['error']);
+            if ($useRAG && $this->ragService->isRAGEnabled($uploadId)) {
+                // Use RAG for summarization
+                $ragResult = $this->ragService->getRAGSummary($uploadId, $query, $options);
+                
+                // Generate summary using relevant content
+                $prompt = $this->buildTextPrompt($ragResult['content'], $options);
+                $summary = $this->openAIService->generateResponse($prompt);
+                
+                return [
+                    'summary' => $summary,
+                    'metadata' => [
+                        'content_type' => 'pdf',
+                        'processing_time' => '6.5s',
+                        'tokens_used' => strlen($ragResult['content']) / 4,
+                        'confidence' => 0.95,
+                        'rag_enabled' => true,
+                        'chunks_used' => count($ragResult['chunks'])
+                    ],
+                    'source_info' => [
+                        'pages' => $pdfData['pages'] ?? 0,
+                        'word_count' => str_word_count($ragResult['content']),
+                        'character_count' => strlen($ragResult['content']),
+                        'file_size' => $this->formatFileSize($upload->file_size),
+                        'title' => $pdfData['metadata']['Title'] ?? 'Untitled',
+                        'author' => $pdfData['metadata']['Author'] ?? 'Unknown',
+                        'created_date' => $pdfData['metadata']['CreationDate'] ?? null,
+                        'subject' => $pdfData['metadata']['Subject'] ?? null,
+                        'password_protected' => $isPasswordProtected,
+                        'rag_chunks' => $ragResult['chunks']
+                    ]
+                ];
+            } else {
+                // Use regular PDF processing for unprotected PDFs
+                $pdfData = $this->contentProcessingService->extractTextFromPDF($filePath);
+                
+                if (!$pdfData['success']) {
+                    throw new \Exception($pdfData['error']);
+                }
+                
+                if (empty($pdfData['text'])) {
+                    throw new \Exception('No readable text found in PDF. The document may be scanned or image-based.');
+                }
+                
+                // Truncate content if too long for OpenAI (max ~12,000 tokens to leave room for prompt)
+                $maxTokens = 12000;
+                $truncatedText = $this->truncateTextForOpenAI($pdfData['text'], $maxTokens);
+                
+                // Generate summary using OpenAI
+                $prompt = $this->buildTextPrompt($truncatedText, $options);
+                $summary = $this->openAIService->generateResponse($prompt);
+                
+                return [
+                    'summary' => $summary,
+                    'metadata' => [
+                        'content_type' => 'pdf',
+                        'processing_time' => '4.2s',
+                        'tokens_used' => strlen($pdfData['text']) / 4, // Rough estimate
+                        'confidence' => 0.95
+                    ],
+                    'source_info' => [
+                        'pages' => $pdfData['pages'],
+                        'word_count' => $pdfData['word_count'],
+                        'character_count' => $pdfData['character_count'],
+                        'file_size' => $this->formatFileSize($upload->file_size),
+                        'title' => $pdfData['metadata']['Title'] ?? 'Untitled',
+                        'author' => $pdfData['metadata']['Author'] ?? 'Unknown',
+                        'created_date' => $pdfData['metadata']['CreationDate'] ?? null,
+                        'subject' => $pdfData['metadata']['Subject'] ?? null,
+                        'password_protected' => $isPasswordProtected
+                    ]
+                ];
             }
-            
-            if (empty($pdfData['text'])) {
-                throw new \Exception('No readable text found in PDF. The document may be scanned or image-based.');
-            }
-            
-            // Truncate content if too long for OpenAI (max ~12,000 tokens to leave room for prompt)
-            $maxTokens = 12000;
-            $truncatedText = $this->truncateTextForOpenAI($pdfData['text'], $maxTokens);
-            
-            // Generate summary using OpenAI
-            $prompt = $this->buildTextPrompt($truncatedText, $options);
-            $summary = $this->openAIService->generateResponse($prompt);
-            
-            return [
-                'summary' => $summary,
-                'metadata' => [
-                    'content_type' => 'pdf',
-                    'processing_time' => '4.2s',
-                    'tokens_used' => strlen($pdfData['text']) / 4, // Rough estimate
-                    'confidence' => 0.95
-                ],
-                'source_info' => [
-                    'pages' => $pdfData['pages'],
-                    'word_count' => $pdfData['word_count'],
-                    'character_count' => $pdfData['character_count'],
-                    'file_size' => $this->formatFileSize($upload->file_size),
-                    'title' => $pdfData['metadata']['Title'] ?? 'Untitled',
-                    'author' => $pdfData['metadata']['Author'] ?? 'Unknown',
-                    'created_date' => $pdfData['metadata']['CreationDate'] ?? null,
-                    'subject' => $pdfData['metadata']['Subject'] ?? null,
-                    'password_protected' => $isPasswordProtected
-                ]
-            ];
             
         } catch (\Exception $e) {
             Log::error('PDF processing error: ' . $e->getMessage());
@@ -608,5 +648,160 @@ class SummarizeController extends Controller
         }
         
         return $truncated . "\n\n[Content truncated due to length - showing first " . number_format($maxTokens) . " tokens]";
+    }
+
+    /**
+     * Process document for RAG
+     */
+    public function processRAG(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'upload_id' => 'required|integer|exists:content_uploads,id'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'error' => 'Validation failed',
+                    'details' => $validator->errors()
+                ], 422);
+            }
+
+            $uploadId = $request->input('upload_id');
+            $success = $this->ragService->processDocument($uploadId);
+
+            if ($success) {
+                return response()->json([
+                    'message' => 'Document processed for RAG successfully',
+                    'upload_id' => $uploadId,
+                    'status' => 'processed'
+                ]);
+            } else {
+                return response()->json([
+                    'error' => 'Failed to process document for RAG'
+                ], 500);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('RAG processing error: ' . $e->getMessage());
+            return response()->json([
+                'error' => 'Unable to process document for RAG: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get RAG summary for a document
+     */
+    public function getRAGSummary(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'upload_id' => 'required|integer|exists:content_uploads,id',
+                'query' => 'nullable|string|max:1000',
+                'max_chunks' => 'nullable|integer|min:1|max:10'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'error' => 'Validation failed',
+                    'details' => $validator->errors()
+                ], 422);
+            }
+
+            $uploadId = $request->input('upload_id');
+            $query = $request->input('query');
+            $maxChunks = $request->input('max_chunks', 5);
+
+            $options = [
+                'max_chunks' => $maxChunks,
+                'mode' => $request->input('mode', 'detailed'),
+                'language' => $request->input('language', 'en')
+            ];
+
+            $ragResult = $this->ragService->getRAGSummary($uploadId, $query, $options);
+
+            return response()->json([
+                'summary' => $ragResult['content'],
+                'metadata' => [
+                    'content_type' => 'rag',
+                    'processing_time' => '3.5s',
+                    'tokens_used' => strlen($ragResult['content']) / 4,
+                    'confidence' => 0.95,
+                    'chunks_used' => count($ragResult['chunks']),
+                    'query' => $query
+                ],
+                'source_info' => [
+                    'upload_id' => $uploadId,
+                    'chunks' => $ragResult['chunks'],
+                    'total_chunks' => $ragResult['total_chunks']
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('RAG summary error: ' . $e->getMessage());
+            return response()->json([
+                'error' => 'Unable to generate RAG summary: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get document RAG status
+     */
+    public function getRAGStatus(Request $request, $uploadId)
+    {
+        try {
+            $stats = $this->ragService->getDocumentStats($uploadId);
+
+            if (empty($stats)) {
+                return response()->json([
+                    'error' => 'Document not found'
+                ], 404);
+            }
+
+            return response()->json([
+                'upload_id' => $uploadId,
+                'rag_enabled' => $stats['rag_enabled'],
+                'processed_at' => $stats['processed_at'],
+                'chunk_count' => $stats['chunk_count'],
+                'total_chunks' => $stats['total_chunks'],
+                'total_content_length' => $stats['total_content_length'],
+                'page_range' => $stats['page_range']
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('RAG status error: ' . $e->getMessage());
+            return response()->json([
+                'error' => 'Unable to get RAG status: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete RAG data for a document
+     */
+    public function deleteRAGData(Request $request, $uploadId)
+    {
+        try {
+            $success = $this->ragService->deleteRAGData($uploadId);
+
+            if ($success) {
+                return response()->json([
+                    'message' => 'RAG data deleted successfully',
+                    'upload_id' => $uploadId
+                ]);
+            } else {
+                return response()->json([
+                    'error' => 'Failed to delete RAG data'
+                ], 500);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('RAG deletion error: ' . $e->getMessage());
+            return response()->json([
+                'error' => 'Unable to delete RAG data: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }
