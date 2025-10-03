@@ -48,4 +48,39 @@ class OpenAIService
             return 'Sorry, I was unable to generate a summary at this time.';
         }
     }
+
+    /**
+     * Generate embeddings using OpenAI
+     */
+    public function generateEmbedding($text)
+    {
+        $apiKey = config('services.openai.api_key');
+        $url = 'https://api.openai.com/v1/embeddings';
+
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $apiKey,
+                'Content-Type' => 'application/json',
+            ])->post($url, [
+                'model' => 'text-embedding-ada-002',
+                'input' => $text
+            ]);
+
+            if ($response->failed()) {
+                Log::error('OpenAI Embeddings API Error: ' . $response->body());
+                throw new \Exception('Failed to generate embedding');
+            }
+
+            $data = $response->json();
+            
+            if (isset($data['data'][0]['embedding'])) {
+                return $data['data'][0]['embedding'];
+            }
+
+            throw new \Exception('No embedding returned from OpenAI');
+        } catch (\Exception $e) {
+            Log::error('OpenAI Embeddings API Error: ' . $e->getMessage());
+            throw $e;
+        }
+    }
 }

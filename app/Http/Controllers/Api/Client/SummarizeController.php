@@ -9,6 +9,9 @@ use App\Services\ContentProcessingService;
 use App\Services\OpenAIService;
 use App\Services\WebScrapingService;
 use App\Services\EnhancedPDFProcessingService;
+use App\Services\EnhancedDocumentProcessingService;
+use App\Services\WordProcessingService;
+use App\Services\VectorDatabaseService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -20,13 +23,26 @@ class SummarizeController extends Controller
     protected $openAIService;
     protected $webScrapingService;
     protected $enhancedPDFService;
+    protected $enhancedDocumentService;
+    protected $wordService;
+    protected $vectorService;
 
-    public function __construct(ContentProcessingService $contentProcessingService, OpenAIService $openAIService, WebScrapingService $webScrapingService, EnhancedPDFProcessingService $enhancedPDFService)
-    {
+    public function __construct(
+        ContentProcessingService $contentProcessingService, 
+        OpenAIService $openAIService, 
+        WebScrapingService $webScrapingService, 
+        EnhancedPDFProcessingService $enhancedPDFService,
+        EnhancedDocumentProcessingService $enhancedDocumentService,
+        WordProcessingService $wordService,
+        VectorDatabaseService $vectorService
+    ) {
         $this->contentProcessingService = $contentProcessingService;
         $this->openAIService = $openAIService;
         $this->webScrapingService = $webScrapingService;
         $this->enhancedPDFService = $enhancedPDFService;
+        $this->enhancedDocumentService = $enhancedDocumentService;
+        $this->wordService = $wordService;
+        $this->vectorService = $vectorService;
     }
 
     /**
@@ -185,6 +201,81 @@ class SummarizeController extends Controller
             Log::error('Upload Status Error: ' . $e->getMessage());
             return response()->json([
                 'error' => 'Unable to get upload status'
+            ], 500);
+        }
+    }
+
+    /**
+     * Process document for chat
+     */
+    public function processDocument(Request $request, $uploadId)
+    {
+        try {
+            $upload = \App\Models\ContentUpload::where('id', $uploadId)
+                ->where('user_id', $request->user()->id)
+                ->first();
+
+            if (!$upload) {
+                return response()->json([
+                    'error' => 'Document not found'
+                ], 404);
+            }
+
+            $filePath = Storage::path($upload->file_path);
+            
+            if (!file_exists($filePath)) {
+                return response()->json([
+                    'error' => 'Document file not found'
+                ], 404);
+            }
+
+            // Process document based on type
+            $result = $this->enhancedDocumentService->processDocument($uploadId, $filePath, $upload->file_type);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Document processed successfully',
+                'total_chunks' => $result['total_chunks'],
+                'total_pages' => $result['total_pages']
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Document processing error: ' . $e->getMessage());
+            return response()->json([
+                'error' => 'Failed to process document: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get document processing status
+     */
+    public function getDocumentStatus(Request $request, $uploadId)
+    {
+        try {
+            $upload = \App\Models\ContentUpload::where('id', $uploadId)
+                ->where('user_id', $request->user()->id)
+                ->first();
+
+            if (!$upload) {
+                return response()->json([
+                    'error' => 'Document not found'
+                ], 404);
+            }
+
+            $status = $this->vectorService->getDocumentStatus($uploadId);
+
+            return response()->json([
+                'document_id' => $uploadId,
+                'status' => $status['status'],
+                'total_chunks' => $status['total_chunks'],
+                'total_pages' => $status['total_pages']
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Document status error: ' . $e->getMessage());
+            return response()->json([
+                'error' => 'Unable to get document status'
             ], 500);
         }
     }

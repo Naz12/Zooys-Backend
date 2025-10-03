@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\Client\FlashcardController;
 use App\Http\Controllers\Api\Client\DiagramController;
 use App\Http\Controllers\Api\Client\ChatController;
 use App\Http\Controllers\Api\Client\SummarizeController;
+use App\Http\Controllers\Api\Client\DocumentChatController;
 
 // Admin Controllers
 use App\Http\Controllers\Api\Admin\AdminAuthController;
@@ -63,6 +64,14 @@ Route::middleware(['auth:sanctum', 'check.usage'])->group(function () {
     Route::post('/summarize', [SummarizeController::class, 'summarize']);
     Route::post('/summarize/upload', [SummarizeController::class, 'uploadFile']);
     Route::get('/summarize/upload/{uploadId}/status', [SummarizeController::class, 'getUploadStatus']);
+    
+    // Document Chat
+    Route::post('/chat/document', [DocumentChatController::class, 'chat']);
+    Route::get('/chat/document/{documentId}/history', [DocumentChatController::class, 'history']);
+    
+    // Document Processing
+    Route::post('/summarize/process/{uploadId}', [SummarizeController::class, 'processDocument']);
+    Route::get('/summarize/status/{uploadId}', [SummarizeController::class, 'getDocumentStatus']);
 });
 
 // 🔹 Admin Authentication (Public)
