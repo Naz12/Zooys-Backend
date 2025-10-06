@@ -12,6 +12,8 @@ use App\Http\Controllers\Api\Client\PdfController;
 use App\Http\Controllers\Api\Client\WriterController;
 use App\Http\Controllers\Api\Client\MathController;
 use App\Http\Controllers\Api\Client\FlashcardController;
+use App\Http\Controllers\Api\Client\FileUploadController;
+use App\Http\Controllers\Api\Client\AIResultController;
 use App\Http\Controllers\Api\Client\DiagramController;
 use App\Http\Controllers\Api\Client\ChatController;
 use App\Http\Controllers\Api\Client\ChatSessionController;
@@ -55,7 +57,28 @@ Route::middleware(['auth:sanctum', 'check.usage'])->group(function () {
     Route::post('/pdf/summarize', [PdfController::class, 'summarize']);
     Route::post('/writer/run', [WriterController::class, 'run']);
     Route::post('/math/solve', [MathController::class, 'solve']);
+    // Flashcards
     Route::post('/flashcards/generate', [FlashcardController::class, 'generate']);
+    Route::get('/flashcards', [FlashcardController::class, 'index']);
+    Route::get('/flashcards/public', [FlashcardController::class, 'public']);
+    Route::get('/flashcards/{id}', [FlashcardController::class, 'show']);
+    Route::put('/flashcards/{id}', [FlashcardController::class, 'update']);
+    Route::delete('/flashcards/{id}', [FlashcardController::class, 'destroy']);
+    
+    // File Uploads
+    Route::post('/files/upload', [FileUploadController::class, 'upload']);
+    Route::get('/files', [FileUploadController::class, 'index']);
+    Route::get('/files/{id}', [FileUploadController::class, 'show']);
+    Route::delete('/files/{id}', [FileUploadController::class, 'destroy']);
+    Route::get('/files/{id}/content', [FileUploadController::class, 'content']);
+    
+    // AI Results
+    Route::get('/ai-results', [AIResultController::class, 'index']);
+    Route::get('/ai-results/{id}', [AIResultController::class, 'show']);
+    Route::put('/ai-results/{id}', [AIResultController::class, 'update']);
+    Route::delete('/ai-results/{id}', [AIResultController::class, 'destroy']);
+    Route::get('/ai-results/stats', [AIResultController::class, 'stats']);
+    
     Route::post('/diagram/generate', [DiagramController::class, 'generate']);
     
     // AI Chat

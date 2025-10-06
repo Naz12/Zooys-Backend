@@ -342,32 +342,93 @@ Solves mathematical problems using AI.
 **POST** `/api/flashcards/generate`
 **Headers:** `Authorization: Bearer {token}`
 
-Generates educational flashcards for any topic using AI.
+Generates educational flashcards from various content sources using AI. Supports text input, URLs, YouTube videos, and file uploads. Creates a mix of question types including definitions, applications, analysis, and comparisons.
 
 **Payload:**
 ```json
 {
-    "topic": "Machine Learning"
+    "input": "Machine Learning Algorithms",
+    "input_type": "text",
+    "count": 10,
+    "difficulty": "intermediate",
+    "style": "mixed"
 }
 ```
+
+**Parameters:**
+- `input` (required): Content source - can be text, URL, YouTube link, or file path
+- `input_type` (optional): Type of input - `text`, `url`, `youtube`, `file` (auto-detected if not specified)
+- `count` (optional): Number of flashcards to generate (1-40, default: 5)
+- `difficulty` (optional): Difficulty level - `beginner`, `intermediate`, `advanced` (default: intermediate)
+- `style` (optional): Question style - `definition`, `application`, `analysis`, `comparison`, `mixed` (default: mixed)
+
+**Input Types Supported:**
+- **Text**: Direct text input for any topic
+- **URL**: Web page content extraction and processing
+- **YouTube**: Video metadata and description processing
+- **File**: PDF, Word documents, and text files
 
 **Response:**
 ```json
 {
     "flashcards": [
         {
-            "question": "What is AI?",
-            "answer": "Artificial Intelligence"
+            "question": "What is the main difference between supervised and unsupervised learning?",
+            "answer": "Supervised learning uses labeled data to train models, while unsupervised learning finds patterns in unlabeled data."
         },
         {
-            "question": "What is ML?",
-            "answer": "Machine Learning"
+            "question": "How does the k-means clustering algorithm work?",
+            "answer": "K-means clustering groups data points into k clusters by minimizing the sum of squared distances between points and their cluster centroids."
         }
-    ]
+    ],
+    "metadata": {
+        "total_generated": 10,
+        "requested_count": 10,
+        "input_type": "text",
+        "source_metadata": {
+            "source_type": "text",
+            "word_count": 1250,
+            "character_count": 7500
+        }
+    }
 }
 ```
 
-**Status:** ⚠️ Returns mock data
+**Example Requests:**
+
+**Text Input:**
+```json
+{
+    "input": "Photosynthesis is the process by which plants convert light energy into chemical energy",
+    "input_type": "text",
+    "count": 8
+}
+```
+
+**YouTube Video:**
+```json
+{
+    "input": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    "input_type": "youtube",
+    "count": 12
+}
+```
+
+**Web Page:**
+```json
+{
+    "input": "https://en.wikipedia.org/wiki/Machine_learning",
+    "input_type": "url",
+    "count": 15
+}
+```
+
+**Error Responses:**
+- `400`: Invalid input - "Content is too short" or "Invalid URL format"
+- `400`: Unsupported file type - "Unsupported file type: {extension}"
+- `503`: AI service unavailable - "AI service is currently unavailable. Please try again later."
+
+**Status:** ✅ Fully Functional
 
 ---
 
