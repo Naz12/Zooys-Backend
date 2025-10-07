@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api\Client;
 
 use App\Http\Controllers\Controller;
-use App\Models\ContentUpload;
+use App\Models\FileUpload;
 use App\Models\DocumentMetadata;
 use App\Models\History;
 use App\Models\Tool;
@@ -31,7 +31,7 @@ class DocumentChatController extends Controller
     {
         try {
             $validator = Validator::make($request->all(), [
-                'document_id' => 'required|exists:content_uploads,id',
+                'document_id' => 'required|exists:file_uploads,id',
                 'query' => 'required|string|max:1000',
                 'conversation_history' => 'nullable|array',
                 'conversation_history.*.role' => 'required|string|in:user,assistant',
@@ -50,7 +50,7 @@ class DocumentChatController extends Controller
             $history = $request->input('conversation_history', []);
             
             // Verify document belongs to user
-            $document = ContentUpload::where('id', $documentId)
+            $document = FileUpload::where('id', $documentId)
                 ->where('user_id', $request->user()->id)
                 ->first();
             
@@ -115,7 +115,7 @@ class DocumentChatController extends Controller
     {
         try {
             // Verify document belongs to user
-            $document = ContentUpload::where('id', $documentId)
+            $document = FileUpload::where('id', $documentId)
                 ->where('user_id', $request->user()->id)
                 ->first();
             

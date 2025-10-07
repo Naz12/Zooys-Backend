@@ -1,6 +1,7 @@
 ---
 alwaysApply: true
 ---
+
 Search for existing code before creating new functions or components.
 Refactor duplicated code into reusable components, hooks, or utilities.
 Follow consistent file/folder naming conventions.
@@ -10,3 +11,7 @@ Always provide meaningful loading states for async actions.
 Validate inputs on both client and server.
 Avoid unnecessary dependencies — solve with the chosen stack first.
 Write lightweight tests for critical business logic and APIs.
+
+create .md files in /md folder
+create test files in /test oflder
+

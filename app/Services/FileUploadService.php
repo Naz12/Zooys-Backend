@@ -23,7 +23,7 @@ class FileUploadService
             $fileType = $this->determineFileType($file);
             
             // Store file
-            $filePath = $file->storeAs('uploads/files', $storedName, 'private');
+            $filePath = $file->storeAs('uploads/files', $storedName, 'public');
             
             // Create database record
             $fileUpload = FileUpload::create([

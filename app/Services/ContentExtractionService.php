@@ -172,9 +172,9 @@ class ContentExtractionService
     }
 
     /**
-     * Extract content from uploaded file
+     * Extract content from file path
      */
-    private function extractFromFile($filePath)
+    private function extractFromFilePath($filePath)
     {
         $fileExtension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
         

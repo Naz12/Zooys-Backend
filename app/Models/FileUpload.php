@@ -44,7 +44,13 @@ class FileUpload extends Model
      */
     public function getFileUrlAttribute(): string
     {
-        return Storage::url($this->file_path);
+        // Use the current request URL to ensure correct port
+        $baseUrl = request()->getSchemeAndHttpHost();
+        
+        // Build the storage URL manually to avoid duplication
+        $storagePath = 'storage/' . $this->file_path;
+        
+        return $baseUrl . '/' . $storagePath;
     }
 
     /**

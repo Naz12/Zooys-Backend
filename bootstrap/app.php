@@ -14,6 +14,11 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware) {
         // ✅ Global middleware
         $middleware->append(\App\Http\Middleware\TrackVisits::class);
+        
+        // ✅ CORS middleware for API routes
+        $middleware->api(prepend: [
+            \Illuminate\Http\Middleware\HandleCors::class,
+        ]);
 
         // ✅ Aliases
         $middleware->alias([

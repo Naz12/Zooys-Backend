@@ -102,16 +102,11 @@ Route::middleware(['auth:sanctum', 'check.usage'])->group(function () {
     
     // Content Summarization
     Route::post('/summarize', [SummarizeController::class, 'summarize']);
-    Route::post('/summarize/upload', [SummarizeController::class, 'uploadFile']);
-    Route::get('/summarize/upload/{uploadId}/status', [SummarizeController::class, 'getUploadStatus']);
+    Route::post('/summarize/validate', [SummarizeController::class, 'validateFile']);
     
     // Document Chat
     Route::post('/chat/document', [DocumentChatController::class, 'chat']);
     Route::get('/chat/document/{documentId}/history', [DocumentChatController::class, 'history']);
-    
-    // Document Processing
-    Route::post('/summarize/process/{uploadId}', [SummarizeController::class, 'processDocument']);
-    Route::get('/summarize/status/{uploadId}', [SummarizeController::class, 'getDocumentStatus']);
 });
 
 // 🔹 Admin Authentication (Public)

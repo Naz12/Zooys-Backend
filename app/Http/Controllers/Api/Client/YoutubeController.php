@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Client;
 use App\Http\Controllers\Controller;
 use App\Services\YouTubeService;
 use App\Services\OpenAIService;
+use App\Services\AIResultService;
 use Illuminate\Http\Request;
 use App\Models\Tool;
 use App\Models\History;
@@ -13,11 +14,13 @@ class YoutubeController extends Controller
 {
     private $youtubeService;
     private $openAIService;
+    private $aiResultService;
 
-    public function __construct(YouTubeService $youtubeService, OpenAIService $openAIService)
+    public function __construct(YouTubeService $youtubeService, OpenAIService $openAIService, AIResultService $aiResultService)
     {
         $this->youtubeService = $youtubeService;
         $this->openAIService = $openAIService;
+        $this->aiResultService = $aiResultService;
     }
 
     public function summarize(Request $request)
@@ -65,6 +68,29 @@ class YoutubeController extends Controller
                 ]);
             }
 
+            // Save to AIResult table for universal management
+            $aiResult = $this->aiResultService->saveResult(
+                $user->id,
+                'youtube',
+                $this->generateTitle($summary),
+                $this->generateDescription($summary),
+                [
+                    'video_url' => $request->video_url,
+                    'video_id' => $videoId,
+                    'language' => $request->language,
+                    'mode' => $request->mode
+                ],
+                ['summary' => $summary],
+                [
+                    'video_info' => [
+                        'title' => $videoData['title'],
+                        'channel' => $videoData['channel_title'],
+                        'duration' => $videoData['duration'],
+                        'views' => $videoData['view_count'],
+                    ]
+                ]
+            );
+
             return response()->json([
                 'summary' => $summary,
                 'video_info' => [
@@ -72,6 +98,12 @@ class YoutubeController extends Controller
                     'channel' => $videoData['channel_title'],
                     'duration' => $videoData['duration'],
                     'views' => $videoData['view_count'],
+                ],
+                'ai_result' => [
+                    'id' => $aiResult['ai_result']->id,
+                    'title' => $aiResult['ai_result']->title,
+                    'file_url' => $aiResult['ai_result']->file_url,
+                    'created_at' => $aiResult['ai_result']->created_at
                 ]
             ]);
 
@@ -112,5 +144,25 @@ Please provide:";
         }
 
         return $basePrompt;
+    }
+
+    /**
+     * Generate title from summary
+     */
+    private function generateTitle($summary)
+    {
+        $words = explode(' ', $summary);
+        $title = implode(' ', array_slice($words, 0, 8));
+        return strlen($title) > 60 ? substr($title, 0, 57) . '...' : $title;
+    }
+
+    /**
+     * Generate description from summary
+     */
+    private function generateDescription($summary)
+    {
+        $words = explode(' ', $summary);
+        $description = implode(' ', array_slice($words, 0, 20));
+        return strlen($description) > 150 ? substr($description, 0, 147) . '...' : $description;
     }
 }

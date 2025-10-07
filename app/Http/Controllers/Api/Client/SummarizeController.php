@@ -12,6 +12,8 @@ use App\Services\EnhancedPDFProcessingService;
 use App\Services\EnhancedDocumentProcessingService;
 use App\Services\WordProcessingService;
 use App\Services\VectorDatabaseService;
+use App\Services\FileUploadService;
+use App\Services\AIResultService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -26,6 +28,8 @@ class SummarizeController extends Controller
     protected $enhancedDocumentService;
     protected $wordService;
     protected $vectorService;
+    protected $fileUploadService;
+    protected $aiResultService;
 
     public function __construct(
         ContentProcessingService $contentProcessingService, 
@@ -34,7 +38,9 @@ class SummarizeController extends Controller
         EnhancedPDFProcessingService $enhancedPDFService,
         EnhancedDocumentProcessingService $enhancedDocumentService,
         WordProcessingService $wordService,
-        VectorDatabaseService $vectorService
+        VectorDatabaseService $vectorService,
+        FileUploadService $fileUploadService,
+        AIResultService $aiResultService
     ) {
         $this->contentProcessingService = $contentProcessingService;
         $this->openAIService = $openAIService;
@@ -43,6 +49,8 @@ class SummarizeController extends Controller
         $this->enhancedDocumentService = $enhancedDocumentService;
         $this->wordService = $wordService;
         $this->vectorService = $vectorService;
+        $this->fileUploadService = $fileUploadService;
+        $this->aiResultService = $aiResultService;
     }
 
     /**
@@ -106,10 +114,47 @@ class SummarizeController extends Controller
             // Store in history
             $this->storeHistory($user, $tool, $source, $result);
 
+            // Save to AIResult table for universal management
+            $fileUploadId = null;
+            if (isset($source['data']) && is_numeric($source['data'])) {
+                // If source data is a file upload ID
+                $fileUploadId = $source['data'];
+            }
+
+            $aiResult = $this->aiResultService->saveResult(
+                $user->id,
+                'summarize',
+                $this->generateTitle($result['summary']),
+                $this->generateDescription($result['summary']),
+                $source,
+                ['summary' => $result['summary']],
+                array_merge($result['metadata'], [
+                    'source_info' => $result['source_info'] ?? null
+                ]),
+                $fileUploadId
+            );
+
             return response()->json([
-                'summary' => $result['summary'],
-                'metadata' => $result['metadata'],
-                'source_info' => $result['source_info'] ?? null
+                'success' => true,
+                'message' => 'Content summarized successfully',
+                'data' => [
+                    'summary' => $result['summary'],
+                    'metadata' => $result['metadata'],
+                    'source_info' => $result['source_info'] ?? null,
+                    'ai_result' => [
+                        'id' => $aiResult['ai_result']->id,
+                        'title' => $aiResult['ai_result']->title,
+                        'file_url' => $aiResult['ai_result']->file_url,
+                        'created_at' => $aiResult['ai_result']->created_at
+                    ]
+                ],
+                'ui_helpers' => [
+                    'summary_length' => strlen($result['summary']),
+                    'word_count' => str_word_count($result['summary']),
+                    'estimated_read_time' => ceil(str_word_count($result['summary']) / 200) . ' minutes',
+                    'can_download' => true,
+                    'can_share' => true
+                ]
             ]);
 
         } catch (\Exception $e) {
@@ -133,8 +178,10 @@ class SummarizeController extends Controller
 
             if ($validator->fails()) {
                 return response()->json([
+                    'success' => false,
                     'error' => 'Validation failed',
-                    'details' => $validator->errors()
+                    'details' => $validator->errors(),
+                    'message' => 'Please check your file and try again'
                 ], 422);
             }
 
@@ -142,33 +189,130 @@ class SummarizeController extends Controller
             $contentType = $request->input('content_type');
             $user = $request->user();
 
-            // Generate unique filename
-            $filename = time() . '_' . $file->getClientOriginalName();
-            $path = $file->storeAs('uploads/' . $contentType, $filename, 'local');
-
-            // Store file info in database
-            $upload = \App\Models\ContentUpload::create([
-                'user_id' => $user->id,
-                'original_filename' => $file->getClientOriginalName(),
-                'file_path' => $path,
-                'file_type' => $contentType,
-                'file_size' => $file->getSize(),
-                'processing_status' => 'pending'
+            // Use universal file upload service
+            $result = $this->fileUploadService->uploadFile($file, $user->id, [
+                'tool_type' => 'summarize',
+                'content_type' => $contentType
             ]);
+
+            if (!$result['success']) {
+                return response()->json([
+                    'success' => false,
+                    'error' => $result['error'],
+                    'message' => 'File upload failed. Please try again.'
+                ], 400);
+            }
 
             return response()->json([
-                'upload_id' => $upload->id,
-                'filename' => $filename,
-                'file_path' => $path,
-                'file_size' => $file->getSize(),
-                'content_type' => $contentType,
-                'status' => 'uploaded'
-            ]);
+                'success' => true,
+                'message' => 'File uploaded successfully',
+                'data' => [
+                    'file_upload' => [
+                        'id' => $result['file_upload']->id,
+                        'original_name' => $result['file_upload']->original_name,
+                        'file_type' => $result['file_upload']->file_type,
+                        'file_size' => $result['file_upload']->file_size,
+                        'human_file_size' => $result['file_upload']->human_file_size,
+                        'file_url' => $result['file_url'],
+                        'created_at' => $result['file_upload']->created_at,
+                        'status' => 'uploaded'
+                    ],
+                    'next_steps' => [
+                        'can_summarize' => true,
+                        'endpoint' => '/api/summarize',
+                        'method' => 'POST'
+                    ]
+                ]
+            ], 201);
 
         } catch (\Exception $e) {
             Log::error('File Upload Error: ' . $e->getMessage());
             return response()->json([
-                'error' => 'Unable to upload file'
+                'success' => false,
+                'error' => 'Unable to upload file',
+                'message' => 'An unexpected error occurred. Please try again.'
+            ], 500);
+        }
+    }
+
+    /**
+     * Validate file before upload
+     */
+    public function validateFile(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'file' => 'required|file',
+                'content_type' => 'required|string|in:pdf,image,audio,video'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Validation failed',
+                    'details' => $validator->errors(),
+                    'message' => 'Please check your file and try again'
+                ], 422);
+            }
+
+            $file = $request->file('file');
+            $contentType = $request->input('content_type');
+            
+            // File validation
+            $maxSize = 102400; // 100MB in KB
+            $allowedTypes = [
+                'pdf' => ['application/pdf'],
+                'image' => ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+                'audio' => ['audio/mpeg', 'audio/wav', 'audio/ogg'],
+                'video' => ['video/mp4', 'video/avi', 'video/mov']
+            ];
+
+            $fileSize = $file->getSize() / 1024; // Convert to KB
+            $mimeType = $file->getMimeType();
+            
+            $validation = [
+                'is_valid' => true,
+                'errors' => [],
+                'warnings' => [],
+                'file_info' => [
+                    'name' => $file->getClientOriginalName(),
+                    'size' => $fileSize,
+                    'human_size' => $this->formatBytes($file->getSize()),
+                    'type' => $mimeType,
+                    'extension' => $file->getClientOriginalExtension()
+                ]
+            ];
+
+            // Check file size
+            if ($fileSize > $maxSize) {
+                $validation['is_valid'] = false;
+                $validation['errors'][] = "File size ({$this->formatBytes($file->getSize())}) exceeds maximum allowed size (100MB)";
+            }
+
+            // Check file type
+            if (!in_array($mimeType, $allowedTypes[$contentType] ?? [])) {
+                $validation['is_valid'] = false;
+                $validation['errors'][] = "File type not supported for {$contentType} content";
+            }
+
+            // Warnings for large files
+            if ($fileSize > 50000) { // 50MB
+                $validation['warnings'][] = "Large file detected. Processing may take longer.";
+            }
+
+            return response()->json([
+                'success' => true,
+                'validation' => $validation,
+                'can_upload' => $validation['is_valid'],
+                'message' => $validation['is_valid'] ? 'File is valid and ready for upload' : 'File validation failed'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('File Validation Error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'error' => 'Unable to validate file',
+                'message' => 'An unexpected error occurred during validation.'
             ], 500);
         }
     }
@@ -179,7 +323,7 @@ class SummarizeController extends Controller
     public function getUploadStatus(Request $request, $uploadId)
     {
         try {
-            $upload = \App\Models\ContentUpload::where('id', $uploadId)
+            $upload = \App\Models\FileUpload::where('id', $uploadId)
                 ->where('user_id', $request->user()->id)
                 ->first();
 
@@ -211,7 +355,7 @@ class SummarizeController extends Controller
     public function processDocument(Request $request, $uploadId)
     {
         try {
-            $upload = \App\Models\ContentUpload::where('id', $uploadId)
+            $upload = \App\Models\FileUpload::where('id', $uploadId)
                 ->where('user_id', $request->user()->id)
                 ->first();
 
@@ -253,7 +397,7 @@ class SummarizeController extends Controller
     public function getDocumentStatus(Request $request, $uploadId)
     {
         try {
-            $upload = \App\Models\ContentUpload::where('id', $uploadId)
+            $upload = \App\Models\FileUpload::where('id', $uploadId)
                 ->where('user_id', $request->user()->id)
                 ->first();
 
@@ -436,8 +580,8 @@ class SummarizeController extends Controller
     private function processPDF($uploadId, $options)
     {
         try {
-            // Get uploaded file
-            $upload = \App\Models\ContentUpload::find($uploadId);
+            // Get uploaded file from the new FileUpload model
+            $upload = \App\Models\FileUpload::find($uploadId);
             if (!$upload) {
                 Log::error('PDF upload not found for ID: ' . $uploadId);
                 throw new \Exception('PDF file not found. Please upload the file first.');
@@ -675,6 +819,40 @@ class SummarizeController extends Controller
         } else {
             return $bytes . ' bytes';
         }
+    }
+
+    /**
+     * Generate title from summary
+     */
+    private function generateTitle($summary)
+    {
+        $words = explode(' ', $summary);
+        $title = implode(' ', array_slice($words, 0, 8));
+        return strlen($title) > 60 ? substr($title, 0, 57) . '...' : $title;
+    }
+
+    /**
+     * Generate description from summary
+     */
+    private function generateDescription($summary)
+    {
+        $words = explode(' ', $summary);
+        $description = implode(' ', array_slice($words, 0, 20));
+        return strlen($description) > 150 ? substr($description, 0, 147) . '...' : $description;
+    }
+
+    /**
+     * Format bytes to human readable format
+     */
+    private function formatBytes($bytes, $precision = 2)
+    {
+        $units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        
+        for ($i = 0; $bytes > 1024 && $i < count($units) - 1; $i++) {
+            $bytes /= 1024;
+        }
+        
+        return round($bytes, $precision) . ' ' . $units[$i];
     }
 
     /**
