@@ -137,7 +137,7 @@ class ContentExtractionService
     /**
      * Extract content from YouTube video
      */
-    private function extractFromYouTube($videoUrl)
+private function extractFromYouTube($videoUrl)
     {
         // Extract video ID
         $videoId = $this->youtubeService->extractVideoId($videoUrl);
@@ -153,8 +153,18 @@ class ContentExtractionService
             throw new \Exception('Video not found or unavailable');
         }
 
-        // Combine title, description, and other metadata for content
-        $content = $this->buildYouTubeContent($videoData);
+        // Try to get captions first
+        $captions = $this->youtubeService->getVideoContentWithCaptions($videoId);
+        
+        if ($captions) {
+            // Use captions as primary content
+            $content = $this->buildYouTubeContentWithCaptions($videoData, $captions);
+            $hasCaptions = true;
+        } else {
+            // Fallback to basic metadata
+            $content = $this->buildYouTubeContent($videoData);
+            $hasCaptions = false;
+        }
 
         return [
             'success' => true,
@@ -166,6 +176,7 @@ class ContentExtractionService
                 'channel' => $videoData['channel_title'],
                 'duration' => $videoData['duration'],
                 'views' => $videoData['view_count'],
+                'has_captions' => $hasCaptions,
                 'word_count' => str_word_count($content)
             ]
         ];
@@ -279,7 +290,30 @@ class ContentExtractionService
         if (!empty($videoData['tags'])) {
             $content .= "Tags: " . implode(', ', $videoData['tags']) . "\n";
         }
+        
+        return $content;
+    }
 
+    /**
+     * Build YouTube content with captions
+     */
+    private function buildYouTubeContentWithCaptions($videoData, $captions)
+    {
+        $content = "Title: {$videoData['title']}\n\n";
+        $content .= "Channel: {$videoData['channel_title']}\n";
+        $content .= "Duration: {$videoData['duration']}\n";
+        $content .= "Views: {$videoData['view_count']}\n\n";
+        
+        $content .= "=== VIDEO TRANSCRIPT ===\n";
+        $content .= $captions . "\n\n";
+        
+        $content .= "=== VIDEO DESCRIPTION ===\n";
+        $content .= $videoData['description'] . "\n";
+        
+        if (!empty($videoData['tags'])) {
+            $content .= "\nTags: " . implode(', ', $videoData['tags']) . "\n";
+        }
+        
         return $content;
     }
 

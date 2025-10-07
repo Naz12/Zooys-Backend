@@ -49,8 +49,12 @@ class YoutubeController extends Controller
                 return response()->json(['error' => 'Video not found or unavailable'], 404);
             }
 
-            // Create summary using OpenAI
-            $summary = $this->createSummary($videoData, $request->language, $request->mode);
+            // Try to get captions for better summary
+            $captions = $this->youtubeService->getVideoContentWithCaptions($videoId);
+            $hasCaptions = !empty($captions);
+
+            // Create summary using OpenAI with enhanced content
+            $summary = $this->createSummary($videoData, $request->language, $request->mode, $captions);
 
             // Log usage
             if ($tool) {
@@ -99,6 +103,11 @@ class YoutubeController extends Controller
                     'duration' => $videoData['duration'],
                     'views' => $videoData['view_count'],
                 ],
+                'captions_info' => [
+                    'has_captions' => $hasCaptions,
+                    'caption_length' => $hasCaptions ? strlen($captions) : 0,
+                    'caption_words' => $hasCaptions ? str_word_count($captions) : 0
+                ],
                 'ai_result' => [
                     'id' => $aiResult['ai_result']->id,
                     'title' => $aiResult['ai_result']->title,
@@ -113,25 +122,34 @@ class YoutubeController extends Controller
         }
     }
 
-    private function createSummary($videoData, $language = 'en', $mode = 'detailed')
+    private function createSummary($videoData, $language = 'en', $mode = 'detailed', $captions = null)
     {
-        $prompt = $this->buildPrompt($videoData, $language, $mode);
+        $prompt = $this->buildPrompt($videoData, $language, $mode, $captions);
         return $this->openAIService->generateResponse($prompt);
     }
 
-    private function buildPrompt($videoData, $language, $mode)
+    private function buildPrompt($videoData, $language, $mode, $captions = null)
     {
         $basePrompt = "Analyze this YouTube video and provide a comprehensive summary:
 
 Title: {$videoData['title']}
-Description: {$videoData['description']}
 Channel: {$videoData['channel_title']}
 Duration: {$videoData['duration']}
 Views: {$videoData['view_count']}
 Published: {$videoData['published_at']}
 Tags: " . implode(', ', $videoData['tags']) . "
 
-Please provide:";
+";
+
+        // Add captions if available
+        if ($captions) {
+            $basePrompt .= "=== VIDEO TRANSCRIPT ===\n";
+            $basePrompt .= $captions . "\n\n";
+        } else {
+            $basePrompt .= "Description: {$videoData['description']}\n\n";
+        }
+
+        $basePrompt .= "Please provide:";
 
         if ($mode === 'brief') {
             $basePrompt .= "\n1. Main topic (1 sentence)\n2. Key takeaway (1 sentence)";
