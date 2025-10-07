@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api\Client;
 use App\Http\Controllers\Controller;
 use App\Models\Tool;
 use App\Models\History;
-use App\Services\ContentProcessingService;
+use App\Services\Modules\UnifiedProcessingService;
 use App\Services\OpenAIService;
 use App\Services\WebScrapingService;
 use App\Services\EnhancedPDFProcessingService;
@@ -21,7 +21,7 @@ use Illuminate\Support\Facades\Validator;
 
 class SummarizeController extends Controller
 {
-    protected $contentProcessingService;
+    protected $unifiedProcessingService;
     protected $openAIService;
     protected $webScrapingService;
     protected $enhancedPDFService;
@@ -32,9 +32,9 @@ class SummarizeController extends Controller
     protected $aiResultService;
 
     public function __construct(
-        ContentProcessingService $contentProcessingService, 
+        UnifiedProcessingService $unifiedProcessingService, 
         OpenAIService $openAIService, 
-        WebScrapingService $webScrapingService, 
+        WebScrapingService $webScrapingService,
         EnhancedPDFProcessingService $enhancedPDFService,
         EnhancedDocumentProcessingService $enhancedDocumentService,
         WordProcessingService $wordService,
@@ -42,7 +42,7 @@ class SummarizeController extends Controller
         FileUploadService $fileUploadService,
         AIResultService $aiResultService
     ) {
-        $this->contentProcessingService = $contentProcessingService;
+        $this->unifiedProcessingService = $unifiedProcessingService;
         $this->openAIService = $openAIService;
         $this->webScrapingService = $webScrapingService;
         $this->enhancedPDFService = $enhancedPDFService;
@@ -620,7 +620,7 @@ class SummarizeController extends Controller
             }
             
             // Use regular PDF processing for unprotected PDFs
-            $pdfData = $this->contentProcessingService->extractTextFromPDF($filePath);
+            $pdfData = $this->enhancedPDFService->extractTextFromPDF($filePath);
             
             if (!$pdfData['success']) {
                 throw new \Exception($pdfData['error']);

@@ -76,7 +76,7 @@ class PythonYouTubeService
         }
 
         try {
-            // Prepare command
+            // Prepare command with proper environment setup
             $command = sprintf(
                 '%s %s "%s" --language %s',
                 $this->pythonExecutable,
@@ -87,8 +87,17 @@ class PythonYouTubeService
 
             Log::info("Executing Python command: $command");
 
-            // Execute Python script
-            $result = Process::run($command);
+            // Set environment variables for better network access
+            $env = [
+                'PYTHONPATH' => base_path('python'),
+                'PYTHONIOENCODING' => 'utf-8',
+                'HTTP_PROXY' => '',
+                'HTTPS_PROXY' => '',
+                'NO_PROXY' => 'localhost,127.0.0.1',
+            ];
+
+            // Execute Python script with environment variables
+            $result = Process::run($command, null, null, null, 60, $env);
 
             if (!$result->successful()) {
                 Log::error('Python script execution failed: ' . $result->errorOutput());
@@ -135,6 +144,11 @@ class PythonYouTubeService
      */
     public function getVideoTranscript($videoUrl, $language = 'en')
     {
+        // Handle null language parameter
+        if ($language === null) {
+            $language = 'en';
+        }
+        
         // Try Python extraction first
         $result = $this->extractCaptions($videoUrl, $language);
 

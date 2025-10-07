@@ -7,12 +7,10 @@ use Illuminate\Support\Facades\Storage;
 
 class EnhancedDocumentProcessingService
 {
-    private $contentProcessingService;
     private $vectorService;
     
-    public function __construct(ContentProcessingService $contentProcessingService, VectorDatabaseService $vectorService)
+    public function __construct(VectorDatabaseService $vectorService)
     {
-        $this->contentProcessingService = $contentProcessingService;
         $this->vectorService = $vectorService;
     }
     

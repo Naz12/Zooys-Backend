@@ -7,8 +7,17 @@ Extracts captions/transcripts from YouTube videos using youtube-transcript-api
 import sys
 import json
 import argparse
+import os
+import socket
+import urllib3
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api.formatters import TextFormatter
+
+# Disable SSL warnings
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# Set socket timeout
+socket.setdefaulttimeout(30)
 
 def extract_video_id(url):
     """Extract video ID from YouTube URL"""
@@ -29,53 +38,67 @@ def extract_video_id(url):
     return None
 
 def get_video_transcript(video_id, language='en'):
-    """Get video transcript using youtube-transcript-api"""
-    try:
-        # Get transcript list
-        transcript_list = YouTubeTranscriptApi().list(video_id)
-        
-        # Try to find transcript in specified language
+    """Get video transcript using youtube-transcript-api with retry logic"""
+    max_retries = 3
+    retry_delay = 2
+    
+    for attempt in range(max_retries):
         try:
-            transcript = transcript_list.find_transcript([language])
-            transcript_data = transcript.fetch()
+            # Get transcript list
+            transcript_list = YouTubeTranscriptApi().list(video_id)
             
-            # Format as plain text
-            formatter = TextFormatter()
-            text = formatter.format_transcript(transcript_data)
+            # Handle null/None language parameter
+            if language is None or language == 'null':
+                language = 'en'
             
-            return {
-                'success': True,
-                'transcript': text,
-                'language': language,
-                'word_count': len(text.split()),
-                'character_count': len(text),
-                'segment_count': len(transcript_data)
-            }
-            
-        except Exception:
-            # Fallback to any available transcript
-            transcript = transcript_list.find_generated_transcript(['en'])
-            transcript_data = transcript.fetch()
-            
-            # Format as plain text
-            formatter = TextFormatter()
-            text = formatter.format_transcript(transcript_data)
-            
-            return {
-                'success': True,
-                'transcript': text,
-                'language': transcript.language_code,
-                'word_count': len(text.split()),
-                'character_count': len(text),
-                'segment_count': len(transcript_data),
-                'fallback': True
-            }
-        
-    except Exception as e:
-        return {
-            'success': False,
-            'error': str(e)
-        }
+            # Try to find transcript in specified language
+            try:
+                transcript = transcript_list.find_transcript([language])
+                transcript_data = transcript.fetch()
+                
+                # Format as plain text
+                formatter = TextFormatter()
+                text = formatter.format_transcript(transcript_data)
+                
+                return {
+                    'success': True,
+                    'transcript': text,
+                    'language': language,
+                    'word_count': len(text.split()),
+                    'character_count': len(text),
+                    'segment_count': len(transcript_data)
+                }
+                
+            except Exception:
+                # Fallback to any available transcript
+                transcript = transcript_list.find_generated_transcript(['en'])
+                transcript_data = transcript.fetch()
+                
+                # Format as plain text
+                formatter = TextFormatter()
+                text = formatter.format_transcript(transcript_data)
+                
+                return {
+                    'success': True,
+                    'transcript': text,
+                    'language': 'en', # Fallback language
+                    'word_count': len(text.split()),
+                    'character_count': len(text),
+                    'segment_count': len(transcript_data),
+                    'fallback': True
+                }
+                
+        except Exception as e:
+            if attempt < max_retries - 1:
+                print(f"Attempt {attempt + 1} failed: {str(e)}. Retrying in {retry_delay} seconds...")
+                import time
+                time.sleep(retry_delay)
+                continue
+            else:
+                return {
+                    'success': False,
+                    'error': f"Failed after {max_retries} attempts: {str(e)}"
+                }
 
 def main():
     """Main function for command line usage"""

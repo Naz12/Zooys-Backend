@@ -306,18 +306,35 @@ class YouTubeService
      */
     public function getVideoContentWithCaptions($videoId)
     {
-        // Try Python integration first (most reliable)
-        Log::info('Attempting Python caption extraction for video: ' . $videoId);
-        $videoUrl = "https://www.youtube.com/watch?v={$videoId}";
-        $pythonResult = $this->pythonService->getVideoTranscript($videoUrl);
+        // Try Python integration multiple times with different strategies
+        $pythonAttempts = [
+            ['url' => "https://www.youtube.com/watch?v={$videoId}", 'language' => 'en'],
+            ['url' => "https://youtu.be/{$videoId}", 'language' => 'en'],
+            ['url' => "https://www.youtube.com/watch?v={$videoId}", 'language' => null],
+            ['url' => "https://youtu.be/{$videoId}", 'language' => null],
+        ];
         
-        if ($pythonResult['success']) {
-            Log::info('Captions obtained via Python for video: ' . $videoId);
-            return $pythonResult['transcript'];
+        foreach ($pythonAttempts as $index => $attempt) {
+            $attemptNumber = $index + 1;
+            Log::info("Python attempt {$attemptNumber}/4 for video: {$videoId} with URL: {$attempt['url']}");
+            
+            $pythonResult = $this->pythonService->getVideoTranscript($attempt['url'], $attempt['language']);
+            
+            if ($pythonResult['success'] && !empty($pythonResult['transcript'])) {
+                $wordCount = str_word_count($pythonResult['transcript']);
+                Log::info("Python attempt {$attemptNumber} successful! Captions obtained: {$wordCount} words");
+                return $pythonResult['transcript'];
+            }
+            
+            Log::warning("Python attempt {$attemptNumber} failed: " . ($pythonResult['error'] ?? 'Unknown error'));
+            
+            // Add small delay between attempts
+            if ($index < count($pythonAttempts) - 1) {
+                sleep(1);
+            }
         }
         
-        // Fallback to web scraping
-        Log::info('Falling back to web scraping for video: ' . $videoId);
+        Log::info('All Python attempts failed, falling back to web scraping for video: ' . $videoId);
         $captions = $this->getVideoCaptionsByScraping($videoId);
         
         if ($captions) {
@@ -325,8 +342,7 @@ class YouTubeService
             return $captions;
         }
         
-        // Final fallback to YouTube API
-        Log::info('Falling back to YouTube API for video: ' . $videoId);
+        Log::info('Web scraping failed, falling back to YouTube API for video: ' . $videoId);
         $captions = $this->getVideoCaptions($videoId);
         
         if ($captions) {
