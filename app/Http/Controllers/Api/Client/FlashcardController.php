@@ -8,7 +8,7 @@ use App\Models\Tool;
 use App\Models\History;
 use App\Models\FlashcardSet;
 use App\Models\Flashcard;
-use App\Services\ContentExtractionService;
+use App\Services\Modules\ContentExtractionService;
 use App\Services\FlashcardGenerationService;
 use App\Services\FileUploadService;
 use App\Services\AIResultService;
