@@ -98,6 +98,19 @@ class ModuleRegistry
                 'user_agent' => 'Mozilla/5.0 (compatible; AIBot/1.0)',
             ]
         ]);
+
+        // Register AI Maths module
+        self::registerModule('ai_math', [
+            'class' => \App\Services\AIMathService::class,
+            'description' => 'AI-powered mathematical problem solving',
+            'dependencies' => [],
+            'config' => [
+                'supported_subjects' => ['algebra', 'geometry', 'calculus', 'statistics', 'trigonometry', 'arithmetic'],
+                'difficulty_levels' => ['beginner', 'intermediate', 'advanced'],
+                'max_image_size' => '10MB',
+                'supported_formats' => ['text', 'image'],
+            ]
+        ]);
     }
 
     /**

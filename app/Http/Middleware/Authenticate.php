@@ -11,18 +11,12 @@ class Authenticate extends Middleware
      */
     protected function redirectTo($request): ?string
     {
-        if (! $request->expectsJson()) {
-            // Redirect any admin URL
-            if ($request->is('admin') || $request->is('admin/*')) {
-                return route('admin.login');
-            }
-
-            // If you add frontend user login later:
-            // return route('login');
-
-            return route('admin.login'); // default for now
+        // For API requests, return null to let Laravel handle JSON response
+        if ($request->expectsJson() || $request->is('api/*')) {
+            return null;
         }
 
+        // For non-API requests, return null to avoid redirect errors
         return null;
     }
 

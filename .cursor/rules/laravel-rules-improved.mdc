@@ -1,0 +1,78 @@
+---
+alwaysApply: true
+---
+
+# 🏗️ Laravel Development Rules
+
+## 🚨 CRITICAL: Check Existing Modules First
+**ALWAYS** search for existing modules before implementing new code:
+- Search in `app/Services/` for similar functionality
+- Check `app/Services/Modules/ModuleRegistry.php` for available services
+- Review existing controllers in `app/Http/Controllers/`
+- Consider extending existing modules instead of creating new ones
+- Follow established patterns and architecture
+
+## 📁 File Structure & Organization
+- Use Laravel's MVC structure properly: keep controllers thin, move business logic to services
+- Place new services in appropriate directories:
+  - Core modules: `app/Services/Modules/`
+  - Specialized services: `app/Services/`
+  - Controllers: `app/Http/Controllers/Api/Client/`
+- Create `.md` documentation files in `md/` folder
+- Create test files in `test/` folder
+
+## 🔧 Code Quality & Standards
+- Always validate requests with Form Request classes
+- Use Resource classes (API Resources) for consistent JSON responses
+- Centralize common logic in Services, Traits, or Helpers instead of duplicating
+- Follow Laravel coding style (PSR-12, naming conventions)
+- Use proper type hints and return types
+
+## 🛡️ Security & Error Handling
+- Secure environment variables with .env (never hardcode secrets)
+- Handle errors gracefully with custom exceptions + error response format
+- Always return proper HTTP status codes with messages
+- Validate all inputs on both client and server
+- Use Laravel's built-in security features (CSRF, XSS protection)
+
+## ⚡ Performance & Optimization
+- Optimize database queries: use Eloquent relationships, eager loading, pagination
+- Use queues/events for long-running tasks instead of blocking requests
+- Implement proper caching strategies
+- Avoid N+1 query problems
+- Use database indexes appropriately
+
+## 📊 Monitoring & Testing
+- Add logging with Laravel's logger for important actions and errors
+- Write tests for controllers, services, and critical features (e.g., auth, payments, business logic)
+- Use meaningful log messages with context
+- Monitor performance and error rates
+
+## 🏗️ Module Integration Rules
+- Register new modules in `ModuleRegistry` if they're part of the core architecture
+- Use existing services as dependencies when possible:
+  - `FileUploadService` for file handling
+  - `OpenAIService` for AI integration
+  - `AIResultService` for result persistence
+  - `UnifiedProcessingService` for content processing
+- Follow the established dependency patterns
+- Don't create duplicate functionality
+
+## 🚫 What NOT to Do
+- Don't implement functionality directly in controllers
+- Don't create standalone services without proper integration
+- Don't bypass the existing modular architecture
+- Don't hardcode configuration values
+- Don't ignore existing error handling patterns
+- Don't create duplicate services when similar ones exist
+
+## ✅ Code Review Checklist
+Before submitting code, ensure:
+- [ ] Existing modules were checked first
+- [ ] Code follows Laravel best practices
+- [ ] Proper error handling is implemented
+- [ ] Security considerations are addressed
+- [ ] Performance is optimized
+- [ ] Tests are written for critical functionality
+- [ ] Documentation is updated
+- [ ] Code is properly formatted and follows PSR-12

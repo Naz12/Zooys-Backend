@@ -3,6 +3,16 @@ alwaysApply: true
 ---
 Use Laravel’s MVC structure properly: keep controllers thin, move business logic to services.
 
+Search in `app/Services/` for similar functionality
+
+Check `app/Services/Modules/ModuleRegistry.php` for available services
+
+Review existing controllers in `app/Http/Controllers/`
+
+Consider extending existing modules instead of creating new ones
+
+Follow established patterns and architecture
+
 Always validate requests with Form Request classes.
 
 Use Resource classes (API Resources) for consistent JSON responses.

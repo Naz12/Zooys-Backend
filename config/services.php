@@ -44,6 +44,7 @@ return [
         'api_key' => env('OPENAI_API_KEY'),
         'url' => env('OPENAI_URL', 'https://api.openai.com/v1/chat/completions'),
         'model' => env('OPENAI_MODEL', 'gpt-3.5-turbo'),
+        'vision_model' => env('OPENAI_VISION_MODEL', 'gpt-4o'),
         'max_tokens' => env('OPENAI_MAX_TOKENS', 1000),
         'temperature' => env('OPENAI_TEMPERATURE', 0.7),
     ],

@@ -57,6 +57,38 @@ Route::middleware(['auth:sanctum', 'check.usage'])->group(function () {
     Route::post('/pdf/summarize', [PdfController::class, 'summarize']);
     Route::post('/writer/run', [WriterController::class, 'run']);
     Route::post('/math/solve', [MathController::class, 'solve']);
+    Route::get('/math/problems', [MathController::class, 'index']);
+    Route::get('/math/problems/{id}', [MathController::class, 'show']);
+    Route::delete('/math/problems/{id}', [MathController::class, 'destroy']);
+    Route::get('/math/history', [MathController::class, 'history']);
+    Route::get('/math/stats', [MathController::class, 'stats']);
+    
+    // Client API routes (for frontend compatibility)
+    Route::prefix('client')->group(function () {
+        // Handle CORS preflight requests
+        Route::options('/math/generate', function () { 
+            return response('', 200)
+                ->header('Access-Control-Allow-Origin', 'http://localhost:3000')
+                ->header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+                ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+                ->header('Access-Control-Allow-Credentials', 'true');
+        });
+        Route::post('/math/generate', [MathController::class, 'solve']); // Alias for solve
+        
+        Route::get('/math/history', [MathController::class, 'history']);
+        
+        Route::options('/math/help', function () { 
+            return response('', 200)
+                ->header('Access-Control-Allow-Origin', 'http://localhost:3000')
+                ->header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+                ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+                ->header('Access-Control-Allow-Credentials', 'true');
+        });
+        Route::post('/math/help', [MathController::class, 'solve']); // Alias for solve
+        
+        Route::get('/math/stats', [MathController::class, 'stats']);
+    });
+    
     // Flashcards
     Route::post('/flashcards/generate', [FlashcardController::class, 'generate']);
     Route::get('/flashcards', [FlashcardController::class, 'index']);
