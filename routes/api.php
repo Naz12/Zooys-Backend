@@ -45,11 +45,29 @@ Route::post('/presentations/{aiResultId}/export', [PresentationController::class
 Route::get('/presentations/{aiResultId}/data', [PresentationController::class, 'getPresentationData']);
 Route::get('/files/download/{filename}', [PresentationController::class, 'downloadPresentation']);
 
+// 🔹 Public Presentation Management Routes
+Route::get('/presentations', [PresentationController::class, 'getPresentations']);
+Route::delete('/presentations/{aiResultId}', [PresentationController::class, 'deletePresentation']);
+
 // CORS OPTIONS for public presentation routes
 Route::options('/presentations/{aiResultId}/export', function () { 
     return response('', 200)
         ->header('Access-Control-Allow-Origin', 'http://localhost:3000')
         ->header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+        ->header('Access-Control-Allow-Credentials', 'true');
+});
+Route::options('/presentations', function () { 
+    return response('', 200)
+        ->header('Access-Control-Allow-Origin', 'http://localhost:3000')
+        ->header('Access-Control-Allow-Methods', 'GET, DELETE, OPTIONS')
+        ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+        ->header('Access-Control-Allow-Credentials', 'true');
+});
+Route::options('/presentations/{aiResultId}', function () { 
+    return response('', 200)
+        ->header('Access-Control-Allow-Origin', 'http://localhost:3000')
+        ->header('Access-Control-Allow-Methods', 'DELETE, OPTIONS')
         ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
         ->header('Access-Control-Allow-Credentials', 'true');
 });
@@ -233,9 +251,7 @@ Route::middleware(['auth:sanctum', 'check.usage'])->group(function () {
     // AI Presentation Generator
     Route::put('/presentations/{aiResultId}/update-outline', [PresentationController::class, 'updateOutline']);
     Route::post('/presentations/{aiResultId}/generate-powerpoint', [PresentationController::class, 'generatePowerPoint']);
-    Route::get('/presentations', [PresentationController::class, 'getPresentations']);
     Route::get('/presentations/{aiResultId}', [PresentationController::class, 'getPresentation']);
-    Route::delete('/presentations/{aiResultId}', [PresentationController::class, 'deletePresentation']);
     
     // Frontend Editing Endpoints (JSON-based)
     Route::post('/presentations/{aiResultId}/save', [PresentationController::class, 'savePresentation']);

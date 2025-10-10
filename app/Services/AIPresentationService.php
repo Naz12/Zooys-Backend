@@ -301,7 +301,9 @@ QUALITY STANDARDS:
 - Each bullet point must be substantial and informative
 - Content should demonstrate deep understanding of the topic
 
-Format the response as a JSON object with a 'slides' field containing an array of objects, each with 'index' and 'content' fields. The content should be an array of 3-5 detailed bullet points.
+IMPORTANT: Generate content for ALL slides. Do not skip any slides. Each slide must have 3-5 detailed bullet points.
+
+Format the response as a VALID JSON object with a 'slides' field containing an array of objects, each with 'index' and 'content' fields. The content should be an array of 3-5 detailed bullet points. Do not include bullet point symbols (•) in the content - just the text.
 
 Example format:
 {
@@ -309,9 +311,9 @@ Example format:
     {
       \"index\": 0,
       \"content\": [
-        \"• AI systems can process vast amounts of data in milliseconds, enabling real-time decision making in critical applications like autonomous vehicles and medical diagnosis\",
-        \"• Machine learning algorithms achieve 99.5% accuracy in image recognition tasks, significantly outperforming human capabilities in pattern detection and analysis\",
-        \"• Automated systems can operate 24/7 without fatigue, maintaining consistent performance levels that would be impossible for human workers to sustain\"
+        \"AI systems can process vast amounts of data in milliseconds, enabling real-time decision making in critical applications like autonomous vehicles and medical diagnosis\",
+        \"Machine learning algorithms achieve 99.5% accuracy in image recognition tasks, significantly outperforming human capabilities in pattern detection and analysis\",
+        \"Automated systems can operate 24/7 without fatigue, maintaining consistent performance levels that would be impossible for human workers to sustain\"
       ]
     }
   ]
@@ -319,7 +321,15 @@ Example format:
 
         $response = $this->openAIService->generateResponse($prompt, 'gpt-4');
 
+        // Log the response for debugging
+        Log::info('AI Content Generation Response', [
+            'response_length' => strlen($response),
+            'response_preview' => substr($response, 0, 200),
+            'slides_count' => count($slides)
+        ]);
+
         if (empty($response) || strpos($response, 'Sorry, I was unable') === 0) {
+            Log::warning('AI content generation failed, using fallback content');
             // Return fallback content for all slides
             $fallbackContent = [];
             foreach ($slides as $index => $slide) {
@@ -328,8 +338,22 @@ Example format:
             return $fallbackContent;
         }
 
+        // Try to parse JSON response
         $parsed = json_decode($response, true);
-        if ($parsed && isset($parsed['slides']) && is_array($parsed['slides'])) {
+        
+        // If JSON parsing fails, try to extract content from the response
+        if (!$parsed || !isset($parsed['slides']) || !is_array($parsed['slides'])) {
+            Log::warning('JSON parsing failed, attempting to extract content from response', [
+                'response_preview' => substr($response, 0, 500)
+            ]);
+            
+            // Try to extract content from the response even if JSON parsing fails
+            $extractedContent = $this->extractContentFromResponse($response, $slides);
+            if (!empty($extractedContent)) {
+                Log::info('Successfully extracted content from failed JSON response');
+                return $extractedContent;
+            }
+        } else {
             $result = [];
             $hasGenericContent = false;
             
@@ -342,13 +366,25 @@ Example format:
                             break 2;
                         }
                     }
-                    $result[$slideContent['index']] = $slideContent['content'];
+                    // Add bullet points to each content item if they don't have them
+                    $formattedContent = [];
+                    foreach ($slideContent['content'] as $item) {
+                        if (!preg_match('/^[•\-\*]\s/', $item)) {
+                            $formattedContent[] = "• " . $item;
+                        } else {
+                            $formattedContent[] = $item;
+                        }
+                    }
+                    $result[$slideContent['index']] = $formattedContent;
                 }
             }
             
             // If generic content is found, use fallback
             if ($hasGenericContent) {
-                logger::warning('Generic content detected in AI response, using fallback');
+                Log::warning('Generic content detected in AI response, using fallback', [
+                    'slides_count' => count($slides),
+                    'result_count' => count($result)
+                ]);
                 $fallbackContent = [];
                 foreach ($slides as $index => $slide) {
                     $fallbackContent[$index] = $this->getFallbackContent($slide);
@@ -360,11 +396,96 @@ Example format:
         }
 
         // Fallback if parsing fails
+        Log::warning('AI response parsing failed, using fallback content', [
+            'response_preview' => substr($response, 0, 300),
+            'slides_count' => count($slides)
+        ]);
         $fallbackContent = [];
         foreach ($slides as $index => $slide) {
             $fallbackContent[$index] = $this->getFallbackContent($slide);
         }
         return $fallbackContent;
+    }
+
+    /**
+     * Extract content from AI response when JSON parsing fails
+     */
+    private function extractContentFromResponse($response, $slides)
+    {
+        $result = [];
+        
+        // Try to find content patterns in the response
+        $lines = explode("\n", $response);
+        $currentContent = [];
+        
+        foreach ($lines as $line) {
+            $line = trim($line);
+            
+            // Skip empty lines and JSON structure lines
+            if (empty($line) || in_array($line, ['{', '}', '[', ']', '"slides":', '"index":', '"content":'])) {
+                continue;
+            }
+            
+            // Look for bullet points
+            if (preg_match('/^[•\-\*]\s*(.+)$/', $line, $matches)) {
+                $content = trim($matches[1]);
+                // Remove any existing bullet points from the content
+                $content = preg_replace('/^[•\-\*]\s*/', '', $content);
+                if (strlen($content) > 20 && !$this->containsGenericPhrase($content)) {
+                    $currentContent[] = "• " . $content;
+                }
+            }
+            // Look for numbered items
+            elseif (preg_match('/^\d+\.\s*(.+)$/', $line, $matches)) {
+                $content = trim($matches[1]);
+                if (strlen($content) > 20 && !$this->containsGenericPhrase($content)) {
+                    $currentContent[] = "• " . $content;
+                }
+            }
+            // Look for content in quotes
+            elseif (preg_match('/^"(.+)"$/', $line, $matches)) {
+                $content = trim($matches[1]);
+                if (strlen($content) > 20 && !$this->containsGenericPhrase($content)) {
+                    $currentContent[] = "• " . $content;
+                }
+            }
+            // Look for any line that looks like content (not JSON structure)
+            elseif (strlen($line) > 30 && 
+                   !preg_match('/^[{}[\]",:]/', $line) && 
+                   !preg_match('/^\d+$/', $line) &&
+                   !$this->containsGenericPhrase($line)) {
+                $currentContent[] = "• " . $line;
+            }
+        }
+        
+        // If we found content, distribute it across slides
+        if (!empty($currentContent)) {
+            $contentSlides = array_filter($slides, function($slide) {
+                return $slide['slide_type'] === 'content';
+            });
+            
+            $contentPerSlide = max(3, min(5, ceil(count($currentContent) / count($contentSlides))));
+            $contentIndex = 0;
+            
+            foreach ($slides as $index => $slide) {
+                if ($slide['slide_type'] === 'content') {
+                    $slideContent = [];
+                    for ($i = 0; $i < $contentPerSlide && $contentIndex < count($currentContent); $i++) {
+                        $slideContent[] = $currentContent[$contentIndex];
+                        $contentIndex++;
+                    }
+                    
+                    // If we don't have enough content, use fallback for this slide
+                    if (empty($slideContent)) {
+                        $slideContent = $this->getFallbackContent($slide);
+                    }
+                    
+                    $result[$index] = $slideContent;
+                }
+            }
+        }
+        
+        return $result;
     }
 
     /**
@@ -413,8 +534,98 @@ Example format:
                 $specificContent[] = "• Actionable next steps with specific timelines and implementation guidelines";
                 $specificContent[] = "• Key performance indicators and success metrics for measuring progress";
             } else {
-                $specificContent[] = "• Industry best practices and proven methodologies for implementation";
-                $specificContent[] = "• Success metrics and key performance indicators for measuring effectiveness";
+                // Generate topic-specific content based on the header
+                if (stripos($header, 'nurturing') !== false || stripos($header, 'care') !== false) {
+                    $specificContent[] = "• Providing emotional support through active listening and empathy, creating safe spaces for expression";
+                    $specificContent[] = "• Ensuring physical well-being through proper nutrition, healthcare, and safety measures";
+                } elseif (stripos($header, 'development') !== false || stripos($header, 'child') !== false) {
+                    $specificContent[] = "• Shaping behavioral patterns through consistent guidance, positive reinforcement, and boundary setting";
+                    $specificContent[] = "• Instilling core values and ethics through daily interactions, storytelling, and leading by example";
+                } elseif (stripos($header, 'work') !== false || stripos($header, 'balance') !== false) {
+                    $specificContent[] = "• Managing time effectively between professional responsibilities and family commitments";
+                    $specificContent[] = "• Implementing flexible scheduling, delegation strategies, and prioritizing essential tasks";
+                } elseif (stripos($header, 'education') !== false || stripos($header, 'learning') !== false) {
+                    $specificContent[] = "• Creating stimulating learning environments at home with educational resources and activities";
+                    $specificContent[] = "• Providing homework assistance, tutoring support, and encouraging curiosity and exploration";
+                } elseif (stripos($header, 'emotional') !== false || stripos($header, 'well-being') !== false) {
+                    $specificContent[] = "• Establishing secure attachment bonds that provide children with confidence and emotional stability";
+                    $specificContent[] = "• Offering comfort during difficult times through physical presence, reassurance, and problem-solving support";
+                } elseif (stripos($header, 'cultural') !== false || stripos($header, 'social') !== false) {
+                    $specificContent[] = "• Preserving family traditions, cultural heritage, and passing down stories from previous generations";
+                    $specificContent[] = "• Modeling social behaviors, teaching interpersonal skills, and guiding children in community interactions";
+                } elseif (stripos($header, 'support') !== false || stripos($header, 'partner') !== false) {
+                    $specificContent[] = "• Collaborating with partners in decision-making, sharing parenting responsibilities, and maintaining unity";
+                    $specificContent[] = "• Building strong family foundations through communication, mutual respect, and shared goals";
+                } elseif (stripos($header, 'community') !== false || stripos($header, 'impact') !== false) {
+                    $specificContent[] = "• Contributing to community through volunteer work, school involvement, and local initiatives";
+                    $specificContent[] = "• Advocating for family-friendly policies, educational improvements, and social support systems";
+                } elseif (stripos($header, 'challenge') !== false || stripos($header, 'resilience') !== false) {
+                    $specificContent[] = "• Demonstrating perseverance through difficult circumstances and modeling problem-solving approaches";
+                    $specificContent[] = "• Adapting to changing family dynamics, economic conditions, and evolving child development needs";
+                } elseif (stripos($header, 'celebrat') !== false || stripos($header, 'acknowledge') !== false) {
+                    $specificContent[] = "• Recognizing the countless daily contributions that often go unnoticed but are essential for family functioning";
+                    $specificContent[] = "• Expressing appreciation for sacrifices made, time invested, and unconditional love provided";
+                } elseif (stripos($header, 'conclusion') !== false || stripos($header, 'summary') !== false) {
+                    $specificContent[] = "• Summarizing the multifaceted role mothers play in shaping individuals, families, and society";
+                    $specificContent[] = "• Highlighting the importance of supporting mothers through policies, community resources, and recognition";
+                } else {
+                    // Generate topic-specific content based on the header
+                    $headerLower = strtolower($header);
+                    
+                    if (stripos($header, 'evolution') !== false || stripos($header, 'timeline') !== false) {
+                        $specificContent[] = "• Detailed chronological progression showing key developments and milestones in the evolutionary process";
+                        $specificContent[] = "• Analysis of significant events and their impact on the overall development and transformation";
+                    } elseif (stripos($header, 'theory') !== false || stripos($header, 'theories') !== false) {
+                        $specificContent[] = "• Comprehensive examination of different theoretical frameworks and their supporting evidence";
+                        $specificContent[] = "• Comparative analysis of competing theories and their implications for understanding the topic";
+                    } elseif (stripos($header, 'genetic') !== false || stripos($header, 'dna') !== false) {
+                        $specificContent[] = "• Scientific research findings and genetic analysis providing insights into biological relationships";
+                        $specificContent[] = "• Molecular evidence and genetic markers that support current understanding of the subject";
+                    } elseif (stripos($header, 'civilization') !== false || stripos($header, 'ancient') !== false) {
+                        $specificContent[] = "• Archaeological discoveries and historical evidence of early human settlements and development";
+                        $specificContent[] = "• Cultural and technological advancements that shaped early human societies and communities";
+                    } elseif (stripos($header, 'climate') !== false || stripos($header, 'environment') !== false) {
+                        $specificContent[] = "• Environmental factors and climatic changes that influenced human adaptation and survival strategies";
+                        $specificContent[] = "• Impact of natural conditions on human behavior, migration patterns, and cultural development";
+                    } elseif (stripos($header, 'cultural') !== false || stripos($header, 'society') !== false) {
+                        $specificContent[] = "• Social structures and cultural practices that evolved within human communities over time";
+                        $specificContent[] = "• Transmission of knowledge, traditions, and innovations across generations and regions";
+                    } elseif (stripos($header, 'diversity') !== false || stripos($header, 'modern') !== false) {
+                        $specificContent[] = "• Contemporary variations and differences observed in modern human populations and cultures";
+                        $specificContent[] = "• Current challenges and opportunities facing diverse human communities in the modern world";
+                    } elseif (stripos($header, 'ethical') !== false || stripos($header, 'consideration') !== false) {
+                        $specificContent[] = "• Moral implications and ethical considerations surrounding research and understanding of human origins";
+                        $specificContent[] = "• Respect for human dignity and cultural sensitivity in scientific investigation and interpretation";
+                    } elseif (stripos($header, 'market') !== false || stripos($header, 'analysis') !== false) {
+                        $specificContent[] = "• Current market conditions and trends affecting the industry and business environment";
+                        $specificContent[] = "• Competitive landscape analysis and strategic positioning within the marketplace";
+                    } elseif (stripos($header, 'design') !== false || stripos($header, 'technical') !== false) {
+                        $specificContent[] = "• Innovative design elements and technical specifications that enhance functionality and performance";
+                        $specificContent[] = "• User experience considerations and engineering solutions that improve product quality";
+                    } elseif (stripos($header, 'performance') !== false || stripos($header, 'review') !== false) {
+                        $specificContent[] = "• Performance metrics and testing results demonstrating effectiveness and reliability";
+                        $specificContent[] = "• Customer feedback and evaluation data showing satisfaction levels and areas for improvement";
+                    } elseif (stripos($header, 'marketing') !== false || stripos($header, 'strategy') !== false) {
+                        $specificContent[] = "• Strategic marketing approaches and promotional campaigns targeting specific audience segments";
+                        $specificContent[] = "• Brand positioning and communication strategies that effectively reach and engage customers";
+                    } elseif (stripos($header, 'sales') !== false || stripos($header, 'projection') !== false) {
+                        $specificContent[] = "• Sales forecasting and revenue projections based on market analysis and historical data";
+                        $specificContent[] = "• Financial targets and growth strategies for achieving business objectives and market expansion";
+                    } elseif (stripos($header, 'success') !== false || stripos($header, 'story') !== false) {
+                        $specificContent[] = "• Real-world examples and case studies demonstrating successful implementation and positive outcomes";
+                        $specificContent[] = "• Testimonials and success stories from satisfied customers and stakeholders";
+                    } elseif (stripos($header, 'future') !== false || stripos($header, 'development') !== false) {
+                        $specificContent[] = "• Upcoming features and planned improvements that will enhance functionality and user experience";
+                        $specificContent[] = "• Long-term development roadmap and expansion opportunities for continued growth";
+                    } elseif (stripos($header, 'competitive') !== false || stripos($header, 'advantage') !== false) {
+                        $specificContent[] = "• Unique selling propositions and competitive advantages that differentiate from market alternatives";
+                        $specificContent[] = "• Market positioning and value propositions that create sustainable competitive advantage";
+                    } else {
+                        // Generic but specific content for unknown topics
+                        $specificContent[] = "• Comprehensive analysis of key concepts and their practical applications in real-world scenarios";
+                        $specificContent[] = "• Examination of current trends, challenges, and opportunities within this specific domain";
+                    }
+                }
             }
         }
         
@@ -740,77 +951,70 @@ Return JSON format:
     }
 
     /**
-     * Save presentation data (JSON) using microservice
+     * Save presentation data (JSON) directly to database
      */
     public function savePresentationData($aiResultId, $presentationData, $userId)
     {
         try {
-            Log::info('Saving presentation data with microservice', [
+            Log::info('Saving presentation data to database', [
                 'ai_result_id' => $aiResultId,
-                'user_id' => $userId
+                'user_id' => $userId,
+                'data_keys' => array_keys($presentationData)
             ]);
 
-            // Prepare request data
-            $requestData = [
-                'presentation_data' => $presentationData,
-                'user_id' => $userId,
-                'ai_result_id' => $aiResultId
-            ];
+            // Find the AI result - use flexible lookup for public access
+            $aiResult = AIResult::where('id', $aiResultId)
+                ->where('tool_type', 'presentation')
+                ->first();
+            
+            // If not found and we have a specific user_id, try with user_id filter
+            if (!$aiResult && $userId) {
+                $aiResult = AIResult::where('id', $aiResultId)
+                    ->where('user_id', $userId)
+                    ->where('tool_type', 'presentation')
+                    ->first();
+            }
 
-            // Call FastAPI microservice
-            $response = Http::timeout(30)->post($this->microserviceUrl . '/save', $requestData);
-
-            if ($response->successful()) {
-                $result = $response->json();
-                
-                if ($result['success']) {
-                    // Update AI result with presentation data - use flexible lookup
-                    $aiResult = AIResult::where('id', $aiResultId)
-                        ->where('tool_type', 'presentation')
-                        ->first();
-                    
-                    // If not found and we have a specific user_id, try with user_id filter
-                    if (!$aiResult && $userId) {
-                        $aiResult = AIResult::where('id', $aiResultId)
-                            ->where('user_id', $userId)
-                            ->where('tool_type', 'presentation')
-                            ->first();
-                    }
-
-                    if ($aiResult) {
-                        $aiResult->update([
-                            'result_data' => $presentationData,
-                            'metadata' => array_merge($aiResult->metadata ?? [], [
-                                'saved_at' => now()->toISOString(),
-                                'saved_by' => 'microservice',
-                                'version' => ($aiResult->metadata['version'] ?? 0) + 1
-                            ])
-                        ]);
-                    }
-
-                    return [
-                        'success' => true,
-                        'data' => $result['data'],
-                        'message' => $result['message']
-                    ];
-                } else {
-                    return [
-                        'success' => false,
-                        'error' => $result['error'] ?? 'Microservice save failed'
-                    ];
-                }
-            } else {
+            if (!$aiResult) {
                 return [
                     'success' => false,
-                    'error' => 'Microservice communication failed: ' . $response->body()
+                    'error' => 'Presentation not found'
                 ];
             }
 
+            // Update the AI result with the new presentation data
+            $aiResult->update([
+                'result_data' => $presentationData,
+                'metadata' => array_merge($aiResult->metadata ?? [], [
+                    'saved_at' => now()->toISOString(),
+                    'saved_by' => 'user_edit',
+                    'version' => ($aiResult->metadata['version'] ?? 0) + 1,
+                    'last_edited_by' => $userId
+                ])
+            ]);
+
+            Log::info('Presentation data saved successfully', [
+                'ai_result_id' => $aiResultId,
+                'user_id' => $userId,
+                'version' => $aiResult->metadata['version'] ?? 1
+            ]);
+
+            return [
+                'success' => true,
+                'data' => [
+                    'ai_result_id' => $aiResultId,
+                    'updated_at' => $aiResult->updated_at->toISOString(),
+                    'version' => $aiResult->metadata['version'] ?? 1
+                ],
+                'message' => 'Presentation saved successfully'
+            ];
+
         } catch (\Exception $e) {
-            Log::error('Microservice save failed', [
+            Log::error('Save presentation data failed', [
                 'error' => $e->getMessage(),
                 'ai_result_id' => $aiResultId,
-                'user_id' => $userId
+                'user_id' => $userId,
+                'trace' => $e->getTraceAsString()
             ]);
 
             return [
@@ -945,7 +1149,7 @@ Return JSON format:
                     }
                 }
             }
-            
+
             // Prepare data for FastAPI microservice
             $requestData = [
                 'presentation_data' => [

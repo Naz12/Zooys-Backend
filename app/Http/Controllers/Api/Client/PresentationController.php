@@ -350,7 +350,7 @@ class PresentationController extends Controller
     public function getPresentations(Request $request): JsonResponse
     {
         try {
-            $userId = auth()->id();
+            $userId = auth()->id() ?? 5; // Use public user ID for public access
             $perPage = $request->get('per_page', 15);
             $search = $request->get('search');
 
@@ -383,7 +383,7 @@ class PresentationController extends Controller
         } catch (\Exception $e) {
             Log::error('Failed to get presentations', [
                 'error' => $e->getMessage(),
-                'user_id' => auth()->id()
+                'user_id' => auth()->id() ?? 5
             ]);
 
             return response()->json([
@@ -399,7 +399,7 @@ class PresentationController extends Controller
     public function getPresentation($aiResultId): JsonResponse
     {
         try {
-            $userId = auth()->id();
+            $userId = auth()->id() ?? 5; // Use public user ID for public access
 
             $presentation = \App\Models\AIResult::where('id', $aiResultId)
                 ->where('user_id', $userId)
@@ -440,7 +440,7 @@ class PresentationController extends Controller
     public function deletePresentation($aiResultId): JsonResponse
     {
         try {
-            $userId = auth()->id();
+            $userId = auth()->id() ?? 5; // Use public user ID for public access
 
             $presentation = \App\Models\AIResult::where('id', $aiResultId)
                 ->where('user_id', $userId)
@@ -457,8 +457,26 @@ class PresentationController extends Controller
             // Delete associated PowerPoint file if exists
             if (isset($presentation->result_data['powerpoint_file'])) {
                 $filePath = $presentation->result_data['powerpoint_file'];
-                if (\Illuminate\Support\Facades\Storage::exists($filePath)) {
-                    \Illuminate\Support\Facades\Storage::delete($filePath);
+                $fullFilePath = storage_path('app/' . $filePath);
+                
+                // Use direct file operations since Storage facade has path issues
+                if (file_exists($fullFilePath)) {
+                    if (unlink($fullFilePath)) {
+                        Log::info('PowerPoint file deleted successfully', [
+                            'file_path' => $fullFilePath,
+                            'ai_result_id' => $aiResultId
+                        ]);
+                    } else {
+                        Log::warning('Failed to delete PowerPoint file', [
+                            'file_path' => $fullFilePath,
+                            'ai_result_id' => $aiResultId
+                        ]);
+                    }
+                } else {
+                    Log::info('PowerPoint file not found (may have been deleted already)', [
+                        'file_path' => $fullFilePath,
+                        'ai_result_id' => $aiResultId
+                    ]);
                 }
             }
 
@@ -473,7 +491,7 @@ class PresentationController extends Controller
             Log::error('Failed to delete presentation', [
                 'error' => $e->getMessage(),
                 'ai_result_id' => $aiResultId,
-                'user_id' => auth()->id()
+                'user_id' => auth()->id() ?? 5
             ]);
 
             return response()->json([
@@ -532,7 +550,7 @@ class PresentationController extends Controller
      */
     public function getPresentationData($aiResultId)
     {
-        $userId = auth()->id();
+        $userId = auth()->id() ?? 5; // Use public user ID for public access
 
         $result = $this->aiPresentationService->getPresentationData($aiResultId, $userId);
 

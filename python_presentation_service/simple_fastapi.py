@@ -237,3 +237,4 @@ if FASTAPI_AVAILABLE:
 else:
     print("FastAPI not available, cannot start microservice")
 
+

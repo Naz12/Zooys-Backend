@@ -5,126 +5,196 @@ require_once __DIR__ . '/../vendor/autoload.php';
 $app = require_once __DIR__ . '/../bootstrap/app.php';
 $app->make('Illuminate\Contracts\Console\Kernel')->bootstrap();
 
-echo "🧪 Testing Improved Content Generation\n";
-echo "====================================\n\n";
+echo "🔍 Testing Improved Content Generation\n";
+echo "=====================================\n\n";
 
 $service = app(\App\Services\AIPresentationService::class);
 
-// Test with a new presentation to see the improved content quality
-$testData = [
-    'title' => 'Test Improved Content Generation',
-    'slides' => [
-        [
-            'slide_number' => 1,
-            'header' => 'Introduction',
-            'subheaders' => ['Overview', 'Objectives'],
-            'slide_type' => 'title'
-        ],
-        [
-            'slide_number' => 2,
-            'header' => 'AI Advantages',
-            'subheaders' => ['Speed', 'Accuracy', 'Efficiency'],
-            'slide_type' => 'content'
-        ],
-        [
-            'slide_number' => 3,
-            'header' => 'AI Disadvantages',
-            'subheaders' => ['Lack of Empathy', 'Limited Creativity', 'Dependency'],
-            'slide_type' => 'content'
-        ],
-        [
-            'slide_number' => 4,
-            'header' => 'Conclusion',
-            'subheaders' => ['Summary', 'Future Outlook'],
-            'slide_type' => 'content'
-        ]
-    ]
+// Test with a different topic to see if the improvements work
+$testTopic = [
+    'title' => 'Artificial Intelligence in Healthcare',
+    'topic' => 'Explore how AI is transforming healthcare delivery and patient outcomes',
+    'slides_count' => 8,
+    'target_audience' => 'Healthcare professionals',
+    'presentation_style' => 'Educational'
 ];
 
-echo "1. Testing improved content generation...\n";
-echo "   Slides to process: " . count($testData['slides']) . "\n\n";
+echo "🎯 Testing Topic: " . $testTopic['title'] . "\n";
+echo "==========================================\n\n";
 
 try {
-    // Test the generateAllSlideContent method directly
-    $reflection = new ReflectionClass($service);
-    $method = $reflection->getMethod('generateAllSlideContent');
-    $method->setAccessible(true);
+    // Generate outline
+    echo "1. Generating outline...\n";
+    $outlineResult = $service->generateOutline($testTopic, 5);
     
-    $contentSlides = array_filter($testData['slides'], function($slide) {
+    if (!$outlineResult['success']) {
+        echo "❌ Outline generation failed: " . ($outlineResult['error'] ?? 'Unknown error') . "\n";
+        exit(1);
+    }
+    
+    $aiResultId = $outlineResult['data']['ai_result_id'];
+    echo "✅ Outline generated (ID: $aiResultId)\n";
+    
+    // Generate content
+    echo "2. Generating content...\n";
+    $contentResult = $service->generateContent($aiResultId, 5);
+    
+    if (!$contentResult['success']) {
+        echo "❌ Content generation failed: " . ($contentResult['error'] ?? 'Unknown error') . "\n";
+        exit(1);
+    }
+    
+    echo "✅ Content generated\n";
+    
+    // Analyze content quality and issues
+    echo "\n3. Analyzing content for issues...\n";
+    $aiResult = \App\Models\AIResult::find($aiResultId);
+    $slides = $aiResult->result_data['slides'] ?? [];
+    
+    $contentSlides = array_filter($slides, function($slide) {
         return $slide['slide_type'] === 'content';
     });
     
-    $result = $method->invoke($service, $contentSlides, $testData['title']);
+    $totalContentItems = 0;
+    $duplicateItems = 0;
+    $incompleteItems = 0;
+    $genericPhrases = 0;
+    $allContent = [];
     
-    echo "✅ Content generation successful\n\n";
+    echo "\n📊 Detailed Content Analysis:\n";
+    echo "============================\n\n";
     
-    // Analyze the generated content
-    echo "📊 Content Quality Analysis:\n";
-    echo "============================\n";
-    
-    $qualityIssues = 0;
-    $totalItems = 0;
-    
-    foreach ($result as $index => $content) {
-        $slide = $contentSlides[$index];
+    foreach ($contentSlides as $index => $slide) {
         echo "Slide " . ($index + 1) . ": " . $slide['header'] . "\n";
-        echo "Content items: " . count($content) . "\n";
+        echo "Type: " . $slide['slide_type'] . "\n";
         
-        foreach ($content as $i => $item) {
-            $totalItems++;
-            echo "  " . ($i + 1) . ". " . $item . "\n";
+        if (isset($slide['content']) && is_array($slide['content'])) {
+            echo "Content items: " . count($slide['content']) . "\n\n";
+            $totalContentItems += count($slide['content']);
             
-            // Check for quality issues
-            $item = trim($item);
-            
-            // Check for generic phrases
-            if (strpos($item, 'Important aspects and key features') !== false ||
-                strpos($item, 'Current status and future potential') !== false) {
-                $qualityIssues++;
-                echo "    ⚠️  Generic content detected\n";
+            foreach ($slide['content'] as $i => $item) {
+                echo "  " . ($i + 1) . ". " . $item . "\n";
+                
+                // Check for duplicates
+                if (in_array($item, $allContent)) {
+                    $duplicateItems++;
+                    echo "    ❌ DUPLICATE CONTENT\n";
+                }
+                $allContent[] = $item;
+                
+                // Check for incomplete content
+                $item = trim($item);
+                if (strlen($item) < 30) {
+                    $incompleteItems++;
+                    echo "    ❌ INCOMPLETE CONTENT (" . strlen($item) . " chars)\n";
+                }
+                
+                // Check for generic phrases
+                $genericPhrasesList = [
+                    'Industry best practices',
+                    'Success metrics',
+                    'Key performance indicators',
+                    'Important aspects',
+                    'Current status',
+                    'Specific examples',
+                    'Detailed analysis',
+                    'Practical applications',
+                    'Measurable outcomes',
+                    'Real-world applications',
+                    'Comprehensive analysis',
+                    'Examination of current trends'
+                ];
+                
+                foreach ($genericPhrasesList as $phrase) {
+                    if (stripos($item, $phrase) !== false) {
+                        $genericPhrases++;
+                        echo "    ❌ GENERIC PHRASE: $phrase\n";
+                        break;
+                    }
+                }
             }
-            
-            // Check for too short content
-            if (strlen($item) < 30) {
-                $qualityIssues++;
-                echo "    ⚠️  Too short (" . strlen($item) . " chars)\n";
-            }
-            
-            // Check for single words
-            $words = explode(' ', str_replace(['•', ',', '.', '!', '?'], '', $item));
-            if (count($words) <= 3) {
-                $qualityIssues++;
-                echo "    ⚠️  Too few words (" . count($words) . " words)\n";
-            }
+        } else {
+            echo "❌ No content found\n";
         }
-        echo "\n";
+        
+        echo "\n" . str_repeat("-", 40) . "\n\n";
     }
     
-    echo "📋 Quality Summary:\n";
-    echo "==================\n";
-    echo "Total content items: $totalItems\n";
-    echo "Quality issues: $qualityIssues\n";
-    echo "Quality score: " . round((($totalItems - $qualityIssues) / $totalItems) * 100, 1) . "%\n";
+    // Check for cross-slide duplicates
+    echo "🔍 Cross-Slide Duplicate Analysis:\n";
+    echo "=================================\n";
+    $contentCounts = array_count_values($allContent);
+    $crossSlideDuplicates = 0;
     
-    if ($qualityIssues === 0) {
-        echo "✅ Excellent! No quality issues found\n";
-    } elseif ($qualityIssues <= 2) {
-        echo "✅ Good! Minimal quality issues\n";
+    foreach ($contentCounts as $content => $count) {
+        if ($count > 1) {
+            $crossSlideDuplicates += $count - 1;
+            echo "Duplicate: '$content' (appears $count times)\n";
+        }
+    }
+    
+    if ($crossSlideDuplicates === 0) {
+        echo "✅ No cross-slide duplicates found\n";
     } else {
-        echo "⚠️  Some quality issues remain\n";
+        echo "❌ Found $crossSlideDuplicates cross-slide duplicates\n";
+    }
+    
+    // Summary
+    echo "\n📋 Issue Summary:\n";
+    echo "================\n";
+    echo "Total content items: $totalContentItems\n";
+    echo "Duplicate items: $duplicateItems\n";
+    echo "Cross-slide duplicates: $crossSlideDuplicates\n";
+    echo "Incomplete items: $incompleteItems\n";
+    echo "Generic phrases: $genericPhrases\n";
+    echo "Total issues: " . ($duplicateItems + $crossSlideDuplicates + $incompleteItems + $genericPhrases) . "\n";
+    
+    $qualityScore = $totalContentItems > 0 ? round((($totalContentItems - ($duplicateItems + $crossSlideDuplicates + $incompleteItems + $genericPhrases)) / $totalContentItems) * 100, 1) : 0;
+    echo "Quality score: $qualityScore%\n";
+    
+    // Generate PowerPoint to test the final output
+    echo "\n4. Generating PowerPoint...\n";
+    $templateData = [
+        'template' => 'corporate_blue',
+        'color_scheme' => 'blue',
+        'font_style' => 'modern'
+    ];
+    
+    $powerPointResult = $service->generatePowerPointWithMicroservice($aiResultId, $templateData, 5);
+    
+    if ($powerPointResult['success']) {
+        echo "✅ PowerPoint generated successfully\n";
+        echo "📁 File: " . basename($powerPointResult['data']['powerpoint_file']) . "\n";
+        
+        if (file_exists($powerPointResult['data']['powerpoint_file'])) {
+            $fileSize = filesize($powerPointResult['data']['powerpoint_file']);
+            echo "📊 File size: " . number_format($fileSize) . " bytes\n";
+        }
+        
+        echo "\n🪟 Windows Path:\n";
+        echo "===============\n";
+        $windowsPath = str_replace('/', '\\', $powerPointResult['data']['powerpoint_file']);
+        echo "$windowsPath\n";
+        
+    } else {
+        echo "❌ PowerPoint generation failed: " . ($powerPointResult['error'] ?? 'Unknown error') . "\n";
+    }
+    
+    echo "\n🔍 Analysis Results:\n";
+    echo "===================\n";
+    if ($qualityScore >= 90) {
+        echo "✅ EXCELLENT: Content generation is working perfectly!\n";
+    } elseif ($qualityScore >= 70) {
+        echo "⚠️  GOOD: Content generation is mostly working with minor issues\n";
+    } elseif ($qualityScore >= 50) {
+        echo "⚠️  FAIR: Content generation has some issues that need attention\n";
+    } else {
+        echo "❌ POOR: Content generation has significant issues that need fixing\n";
     }
     
 } catch (Exception $e) {
-    echo "❌ Content generation failed: " . $e->getMessage() . "\n";
+    echo "❌ Exception: " . $e->getMessage() . "\n";
+    echo "Stack trace: " . $e->getTraceAsString() . "\n";
 }
-
-echo "\n📋 Improvements Made:\n";
-echo "====================\n";
-echo "✅ Enhanced prompt with specific requirements\n";
-echo "✅ Added content length requirements (15-40 words)\n";
-echo "✅ Eliminated generic phrases\n";
-echo "✅ Added topic-specific content guidelines\n";
-echo "✅ Improved fallback content generation\n";
-echo "✅ Added quality standards and examples\n";
 
 ?>
