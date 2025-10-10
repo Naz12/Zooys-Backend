@@ -18,6 +18,10 @@
 /public/storage
 /storage/*.key
 /storage/pail
+
+# Agent Communication Files
+agent-communication.md
+agent-communication/
 /vendor
 Homestead.json
 Homestead.yaml

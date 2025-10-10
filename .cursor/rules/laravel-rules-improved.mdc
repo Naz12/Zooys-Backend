@@ -14,11 +14,12 @@ alwaysApply: true
 
 ## 📁 File Structure & Organization
 - Use Laravel's MVC structure properly: keep controllers thin, move business logic to services
+- we are using a python fast api microservice in this project,
 - Place new services in appropriate directories:
   - Core modules: `app/Services/Modules/`
   - Specialized services: `app/Services/`
   - Controllers: `app/Http/Controllers/Api/Client/`
-- Create `.md` documentation files in `md/` folder
+
 - Create test files in `test/` folder
 
 ## 🔧 Code Quality & Standards
@@ -66,6 +67,27 @@ alwaysApply: true
 - Don't ignore existing error handling patterns
 - Don't create duplicate services when similar ones exist
 
+## 🤝 Agent Communication Rules
+**CRITICAL:** When working on issues reported by frontend agents, ALWAYS update the communication file:
+- **File Location:** `agent-communication.md` in project root
+- **Update Requirements:**
+  - Update "Frontend Requests" section when resolving issues
+  - Change status from "Pending" to "RESOLVED" with ✅ checkmark
+  - Add detailed resolution information
+  - Update timestamps to current time
+  - Move resolved issues to "Resolved Issues" section
+  - Update "Current Issues" to "NO CURRENT ISSUES" when all resolved
+- **Communication Protocol:**
+  - Frontend agents write requests in "Frontend Requests" section
+  - Backend agents respond in "Backend Responses" section
+  - Both agents update "Communication Log" for important updates
+  - Always update timestamps when making changes
+- **Status Updates:**
+  - Mark issues as "✅ RESOLVED" when completely fixed
+  - Provide clear action items for frontend agents
+  - Document all fixes and solutions implemented
+  - Keep communication file current and accurate
+
 ## ✅ Code Review Checklist
 Before submitting code, ensure:
 - [ ] Existing modules were checked first
@@ -76,3 +98,4 @@ Before submitting code, ensure:
 - [ ] Tests are written for critical functionality
 - [ ] Documentation is updated
 - [ ] Code is properly formatted and follows PSR-12
+- [ ] **Agent communication file updated with resolution status**

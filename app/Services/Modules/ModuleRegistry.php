@@ -111,6 +111,21 @@ class ModuleRegistry
                 'supported_formats' => ['text', 'image'],
             ]
         ]);
+
+        // Register AI Presentation module
+        self::registerModule('ai_presentation', [
+            'class' => \App\Services\AIPresentationService::class,
+            'description' => 'AI-powered presentation generation with PowerPoint creation',
+            'dependencies' => ['content_extraction'],
+            'config' => [
+                'supported_input_types' => ['text', 'file', 'url', 'youtube'],
+                'supported_templates' => ['corporate_blue', 'modern_white', 'creative_colorful', 'minimalist_gray', 'academic_formal'],
+                'supported_languages' => ['English', 'Spanish', 'French', 'German', 'Italian', 'Portuguese', 'Chinese', 'Japanese'],
+                'supported_tones' => ['Professional', 'Casual', 'Academic', 'Creative', 'Formal'],
+                'supported_lengths' => ['Short', 'Medium', 'Long'],
+                'python_script_path' => 'python/generate_presentation.py',
+            ]
+        ]);
     }
 
     /**

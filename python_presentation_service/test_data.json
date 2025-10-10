@@ -1,0 +1,14 @@
+﻿{
+    "ai_result_id":  117,
+    "template":  "corporate_blue",
+    "font_style":  "modern",
+    "user_id":  1,
+    "color_scheme":  "blue",
+    "title":  "Test Presentation",
+    "slides":  [
+                   {
+                       "content":  "Test content",
+                       "title":  "Slide 1"
+                   }
+               ]
+}

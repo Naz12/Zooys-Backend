@@ -1,1 +1,4 @@
 youtube-transcript-api==0.6.2
+python-pptx==0.6.21
+pptx-template==0.1.0
+Pillow==10.0.0

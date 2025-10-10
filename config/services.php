@@ -53,4 +53,8 @@ return [
         'api_key' => env('YOUTUBE_API_KEY'),
     ],
 
+    'presentation_microservice' => [
+        'url' => env('PRESENTATION_MICROSERVICE_URL', 'http://localhost:8001'),
+    ],
+
 ];

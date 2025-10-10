@@ -12,6 +12,7 @@ Validate inputs on both client and server.
 Avoid unnecessary dependencies — solve with the chosen stack first.
 Write lightweight tests for critical business logic and APIs.
 
-create .md files in /md folder
-create test files in /test oflder
+create documentation .md files in /md folder
+create test files in /test folder
+keep agent communication files in /agent-communication folder
 

@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\Client\ChatSessionController;
 use App\Http\Controllers\Api\Client\ChatMessageController;
 use App\Http\Controllers\Api\Client\SummarizeController;
 use App\Http\Controllers\Api\Client\DocumentChatController;
+use App\Http\Controllers\Api\Client\PresentationController;
 
 // Admin Controllers
 use App\Http\Controllers\Api\Admin\AdminAuthController;
@@ -35,6 +36,23 @@ use App\Http\Controllers\Api\Admin\VisitorController;
 Route::get('/plans', [PlanController::class, 'index']);
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
+
+// 🔹 Public Presentation Routes (for testing)
+Route::get('/presentations/templates', [PresentationController::class, 'getTemplates']);
+Route::post('/presentations/generate-outline', [PresentationController::class, 'generateOutline']);
+Route::post('/presentations/{aiResultId}/generate-content', [PresentationController::class, 'generateContent']);
+Route::post('/presentations/{aiResultId}/export', [PresentationController::class, 'exportPresentation']);
+Route::get('/presentations/{aiResultId}/data', [PresentationController::class, 'getPresentationData']);
+Route::get('/files/download/{filename}', [PresentationController::class, 'downloadPresentation']);
+
+// CORS OPTIONS for public presentation routes
+Route::options('/presentations/{aiResultId}/export', function () { 
+    return response('', 200)
+        ->header('Access-Control-Allow-Origin', 'http://localhost:3000')
+        ->header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+        ->header('Access-Control-Allow-Credentials', 'true');
+});
 
 // 🔹 Stripe webhook
 Route::post('/stripe/webhook', [StripeController::class, 'webhook']);
@@ -139,6 +157,89 @@ Route::middleware(['auth:sanctum', 'check.usage'])->group(function () {
     // Document Chat
     Route::post('/chat/document', [DocumentChatController::class, 'chat']);
     Route::get('/chat/document/{documentId}/history', [DocumentChatController::class, 'history']);
+    
+    // AI Presentation Generator - CORS OPTIONS routes
+    Route::options('/presentations/generate-outline', function () { 
+        return response('', 200)
+            ->header('Access-Control-Allow-Origin', 'http://localhost:3000')
+            ->header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+            ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+            ->header('Access-Control-Allow-Credentials', 'true');
+    });
+    Route::options('/presentations/templates', function () { 
+        return response('', 200)
+            ->header('Access-Control-Allow-Origin', 'http://localhost:3000')
+            ->header('Access-Control-Allow-Methods', 'GET, OPTIONS')
+            ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+            ->header('Access-Control-Allow-Credentials', 'true');
+    });
+    Route::options('/presentations/{aiResultId}/generate-content', function () { 
+        return response('', 200)
+            ->header('Access-Control-Allow-Origin', 'http://localhost:3000')
+            ->header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+            ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+            ->header('Access-Control-Allow-Credentials', 'true');
+    });
+    Route::options('/presentations/{aiResultId}/generate-powerpoint', function () { 
+        return response('', 200)
+            ->header('Access-Control-Allow-Origin', 'http://localhost:3000')
+            ->header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+            ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+            ->header('Access-Control-Allow-Credentials', 'true');
+    });
+    Route::options('/presentations/{aiResultId}/save', function () { 
+        return response('', 200)
+            ->header('Access-Control-Allow-Origin', 'http://localhost:3000')
+            ->header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+            ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+            ->header('Access-Control-Allow-Credentials', 'true');
+    });
+    Route::options('/presentations/{aiResultId}/data', function () { 
+        return response('', 200)
+            ->header('Access-Control-Allow-Origin', 'http://localhost:3000')
+            ->header('Access-Control-Allow-Methods', 'GET, OPTIONS')
+            ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+            ->header('Access-Control-Allow-Credentials', 'true');
+    });
+    Route::options('/presentations/{aiResultId}', function () { 
+        return response('', 200)
+            ->header('Access-Control-Allow-Origin', 'http://localhost:3000')
+            ->header('Access-Control-Allow-Methods', 'GET, DELETE, OPTIONS')
+            ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+            ->header('Access-Control-Allow-Credentials', 'true');
+    });
+    Route::options('/presentations', function () { 
+        return response('', 200)
+            ->header('Access-Control-Allow-Origin', 'http://localhost:3000')
+            ->header('Access-Control-Allow-Methods', 'GET, OPTIONS')
+            ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+            ->header('Access-Control-Allow-Credentials', 'true');
+    });
+    Route::options('/presentations/microservice-status', function () { 
+        return response('', 200)
+            ->header('Access-Control-Allow-Origin', 'http://localhost:3000')
+            ->header('Access-Control-Allow-Methods', 'GET, OPTIONS')
+            ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+            ->header('Access-Control-Allow-Credentials', 'true');
+    });
+    Route::options('/presentations/{aiResultId}/update-outline', function () { 
+        return response('', 200)
+            ->header('Access-Control-Allow-Origin', 'http://localhost:3000')
+            ->header('Access-Control-Allow-Methods', 'PUT, OPTIONS')
+            ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+            ->header('Access-Control-Allow-Credentials', 'true');
+    });
+
+    // AI Presentation Generator
+    Route::put('/presentations/{aiResultId}/update-outline', [PresentationController::class, 'updateOutline']);
+    Route::post('/presentations/{aiResultId}/generate-powerpoint', [PresentationController::class, 'generatePowerPoint']);
+    Route::get('/presentations', [PresentationController::class, 'getPresentations']);
+    Route::get('/presentations/{aiResultId}', [PresentationController::class, 'getPresentation']);
+    Route::delete('/presentations/{aiResultId}', [PresentationController::class, 'deletePresentation']);
+    
+    // Frontend Editing Endpoints (JSON-based)
+    Route::post('/presentations/{aiResultId}/save', [PresentationController::class, 'savePresentation']);
+    Route::get('/presentations/microservice-status', [PresentationController::class, 'checkMicroserviceStatus']);
 });
 
 // 🔹 Admin Authentication (Public)
