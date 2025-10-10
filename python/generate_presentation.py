@@ -27,7 +27,7 @@ class PresentationGenerator:
                 'secondary_color': RGBColor(0, 102, 204),   # Light blue
                 'accent_color': RGBColor(255, 255, 255),    # White
                 'text_color': RGBColor(51, 51, 51),         # Dark gray
-                'background_color': RGBColor(248, 249, 250), # Light gray
+                'background_color': RGBColor(240, 248, 255), # Light blue background
                 'title_color': RGBColor(0, 51, 102),        # Dark blue
                 'subtitle_color': RGBColor(0, 102, 204)     # Light blue
             },
@@ -45,7 +45,7 @@ class PresentationGenerator:
                 'secondary_color': RGBColor(33, 150, 243),  # Blue
                 'accent_color': RGBColor(76, 175, 80),      # Green
                 'text_color': RGBColor(51, 51, 51),         # Dark gray
-                'background_color': RGBColor(255, 255, 255), # White
+                'background_color': RGBColor(255, 248, 240), # Light orange background
                 'title_color': RGBColor(255, 87, 34),       # Orange
                 'subtitle_color': RGBColor(33, 150, 243)    # Blue
             },
@@ -54,7 +54,7 @@ class PresentationGenerator:
                 'secondary_color': RGBColor(158, 158, 158), # Light gray
                 'accent_color': RGBColor(33, 33, 33),       # Dark gray
                 'text_color': RGBColor(33, 33, 33),         # Dark gray
-                'background_color': RGBColor(250, 250, 250), # Very light gray
+                'background_color': RGBColor(245, 245, 245), # Light gray background
                 'title_color': RGBColor(33, 33, 33),        # Dark gray
                 'subtitle_color': RGBColor(97, 97, 97)      # Medium gray
             },
@@ -72,7 +72,7 @@ class PresentationGenerator:
                 'secondary_color': RGBColor(76, 175, 80),   # Green
                 'accent_color': RGBColor(255, 193, 7),      # Amber
                 'text_color': RGBColor(33, 33, 33),         # Dark gray
-                'background_color': RGBColor(250, 250, 250), # Light gray
+                'background_color': RGBColor(240, 255, 250), # Light green background
                 'title_color': RGBColor(0, 150, 136),       # Teal
                 'subtitle_color': RGBColor(76, 175, 80)     # Green
             },
@@ -81,7 +81,7 @@ class PresentationGenerator:
                 'secondary_color': RGBColor(156, 39, 176),  # Deep purple
                 'accent_color': RGBColor(255, 255, 255),    # White
                 'text_color': RGBColor(51, 51, 51),         # Dark gray
-                'background_color': RGBColor(248, 247, 252), # Light purple
+                'background_color': RGBColor(248, 240, 255), # Light purple background
                 'title_color': RGBColor(103, 58, 183),      # Purple
                 'subtitle_color': RGBColor(156, 39, 176)    # Deep purple
             },
@@ -90,7 +90,7 @@ class PresentationGenerator:
                 'secondary_color': RGBColor(76, 175, 80),   # Light green
                 'accent_color': RGBColor(255, 255, 255),    # White
                 'text_color': RGBColor(51, 51, 51),         # Dark gray
-                'background_color': RGBColor(248, 252, 248), # Light green
+                'background_color': RGBColor(240, 255, 240), # Light green background
                 'title_color': RGBColor(46, 125, 50),       # Dark green
                 'subtitle_color': RGBColor(76, 175, 80)     # Light green
             }
@@ -134,17 +134,31 @@ class PresentationGenerator:
             # Create title slide
             self.create_title_slide(prs, title, template_colors, font_config)
         
-            # Create content slides
-            for slide_data in slides_data:
+            # Create content slides with different layouts
+            for i, slide_data in enumerate(slides_data):
                 if slide_data.get('slide_type') == 'title':
                     continue  # Skip title slides as we already created one
                 
-                self.create_content_slide(
-                    prs, 
-                    slide_data, 
-                    template_colors, 
-                    font_config
-                )
+                # Determine slide layout based on content and position
+                content_items = slide_data.get('content', slide_data.get('subheaders', []))
+                item_count = len(content_items) if isinstance(content_items, list) else 0
+                
+                # Use two-column layout for slides with many items
+                if item_count > 4:
+                    self.create_two_column_slide(
+                        prs, 
+                        slide_data, 
+                        template_colors, 
+                        font_config
+                    )
+                else:
+                    # Use standard content slide
+                    self.create_content_slide(
+                        prs, 
+                        slide_data, 
+                        template_colors, 
+                        font_config
+                    )
             
             # Save presentation
             output_path = self.save_presentation(prs, user_id, ai_result_id)
@@ -169,29 +183,64 @@ class PresentationGenerator:
                 'error': str(e)
             }
 
-    def create_title_slide(self, prs, title, colors, fonts):
-        """Create title slide"""
-        slide_layout = prs.slide_layouts[0]  # Title slide layout
-        slide = prs.slides.add_slide(slide_layout)
-        
-        # Set title
-        title_shape = slide.shapes.title
-        title_shape.text = title
-        title_paragraph = title_shape.text_frame.paragraphs[0]
-        title_paragraph.font.name = fonts['font_name']
-        title_paragraph.font.size = Pt(fonts['title_size'])
-        title_paragraph.font.color.rgb = colors['title_color']
-        title_paragraph.font.bold = True
-        title_paragraph.alignment = PP_ALIGN.CENTER
-        
-        # Set background color
-        background = slide.background
-        fill = background.fill
-        fill.solid()
-        fill.fore_color.rgb = colors['background_color']
+    def add_decorative_elements(self, slide, colors):
+        """Add decorative elements to title slide"""
+        try:
+            # Add corner accent shapes
+            corner_shape = slide.shapes.add_shape(
+                MSO_SHAPE.RECTANGLE,
+                Inches(8.5), Inches(6.5),
+                Inches(1.5), Inches(1)
+            )
+            corner_fill = corner_shape.fill
+            corner_fill.solid()
+            corner_fill.fore_color.rgb = colors['accent_color']
+            corner_shape.line.fill.background()
+            
+            # Add bottom accent line
+            bottom_line = slide.shapes.add_shape(
+                MSO_SHAPE.RECTANGLE,
+                Inches(0), Inches(7),
+                Inches(10), Inches(0.1)
+            )
+            bottom_fill = bottom_line.fill
+            bottom_fill.solid()
+            bottom_fill.fore_color.rgb = colors['secondary_color']
+            bottom_line.line.fill.background()
+            
+        except Exception as e:
+            logger.warning(f"Could not add decorative elements: {e}")
 
-    def create_content_slide(self, prs, slide_data, colors, fonts):
-        """Create content slide with full content"""
+    def add_content_decorations(self, slide, colors):
+        """Add decorative elements to content slides"""
+        try:
+            # Add corner accent
+            corner_shape = slide.shapes.add_shape(
+                MSO_SHAPE.RECTANGLE,
+                Inches(8.5), Inches(6.5),
+                Inches(1.5), Inches(0.5)
+            )
+            corner_fill = corner_shape.fill
+            corner_fill.solid()
+            corner_fill.fore_color.rgb = colors['accent_color']
+            corner_shape.line.fill.background()
+            
+            # Add side accent line
+            side_line = slide.shapes.add_shape(
+                MSO_SHAPE.RECTANGLE,
+                Inches(0.2), Inches(1.5),
+                Inches(0.1), Inches(5.5)
+            )
+            side_fill = side_line.fill
+            side_fill.solid()
+            side_fill.fore_color.rgb = colors['primary_color']
+            side_line.line.fill.background()
+            
+        except Exception as e:
+            logger.warning(f"Could not add content decorations: {e}")
+
+    def create_two_column_slide(self, prs, slide_data, colors, fonts):
+        """Create a two-column layout slide"""
         slide_layout = prs.slide_layouts[1]  # Content slide layout
         slide = prs.slides.add_slide(slide_layout)
         
@@ -201,19 +250,212 @@ class PresentationGenerator:
         fill.solid()
         fill.fore_color.rgb = colors['background_color']
         
+        # Add header bar
+        header_bar = slide.shapes.add_shape(
+            MSO_SHAPE.RECTANGLE, 
+            Inches(0), Inches(0.5), 
+            Inches(10), Inches(0.3)
+        )
+        header_fill = header_bar.fill
+        header_fill.solid()
+        header_fill.fore_color.rgb = colors['primary_color']
+        header_bar.line.fill.background()
+        
         # Set title
+        title_shape = slide.shapes.title
+        title_shape.text = slide_data.get('header', 'Two Column Layout')
+        title_paragraph = title_shape.text_frame.paragraphs[0]
+        title_paragraph.font.name = fonts['font_name']
+        title_paragraph.font.size = Pt(fonts['title_size'])
+        title_paragraph.font.color.rgb = colors['title_color']
+        title_paragraph.font.bold = True
+        
+        # Create left column
+        left_column = slide.shapes.add_shape(
+            MSO_SHAPE.RECTANGLE,
+            Inches(0.5), Inches(1.5),
+            Inches(4.5), Inches(5.5)
+        )
+        left_fill = left_column.fill
+        left_fill.solid()
+        left_fill.fore_color.rgb = RGBColor(255, 255, 255)
+        left_column.line.color.rgb = colors['secondary_color']
+        left_column.line.width = Pt(2)
+        
+        # Create right column
+        right_column = slide.shapes.add_shape(
+            MSO_SHAPE.RECTANGLE,
+            Inches(5), Inches(1.5),
+            Inches(4.5), Inches(5.5)
+        )
+        right_fill = right_column.fill
+        right_fill.solid()
+        right_fill.fore_color.rgb = RGBColor(255, 255, 255)
+        right_column.line.color.rgb = colors['secondary_color']
+        right_column.line.width = Pt(2)
+        
+        # Add content to columns
+        content_items = slide_data.get('content', slide_data.get('subheaders', []))
+        if isinstance(content_items, list) and len(content_items) > 0:
+            # Split content between columns
+            mid_point = len(content_items) // 2
+            
+            # Left column content
+            left_frame = left_column.text_frame
+            left_frame.word_wrap = True
+            left_frame.margin_left = Inches(0.2)
+            left_frame.margin_right = Inches(0.2)
+            left_frame.margin_top = Inches(0.2)
+            left_frame.margin_bottom = Inches(0.2)
+            
+            for i, item in enumerate(content_items[:mid_point]):
+                if item and item.strip():
+                    if i == 0:
+                        p = left_frame.paragraphs[0]
+                    else:
+                        p = left_frame.add_paragraph()
+                    
+                    text = item.strip()
+                    if not text.startswith('•'):
+                        text = f"• {text}"
+                    
+                    p.text = text
+                    p.font.name = fonts['font_name']
+                    p.font.size = Pt(fonts['content_size'])
+                    p.font.color.rgb = colors['text_color']
+                    p.level = 0
+                    p.space_after = Pt(8)
+            
+            # Right column content
+            right_frame = right_column.text_frame
+            right_frame.word_wrap = True
+            right_frame.margin_left = Inches(0.2)
+            right_frame.margin_right = Inches(0.2)
+            right_frame.margin_top = Inches(0.2)
+            right_frame.margin_bottom = Inches(0.2)
+            
+            for i, item in enumerate(content_items[mid_point:]):
+                if item and item.strip():
+                    if i == 0:
+                        p = right_frame.paragraphs[0]
+                    else:
+                        p = right_frame.add_paragraph()
+                    
+                    text = item.strip()
+                    if not text.startswith('•'):
+                        text = f"• {text}"
+                    
+                    p.text = text
+                    p.font.name = fonts['font_name']
+                    p.font.size = Pt(fonts['content_size'])
+                    p.font.color.rgb = colors['text_color']
+                    p.level = 0
+                    p.space_after = Pt(8)
+        
+        # Add decorative elements
+        self.add_content_decorations(slide, colors)
+
+    def create_title_slide(self, prs, title, colors, fonts):
+        """Create enhanced title slide with modern design"""
+        slide_layout = prs.slide_layouts[0]  # Title slide layout
+        slide = prs.slides.add_slide(slide_layout)
+        
+        # Set background color
+        background = slide.background
+        fill = background.fill
+        fill.solid()
+        fill.fore_color.rgb = colors['background_color']
+        
+        # Add decorative header shape
+        header_shape = slide.shapes.add_shape(
+            MSO_SHAPE.RECTANGLE, 
+            Inches(0), Inches(0), 
+            Inches(10), Inches(1.5)
+        )
+        header_fill = header_shape.fill
+        header_fill.solid()
+        header_fill.fore_color.rgb = colors['primary_color']
+        
+        # Remove header shape outline
+        header_shape.line.fill.background()
+        
+        # Set title with enhanced styling
+        title_shape = slide.shapes.title
+        title_shape.text = title
+        title_paragraph = title_shape.text_frame.paragraphs[0]
+        title_paragraph.font.name = fonts['font_name']
+        title_paragraph.font.size = Pt(fonts['title_size'] + 8)  # Larger title
+        title_paragraph.font.color.rgb = RGBColor(255, 255, 255)  # White text on colored background
+        title_paragraph.font.bold = True
+        title_paragraph.alignment = PP_ALIGN.CENTER
+        
+        # Add subtitle placeholder with company info
+        subtitle_shape = slide.shapes.add_textbox(
+            Inches(1), Inches(2.5), 
+            Inches(8), Inches(1)
+        )
+        subtitle_frame = subtitle_shape.text_frame
+        subtitle_frame.text = "Professional Presentation"
+        subtitle_paragraph = subtitle_frame.paragraphs[0]
+        subtitle_paragraph.font.name = fonts['font_name']
+        subtitle_paragraph.font.size = Pt(24)
+        subtitle_paragraph.font.color.rgb = colors['secondary_color']
+        subtitle_paragraph.font.italic = True
+        subtitle_paragraph.alignment = PP_ALIGN.CENTER
+        
+        # Add decorative elements
+        self.add_decorative_elements(slide, colors)
+
+    def create_content_slide(self, prs, slide_data, colors, fonts):
+        """Create enhanced content slide with modern design"""
+        slide_layout = prs.slide_layouts[1]  # Content slide layout
+        slide = prs.slides.add_slide(slide_layout)
+        
+        # Set background color
+        background = slide.background
+        fill = background.fill
+        fill.solid()
+        fill.fore_color.rgb = colors['background_color']
+        
+        # Add header bar
+        header_bar = slide.shapes.add_shape(
+            MSO_SHAPE.RECTANGLE, 
+            Inches(0), Inches(0.5), 
+            Inches(10), Inches(0.3)
+        )
+        header_fill = header_bar.fill
+        header_fill.solid()
+        header_fill.fore_color.rgb = colors['primary_color']
+        header_bar.line.fill.background()
+        
+        # Set title with enhanced styling
         title_shape = slide.shapes.title
         title_shape.text = slide_data.get('header', 'Untitled Slide')
         title_paragraph = title_shape.text_frame.paragraphs[0]
         title_paragraph.font.name = fonts['font_name']
-        title_paragraph.font.size = Pt(fonts['title_size'] - 8)
+        title_paragraph.font.size = Pt(fonts['title_size'])
         title_paragraph.font.color.rgb = colors['title_color']
         title_paragraph.font.bold = True
         
-        # Set content
-        content_shape = slide.placeholders[1]
+        # Create content area with modern design
+        content_shape = slide.shapes.add_shape(
+            MSO_SHAPE.RECTANGLE,
+            Inches(0.5), Inches(1.5),
+            Inches(9), Inches(5.5)
+        )
+        content_fill = content_shape.fill
+        content_fill.solid()
+        content_fill.fore_color.rgb = RGBColor(255, 255, 255)  # White content area
+        content_shape.line.color.rgb = colors['secondary_color']
+        content_shape.line.width = Pt(2)
+        
+        # Add text frame inside the content shape
         text_frame = content_shape.text_frame
-        text_frame.clear()
+        text_frame.word_wrap = True
+        text_frame.margin_left = Inches(0.3)
+        text_frame.margin_right = Inches(0.3)
+        text_frame.margin_top = Inches(0.2)
+        text_frame.margin_bottom = Inches(0.2)
         
         # Use full content if available, otherwise fall back to subheaders
         content_items = slide_data.get('content', slide_data.get('subheaders', []))
@@ -244,6 +486,7 @@ class PresentationGenerator:
                     p.font.size = Pt(fonts['content_size'])
                     p.font.color.rgb = colors['text_color']
                     p.level = 0
+                    p.space_after = Pt(12)  # Add spacing between items
                     
                     logger.info(f"Added content item {i}: {text[:50]}...")
         else:
@@ -268,8 +511,12 @@ class PresentationGenerator:
                     p.font.size = Pt(fonts['content_size'])
                     p.font.color.rgb = colors['text_color']
                     p.level = 0
+                    p.space_after = Pt(12)  # Add spacing between items
                     
                     logger.info(f"Added subheader item {i}: {text[:50]}...")
+        
+        # Add decorative elements
+        self.add_content_decorations(slide, colors)
 
     def save_presentation(self, prs, user_id, ai_result_id):
         """Save presentation to storage directory"""

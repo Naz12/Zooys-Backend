@@ -272,19 +272,36 @@ class AIPresentationService
             ];
         }
 
-        $prompt = "Generate detailed content for ALL slides in this presentation titled '{$presentationTitle}'.
+        $prompt = "You are a professional presentation content creator. Generate high-quality, detailed content for ALL slides in this presentation titled '{$presentationTitle}'.
 
 Complete Slide Structure:
 " . json_encode($slideData, JSON_PRETTY_PRINT) . "
 
-For each slide, provide:
-1. 3-5 detailed bullet points that expand on each key point
-2. Specific examples, data, or insights where relevant
-3. Professional, engaging content suitable for a business presentation
-4. Keep each bullet point concise but informative (1-2 sentences)
-5. Ensure content flows well between slides and maintains consistency
+CRITICAL REQUIREMENTS - STRICT ENFORCEMENT:
+1. ABSOLUTELY NO generic phrases like 'Important aspects', 'Current status', 'Specific examples', 'Detailed analysis', 'Practical applications', 'Measurable outcomes', 'Real-world applications', 'Industry best practices', or 'Key performance indicators'
+2. Each bullet point must be 25-50 words long with substantial, meaningful content
+3. Use SPECIFIC examples, statistics, case studies, or real-world applications with actual data
+4. Make content directly relevant to the slide's topic and the presentation theme
+5. Avoid repetitive or filler content - every bullet point must add unique value
+6. Use professional business language but keep it engaging and accessible
+7. Include actual numbers, percentages, or specific examples where possible
+8. Each bullet point must be actionable and informative
 
-Format the response as a JSON object with a 'slides' field containing an array of objects, each with 'index' and 'content' fields. The content should be an array of bullet points.
+CONTENT GUIDELINES:
+- For advantages/benefits: Include specific examples, measurable outcomes, or real-world applications
+- For disadvantages/challenges: Provide concrete examples, potential solutions, or mitigation strategies  
+- For processes/methods: Include step-by-step details, best practices, or implementation tips
+- For comparisons: Use specific criteria, examples, or data points
+- For conclusions: Summarize key insights, actionable recommendations, or future implications
+
+QUALITY STANDARDS:
+- NO single-word bullet points (like 'Speed', 'Accuracy', 'Automation')
+- NO generic filler phrases that could apply to any topic
+- NO duplicate content across slides
+- Each bullet point must be substantial and informative
+- Content should demonstrate deep understanding of the topic
+
+Format the response as a JSON object with a 'slides' field containing an array of objects, each with 'index' and 'content' fields. The content should be an array of 3-5 detailed bullet points.
 
 Example format:
 {
@@ -292,15 +309,15 @@ Example format:
     {
       \"index\": 0,
       \"content\": [
-        \"• First bullet point with detailed information\",
-        \"• Second bullet point with examples\",
-        \"• Third bullet point with insights\"
+        \"• AI systems can process vast amounts of data in milliseconds, enabling real-time decision making in critical applications like autonomous vehicles and medical diagnosis\",
+        \"• Machine learning algorithms achieve 99.5% accuracy in image recognition tasks, significantly outperforming human capabilities in pattern detection and analysis\",
+        \"• Automated systems can operate 24/7 without fatigue, maintaining consistent performance levels that would be impossible for human workers to sustain\"
       ]
     }
   ]
 }";
 
-        $response = $this->openAIService->generateResponse($prompt, 'gpt-3.5-turbo');
+        $response = $this->openAIService->generateResponse($prompt, 'gpt-4');
 
         if (empty($response) || strpos($response, 'Sorry, I was unable') === 0) {
             // Return fallback content for all slides
@@ -314,11 +331,31 @@ Example format:
         $parsed = json_decode($response, true);
         if ($parsed && isset($parsed['slides']) && is_array($parsed['slides'])) {
             $result = [];
+            $hasGenericContent = false;
+            
             foreach ($parsed['slides'] as $slideContent) {
                 if (isset($slideContent['index']) && isset($slideContent['content'])) {
+                    // Validate content quality
+                    foreach ($slideContent['content'] as $item) {
+                        if ($this->containsGenericPhrase($item)) {
+                            $hasGenericContent = true;
+                            break 2;
+                        }
+                    }
                     $result[$slideContent['index']] = $slideContent['content'];
                 }
             }
+            
+            // If generic content is found, use fallback
+            if ($hasGenericContent) {
+                logger::warning('Generic content detected in AI response, using fallback');
+                $fallbackContent = [];
+                foreach ($slides as $index => $slide) {
+                    $fallbackContent[$index] = $this->getFallbackContent($slide);
+                }
+                return $fallbackContent;
+            }
+            
             return $result;
         }
 
@@ -360,11 +397,57 @@ Example format:
             $specificContent[] = "• Popular destinations and attractions";
             $specificContent[] = "• Cultural sites and recreational activities";
         } else {
-            $specificContent[] = "• Important aspects and key features";
-            $specificContent[] = "• Current status and future potential";
+            // Generate more specific content based on the header
+            $headerLower = strtolower($header);
+            
+            if (stripos($header, 'advantage') !== false || stripos($header, 'benefit') !== false) {
+                $specificContent[] = "• Real-world case studies showing measurable improvements and success metrics";
+                $specificContent[] = "• Industry-specific examples demonstrating competitive advantages and ROI";
+            } elseif (stripos($header, 'disadvantage') !== false || stripos($header, 'challenge') !== false) {
+                $specificContent[] = "• Documented instances where these challenges have caused significant problems";
+                $specificContent[] = "• Proven strategies and best practices for overcoming these obstacles";
+            } elseif (stripos($header, 'future') !== false || stripos($header, 'trend') !== false) {
+                $specificContent[] = "• Current market data and projections from industry research and studies";
+                $specificContent[] = "• Expert predictions and analysis of upcoming changes and opportunities";
+            } elseif (stripos($header, 'conclusion') !== false || stripos($header, 'summary') !== false) {
+                $specificContent[] = "• Actionable next steps with specific timelines and implementation guidelines";
+                $specificContent[] = "• Key performance indicators and success metrics for measuring progress";
+            } else {
+                $specificContent[] = "• Industry best practices and proven methodologies for implementation";
+                $specificContent[] = "• Success metrics and key performance indicators for measuring effectiveness";
+            }
         }
         
         return $specificContent;
+    }
+
+    /**
+     * Check if content contains generic phrases
+     */
+    private function containsGenericPhrase($content)
+    {
+        $genericPhrases = [
+            'Important aspects and key features',
+            'Current status and future potential',
+            'Specific examples and real-world applications',
+            'Measurable outcomes and performance improvements',
+            'Detailed analysis and comprehensive coverage',
+            'Practical applications and implementation considerations',
+            'Industry best practices and proven methodologies',
+            'Success metrics and key performance indicators',
+            'Emerging trends and developments',
+            'Predicted impact and implications',
+            'Key insights and actionable recommendations',
+            'Next steps and future considerations'
+        ];
+        
+        foreach ($genericPhrases as $phrase) {
+            if (stripos($content, $phrase) !== false) {
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     /**
@@ -392,7 +475,7 @@ Please provide:
 
 Format the response as a JSON object with a 'content' field containing an array of bullet points.";
 
-        $response = $this->openAIService->generateResponse($prompt, 'gpt-3.5-turbo');
+        $response = $this->openAIService->generateResponse($prompt, 'gpt-4');
 
         if (empty($response) || strpos($response, 'Sorry, I was unable') === 0) {
             // Fallback content if OpenAI fails
@@ -428,118 +511,6 @@ Format the response as a JSON object with a 'content' field containing an array 
         ];
     }
 
-    /**
-     * Generate PowerPoint presentation using Python
-     */
-    public function generatePowerPoint($aiResultId, $templateData, $userId)
-    {
-        try {
-            Log::info('Starting PowerPoint generation', [
-                'ai_result_id' => $aiResultId,
-                'user_id' => $userId,
-                'template' => $templateData['template'] ?? 'default'
-            ]);
-
-            // Use flexible lookup for public access
-            $aiResult = AIResult::where('id', $aiResultId)
-                ->where('tool_type', 'presentation')
-                ->first();
-            
-            // If not found and we have a specific user_id, try with user_id filter
-            if (!$aiResult && $userId) {
-                $aiResult = AIResult::where('id', $aiResultId)
-                    ->where('user_id', $userId)
-                    ->where('tool_type', 'presentation')
-                    ->first();
-            }
-
-            if (!$aiResult) {
-                return [
-                    'success' => false,
-                    'error' => 'Presentation not found'
-                ];
-            }
-
-            // Validate result data
-            if (!$aiResult->result_data || !is_array($aiResult->result_data)) {
-                return [
-                    'success' => false,
-                    'error' => 'Invalid presentation data. Please regenerate the outline.'
-                ];
-            }
-
-            // Always use the most up-to-date content from the database
-            // This ensures we use the generated content instead of just the outline
-            $resultData = $aiResult->result_data;
-            
-            // Prepare data for Python script
-            $pythonData = [
-                'outline' => $resultData,
-                'template' => $templateData['template'] ?? 'corporate_blue',
-                'color_scheme' => $templateData['color_scheme'] ?? 'blue',
-                'font_style' => $templateData['font_style'] ?? 'modern',
-                'user_id' => $userId,
-                'ai_result_id' => $aiResultId
-            ];
-
-            Log::info('Python data prepared', [
-                'template_data' => $templateData,
-                'python_data' => $pythonData,
-                'result_data_keys' => array_keys($aiResult->result_data ?? []),
-                'result_data' => $aiResult->result_data,
-                'slides_count' => count($resultData['slides'] ?? []),
-                'first_slide_content' => $resultData['slides'][0]['content'] ?? 'No content',
-                'first_slide_subheaders' => $resultData['slides'][0]['subheaders'] ?? 'No subheaders'
-            ]);
-
-            // Generate PowerPoint using Python script
-            $powerPointResult = $this->generatePowerPointWithPython($pythonData);
-
-            if (!$powerPointResult['success']) {
-                return [
-                    'success' => false,
-                    'error' => $powerPointResult['error']
-                ];
-            }
-
-            // Update AI result with PowerPoint file
-            $resultData = $aiResult->result_data;
-            $resultData['powerpoint_file'] = $powerPointResult['file_path'];
-            $resultData['step'] = 'powerpoint_generated';
-            $resultData['template_used'] = $templateData['template'] ?? 'corporate_blue';
-
-            $aiResult->update([
-                'result_data' => $resultData,
-                'metadata' => array_merge($aiResult->metadata ?? [], [
-                    'template' => $templateData['template'] ?? 'corporate_blue',
-                    'color_scheme' => $templateData['color_scheme'] ?? 'blue',
-                    'font_style' => $templateData['font_style'] ?? 'modern',
-                    'generated_at' => now()->toISOString()
-                ])
-            ]);
-
-            return [
-                'success' => true,
-                'data' => [
-                    'powerpoint_file' => $powerPointResult['file_path'],
-                    'download_url' => $powerPointResult['download_url'],
-                    'ai_result_id' => $aiResultId
-                ]
-            ];
-
-        } catch (\Exception $e) {
-            Log::error('PowerPoint generation failed', [
-                'error' => $e->getMessage(),
-                'ai_result_id' => $aiResultId,
-                'user_id' => $userId
-            ]);
-
-            return [
-                'success' => false,
-                'error' => 'Failed to generate PowerPoint: ' . $e->getMessage()
-            ];
-        }
-    }
 
     /**
      * Extract content based on input type
@@ -660,170 +631,6 @@ Return JSON format:
         }
     }
 
-    /**
-     * Generate PowerPoint using Python script
-     */
-    private function generatePowerPointWithPython($data)
-    {
-        try {
-            $pythonScript = base_path('python/generate_presentation.py');
-            $tempFile = tempnam(sys_get_temp_dir(), 'presentation_data_');
-            
-            // Write data to temporary file
-            file_put_contents($tempFile, json_encode($data));
-
-            // Execute Python script with timeout (only capture stdout for JSON)
-            $command = "py \"{$pythonScript}\" \"{$tempFile}\"";
-            Log::info('Executing Python command', [
-                'command' => $command,
-                'temp_file' => $tempFile,
-                'data' => $data
-            ]);
-            
-            // Use proc_open for better control and timeout handling
-            $descriptorspec = array(
-                0 => array("pipe", "r"),
-                1 => array("pipe", "w"),
-                2 => array("pipe", "w")
-            );
-            
-            $process = proc_open($command, $descriptorspec, $pipes);
-            
-            if (is_resource($process)) {
-                // Close input pipe
-                fclose($pipes[0]);
-                
-                // Set timeout (30 seconds)
-                $timeout = 30;
-                $startTime = time();
-                
-                $output = '';
-                $errorOutput = '';
-                
-                // Read output with timeout
-                while (time() - $startTime < $timeout) {
-                    $read = array($pipes[1], $pipes[2]);
-                    $write = null;
-                    $except = null;
-                    
-                    if (stream_select($read, $write, $except, 1) > 0) {
-                        if (in_array($pipes[1], $read)) {
-                            $chunk = fread($pipes[1], 8192);
-                            if ($chunk !== false) {
-                                $output .= $chunk;
-                            }
-                        }
-                        if (in_array($pipes[2], $read)) {
-                            $chunk = fread($pipes[2], 8192);
-                            if ($chunk !== false) {
-                                $errorOutput .= $chunk;
-                            }
-                        }
-                    }
-                    
-                    // Check if process is still running
-                    $status = proc_get_status($process);
-                    if (!$status['running']) {
-                        // Process finished, read any remaining output
-                        while (!feof($pipes[1])) {
-                            $chunk = fread($pipes[1], 8192);
-                            if ($chunk !== false) {
-                                $output .= $chunk;
-                            }
-                        }
-                        while (!feof($pipes[2])) {
-                            $chunk = fread($pipes[2], 8192);
-                            if ($chunk !== false) {
-                                $errorOutput .= $chunk;
-                            }
-                        }
-                        break;
-                    }
-                }
-                
-                // Close pipes
-                fclose($pipes[1]);
-                fclose($pipes[2]);
-                
-                // Get exit code
-                $exitCode = proc_close($process);
-                
-                Log::info('Python script execution completed', [
-                    'exit_code' => $exitCode,
-                    'output' => $output,
-                    'error_output' => $errorOutput,
-                    'execution_time' => time() - $startTime
-                ]);
-                
-                if ($exitCode !== 0) {
-                    return [
-                        'success' => false,
-                        'error' => 'Python script failed with exit code: ' . $exitCode . '. Error: ' . $errorOutput
-                    ];
-                }
-                
-                if (time() - $startTime >= $timeout) {
-                    return [
-                        'success' => false,
-                        'error' => 'Python script execution timed out after ' . $timeout . ' seconds'
-                    ];
-                }
-            } else {
-                return [
-                    'success' => false,
-                    'error' => 'Failed to start Python process'
-                ];
-            }
-
-            // Clean up temp file
-            unlink($tempFile);
-
-            if (!$output) {
-                return [
-                    'success' => false,
-                    'error' => 'Python script execution failed - no output'
-                ];
-            }
-
-            // Parse Python script output (should be clean JSON now)
-            Log::info('Raw Python output for parsing', [
-                'output_length' => strlen($output),
-                'output_preview' => substr($output, 0, 200),
-                'output_end' => substr($output, -200)
-            ]);
-            
-            $result = json_decode(trim($output), true);
-
-            Log::info('Parsed Python result', [
-                'result' => $result,
-                'json_valid' => json_last_error() === JSON_ERROR_NONE
-            ]);
-
-            if (!$result || !$result['success']) {
-                return [
-                    'success' => false,
-                    'error' => $result['error'] ?? 'PowerPoint generation failed - invalid JSON response'
-                ];
-            }
-
-            return [
-                'success' => true,
-                'file_path' => $result['file_path'],
-                'download_url' => $result['download_url']
-            ];
-
-        } catch (\Exception $e) {
-            Log::error('Python PowerPoint generation failed', [
-                'error' => $e->getMessage(),
-                'data' => $data
-            ]);
-
-            return [
-                'success' => false,
-                'error' => 'Failed to execute Python script: ' . $e->getMessage()
-            ];
-        }
-    }
 
     /**
      * Parse AI outline response
@@ -1251,6 +1058,119 @@ Return JSON format:
             return [
                 'success' => false,
                 'error' => 'Failed to get presentation data: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Generate PowerPoint using FastAPI microservice
+     */
+    public function generatePowerPointWithMicroservice($aiResultId, $templateData, $userId)
+    {
+        try {
+            Log::info('Starting PowerPoint generation with microservice', [
+                'ai_result_id' => $aiResultId,
+                'user_id' => $userId,
+                'template' => $templateData['template'] ?? 'default'
+            ]);
+
+            // Use flexible lookup for public access
+            $aiResult = AIResult::where('id', $aiResultId)
+                ->where('tool_type', 'presentation')
+                ->first();
+            
+            // If not found and we have a specific user_id, try with user_id filter
+            if (!$aiResult && $userId) {
+                $aiResult = AIResult::where('id', $aiResultId)
+                    ->where('user_id', $userId)
+                    ->where('tool_type', 'presentation')
+                    ->first();
+            }
+
+            if (!$aiResult) {
+                return [
+                    'success' => false,
+                    'error' => 'Presentation not found'
+                ];
+            }
+
+            // Validate result data
+            if (!$aiResult->result_data || !is_array($aiResult->result_data)) {
+                return [
+                    'success' => false,
+                    'error' => 'Invalid presentation data. Please regenerate the outline.'
+                ];
+            }
+
+            // Always use the most up-to-date content from the database
+            $resultData = $aiResult->result_data;
+            
+            // Prepare data for FastAPI microservice
+            $requestData = [
+                'presentation_data' => [
+                    'title' => $resultData['title'] ?? 'Presentation',
+                    'slides' => $resultData['slides'] ?? []
+                ],
+                'user_id' => $userId,
+                'ai_result_id' => $aiResultId,
+                'template' => $templateData['template'] ?? 'corporate_blue',
+                'color_scheme' => $templateData['color_scheme'] ?? 'blue',
+                'font_style' => $templateData['font_style'] ?? 'modern'
+            ];
+            
+            Log::info('Data being sent to microservice', [
+                'ai_result_id' => $aiResultId,
+                'user_id' => $userId,
+                'request_data' => $requestData,
+                'slides_count' => count($resultData['slides'] ?? []),
+                'has_generated_content' => isset($resultData['slides'][0]['content']) && !empty($resultData['slides'][0]['content'])
+            ]);
+
+            // Call FastAPI microservice
+            $response = $this->callMicroservice($this->microserviceUrl . '/export', $requestData);
+
+            if (!$response['success']) {
+                return [
+                    'success' => false,
+                    'error' => $response['error'] ?? 'Microservice call failed'
+                ];
+            }
+
+            // Update AI result with PowerPoint file
+            $resultData['powerpoint_file'] = $response['data']['file_path'];
+            $resultData['step'] = 'powerpoint_generated';
+            $resultData['template_used'] = $templateData['template'] ?? 'corporate_blue';
+
+            $aiResult->update([
+                'result_data' => $resultData,
+                'metadata' => array_merge($aiResult->metadata ?? [], [
+                    'template' => $templateData['template'] ?? 'corporate_blue',
+                    'color_scheme' => $templateData['color_scheme'] ?? 'blue',
+                    'font_style' => $templateData['font_style'] ?? 'modern',
+                    'generated_at' => now()->toISOString(),
+                    'generated_by' => 'fastapi_microservice'
+                ])
+            ]);
+
+            return [
+                'success' => true,
+                'data' => [
+                    'powerpoint_file' => $response['data']['file_path'],
+                    'download_url' => $response['data']['download_url'],
+                    'ai_result_id' => $aiResultId
+                ]
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Microservice PowerPoint generation failed', [
+                'error' => $e->getMessage(),
+                'ai_result_id' => $aiResultId,
+                'user_id' => $userId
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Failed to generate PowerPoint with microservice: ' . $e->getMessage()
             ];
         }
     }

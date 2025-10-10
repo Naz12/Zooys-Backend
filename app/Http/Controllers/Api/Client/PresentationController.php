@@ -308,12 +308,15 @@ class PresentationController extends Controller
                 'user_id' => $userId
             ]);
 
-            // Try microservice first, fallback to direct generation
-            if ($this->aiPresentationService->isMicroserviceAvailable()) {
-                $result = $this->aiPresentationService->generatePowerPointWithMicroservice($aiResultId, $templateData, $userId);
-            } else {
-                $result = $this->aiPresentationService->generatePowerPoint($aiResultId, $templateData, $userId);
+            // Use microservice for PowerPoint generation
+            if (!$this->aiPresentationService->isMicroserviceAvailable()) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'PowerPoint generation service is currently unavailable. Please try again later.'
+                ], 503);
             }
+            
+            $result = $this->aiPresentationService->generatePowerPointWithMicroservice($aiResultId, $templateData, $userId);
 
             if (!$result['success']) {
                 return response()->json([
