@@ -57,4 +57,9 @@ return [
         'url' => env('PRESENTATION_MICROSERVICE_URL', 'http://localhost:8001'),
     ],
 
+    'math_microservice' => [
+        'url' => env('MATH_MICROSERVICE_URL', 'http://localhost:8002'),
+        'timeout' => env('MATH_MICROSERVICE_TIMEOUT', 60),
+    ],
+
 ];

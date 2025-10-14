@@ -275,9 +275,10 @@ class MathController extends Controller
             
             return response()->json([
                 'total_problems' => $stats['total_problems'],
-                'problems_by_subject' => $stats['problems_by_subject'],
-                'problems_by_difficulty' => $stats['problems_by_difficulty'],
-                'recent_activity' => $stats['recent_activity'],
+                'total_solutions' => $stats['total_solutions'],
+                'subject_stats' => $stats['subject_stats'],
+                'difficulty_stats' => $stats['difficulty_stats'],
+                'recent_problems' => $stats['recent_problems'],
                 'success_rate' => $stats['success_rate']
             ])->header('Access-Control-Allow-Origin', 'http://localhost:3000')
               ->header('Access-Control-Allow-Credentials', 'true');

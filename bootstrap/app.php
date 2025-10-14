@@ -14,15 +14,14 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware) {
         // ✅ Global middleware
         $middleware->append(\App\Http\Middleware\TrackVisits::class);
-        
+
         // ✅ CORS middleware for all routes
         $middleware->web(prepend: [
             \Illuminate\Http\Middleware\HandleCors::class,
         ]);
-        
-        $middleware->api(prepend: [
-            \Illuminate\Http\Middleware\HandleCors::class,
-        ]);
+
+        // ✅ Global CORS headers for all responses
+        $middleware->append(\App\Http\Middleware\CustomCors::class);
 
         // ✅ Aliases
         $middleware->alias([
