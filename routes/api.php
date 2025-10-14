@@ -250,11 +250,13 @@ Route::middleware(['auth:sanctum', 'check.usage'])->group(function () {
 
     // AI Presentation Generator
     Route::put('/presentations/{aiResultId}/update-outline', [PresentationController::class, 'updateOutline']);
+    Route::post('/presentations/{aiResultId}/generate-content', [PresentationController::class, 'generateContent']);
     Route::post('/presentations/{aiResultId}/generate-powerpoint', [PresentationController::class, 'generatePowerPoint']);
     Route::get('/presentations/{aiResultId}', [PresentationController::class, 'getPresentation']);
     
     // Frontend Editing Endpoints (JSON-based)
     Route::post('/presentations/{aiResultId}/save', [PresentationController::class, 'savePresentation']);
+    Route::get('/presentations/{aiResultId}/status', [PresentationController::class, 'getProgressStatus']);
     Route::get('/presentations/microservice-status', [PresentationController::class, 'checkMicroserviceStatus']);
 });
 

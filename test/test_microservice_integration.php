@@ -1,150 +1,355 @@
 <?php
 
 /**
- * Test script for FastAPI Microservice Integration
- * Tests PowerPoint generation and editing capabilities
+ * Test file for Microservice Integration
+ * 
+ * This file tests the integration between Laravel and the enhanced Python microservices
  */
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
-use App\Services\AIPresentationService;
-use App\Models\User;
+use Illuminate\Support\Facades\Http;
 
-// Bootstrap Laravel
-$app = require_once __DIR__ . '/../bootstrap/app.php';
-$app->make('Illuminate\Contracts\Console\Kernel')->bootstrap();
+class MicroserviceIntegrationTest
+{
+    private $presentationMicroserviceUrl;
+    private $mathMicroserviceUrl;
+    private $testResults = [];
 
-echo "🚀 Testing FastAPI Microservice Integration\n";
-echo "==========================================\n\n";
-
-$userId = 21; // Test user ID
-
-try {
-    $service = new AIPresentationService();
-    
-    // Test 1: Check microservice availability
-    echo "🔍 Testing Microservice Availability...\n";
-    $isAvailable = $service->isMicroserviceAvailable();
-    
-    if ($isAvailable) {
-        echo "✅ Microservice is available!\n";
-    } else {
-        echo "❌ Microservice is not available. Please start the FastAPI service.\n";
-        echo "   Run: cd python_presentation_service && python main.py\n\n";
-        exit(1);
+    public function __construct()
+    {
+        $this->presentationMicroserviceUrl = 'http://localhost:8001';
+        $this->mathMicroserviceUrl = 'http://localhost:8002';
     }
-    
-    // Test 2: Generate presentation with microservice
-    echo "\n📝 Testing PowerPoint Generation with Microservice...\n";
-    
-    $testData = [
-        'input_type' => 'text',
-        'content' => 'The Future of AI in Business',
-        'language' => 'English',
-        'tone' => 'Professional',
-        'length' => 'Medium',
-        'model' => 'Basic Model'
-    ];
-    
-    $startTime = microtime(true);
-    $result = $service->generateOutline($testData, $userId);
-    $endTime = microtime(true);
-    $duration = round($endTime - $startTime, 2);
-    
-    if ($result['success']) {
-        echo "✅ Outline generation successful!\n";
-        echo "⏱️  Duration: {$duration} seconds\n";
-        echo "📊 AI Result ID: {$result['data']['ai_result_id']}\n\n";
+
+    /**
+     * Run all tests
+     */
+    public function runAllTests()
+    {
+        echo "🔧 Microservice Integration Tests\n";
+        echo "=================================\n\n";
+
+        $this->testPresentationMicroserviceHealth();
+        $this->testMathMicroserviceHealth();
+        $this->testPresentationOutlineGeneration();
+        $this->testPresentationContentGeneration();
+        $this->testMathProblemSolving();
+
+        $this->displayResults();
+    }
+
+    /**
+     * Test presentation microservice health
+     */
+    private function testPresentationMicroserviceHealth()
+    {
+        echo "Testing Presentation Microservice Health...\n";
         
-        $aiResultId = $result['data']['ai_result_id'];
-        
-        // Test 3: Generate PowerPoint with microservice
-        echo "🎨 Testing PowerPoint Generation with Microservice...\n";
-        $templateData = [
-            'template' => 'tech_modern',
-            'color_scheme' => 'teal',
-            'font_style' => 'modern'
-        ];
-        
-        $startTime = microtime(true);
-        $powerPointResult = $service->generatePowerPointWithMicroservice($aiResultId, $templateData, $userId);
-        $endTime = microtime(true);
-        $duration = round($endTime - $startTime, 2);
-        
-        if ($powerPointResult['success']) {
-            echo "✅ PowerPoint generation successful!\n";
-            echo "⏱️  Duration: {$duration} seconds\n";
-            echo "📁 File: {$powerPointResult['data']['powerpoint_file']}\n";
-            echo "🔗 Download URL: {$powerPointResult['data']['download_url']}\n\n";
+        try {
+            $response = Http::timeout(10)->get($this->presentationMicroserviceUrl . '/health');
             
-            // Test 4: Edit text in presentation
-            echo "✏️  Testing Text Editing...\n";
-            $editResult = $service->editPresentationText(
-                $aiResultId,
-                2, // Slide 2
-                'title',
-                'Updated Slide Title',
-                $userId
-            );
-            
-            if ($editResult['success']) {
-                echo "✅ Text editing successful!\n";
-                echo "📝 Message: {$editResult['message']}\n\n";
+            if ($response->successful()) {
+                $data = $response->json();
+                $this->testResults['presentation_health'] = [
+                    'status' => 'PASS',
+                    'message' => 'Presentation microservice is healthy',
+                    'services' => $data['services'] ?? []
+                ];
+                echo "✅ PASS: Presentation microservice is healthy\n";
             } else {
-                echo "❌ Text editing failed: {$editResult['error']}\n\n";
+                $this->testResults['presentation_health'] = [
+                    'status' => 'FAIL',
+                    'message' => 'Health check failed: ' . $response->status()
+                ];
+                echo "❌ FAIL: Health check failed\n";
             }
-            
-            // Test 5: Change template
-            echo "🎨 Testing Template Change...\n";
-            $templateChangeData = [
-                'template' => 'elegant_purple',
-                'color_scheme' => 'purple',
-                'font_style' => 'modern'
+        } catch (\Exception $e) {
+            $this->testResults['presentation_health'] = [
+                'status' => 'FAIL',
+                'message' => 'Connection failed: ' . $e->getMessage()
             ];
-            
-            $templateResult = $service->changePresentationTemplate(
-                $aiResultId,
-                $templateChangeData,
-                $userId
-            );
-            
-            if ($templateResult['success']) {
-                echo "✅ Template change successful!\n";
-                echo "🎨 New Template: {$templateResult['data']['template']}\n\n";
-            } else {
-                echo "❌ Template change failed: {$templateResult['error']}\n\n";
-            }
-            
-            // Test 6: Get presentation info
-            echo "📊 Testing Presentation Info Retrieval...\n";
-            $infoResult = $service->getPresentationInfo($aiResultId, $userId);
-            
-            if ($infoResult['success']) {
-                echo "✅ Presentation info retrieved successfully!\n";
-                echo "📄 Slide Count: {$infoResult['data']['slide_count']}\n";
-                echo "📁 File Path: {$infoResult['data']['file_path']}\n\n";
-            } else {
-                echo "❌ Presentation info retrieval failed: {$infoResult['error']}\n\n";
-            }
-            
-        } else {
-            echo "❌ PowerPoint generation failed: {$powerPointResult['error']}\n";
+            echo "❌ FAIL: Connection failed\n";
         }
         
-    } else {
-        echo "❌ Outline generation failed: {$result['error']}\n";
+        echo "\n";
     }
-    
-} catch (Exception $e) {
-    echo "❌ Test failed with exception: " . $e->getMessage() . "\n";
-    echo "📍 File: " . $e->getFile() . ":" . $e->getLine() . "\n";
+
+    /**
+     * Test math microservice health
+     */
+    private function testMathMicroserviceHealth()
+    {
+        echo "Testing Math Microservice Health...\n";
+        
+        try {
+            $response = Http::timeout(10)->get($this->mathMicroserviceUrl . '/health');
+            
+            if ($response->successful()) {
+                $data = $response->json();
+                $this->testResults['math_health'] = [
+                    'status' => 'PASS',
+                    'message' => 'Math microservice is healthy',
+                    'services' => $data['services'] ?? []
+                ];
+                echo "✅ PASS: Math microservice is healthy\n";
+            } else {
+                $this->testResults['math_health'] = [
+                    'status' => 'FAIL',
+                    'message' => 'Health check failed: ' . $response->status()
+                ];
+                echo "❌ FAIL: Health check failed\n";
+            }
+        } catch (\Exception $e) {
+            $this->testResults['math_health'] = [
+                'status' => 'FAIL',
+                'message' => 'Connection failed: ' . $e->getMessage()
+            ];
+            echo "❌ FAIL: Connection failed\n";
+        }
+        
+        echo "\n";
+    }
+
+    /**
+     * Test presentation outline generation
+     */
+    private function testPresentationOutlineGeneration()
+    {
+        echo "Testing Presentation Outline Generation...\n";
+        
+        try {
+            $requestData = [
+                'content' => 'Artificial Intelligence and Machine Learning in Modern Business',
+        'language' => 'English',
+        'tone' => 'Professional',
+                'length' => 'Medium'
+            ];
+
+            $response = Http::timeout(30)->post(
+                $this->presentationMicroserviceUrl . '/generate-outline',
+                $requestData
+            );
+            
+            if ($response->successful()) {
+                $data = $response->json();
+                if ($data['success'] && isset($data['data']['title']) && isset($data['data']['slides'])) {
+                    $this->testResults['presentation_outline'] = [
+                        'status' => 'PASS',
+                        'message' => 'Outline generated successfully',
+                        'title' => $data['data']['title'],
+                        'slide_count' => count($data['data']['slides'])
+                    ];
+                    echo "✅ PASS: Outline generated successfully\n";
+                    echo "   Title: " . $data['data']['title'] . "\n";
+                    echo "   Slides: " . count($data['data']['slides']) . "\n";
+                } else {
+                    $this->testResults['presentation_outline'] = [
+                        'status' => 'FAIL',
+                        'message' => 'Invalid response format'
+                    ];
+                    echo "❌ FAIL: Invalid response format\n";
+                }
+            } else {
+                $this->testResults['presentation_outline'] = [
+                    'status' => 'FAIL',
+                    'message' => 'Request failed: ' . $response->status()
+                ];
+                echo "❌ FAIL: Request failed\n";
+            }
+        } catch (\Exception $e) {
+            $this->testResults['presentation_outline'] = [
+                'status' => 'FAIL',
+                'message' => 'Exception: ' . $e->getMessage()
+            ];
+            echo "❌ FAIL: Exception occurred\n";
+        }
+        
+        echo "\n";
+    }
+
+    /**
+     * Test presentation content generation
+     */
+    private function testPresentationContentGeneration()
+    {
+        echo "Testing Presentation Content Generation...\n";
+        
+        try {
+            $outline = [
+                'title' => 'Test Presentation',
+                'slides' => [
+                    [
+                        'slide_number' => 1,
+                        'header' => 'Introduction',
+                        'subheaders' => ['Welcome', 'Overview'],
+                        'slide_type' => 'title'
+                    ],
+                    [
+                        'slide_number' => 2,
+                        'header' => 'Main Topic',
+                        'subheaders' => ['Key Point 1', 'Key Point 2'],
+                        'slide_type' => 'content'
+                    ]
+                ]
+            ];
+
+            $requestData = [
+                'outline' => $outline,
+                'language' => 'English',
+                'tone' => 'Professional',
+                'detail_level' => 'detailed'
+            ];
+
+            $response = Http::timeout(60)->post(
+                $this->presentationMicroserviceUrl . '/generate-content',
+                $requestData
+            );
+            
+            if ($response->successful()) {
+                $data = $response->json();
+                if ($data['success'] && isset($data['data']['slides'])) {
+                    $hasContent = false;
+                    foreach ($data['data']['slides'] as $slide) {
+                        if (isset($slide['content']) && !empty($slide['content'])) {
+                            $hasContent = true;
+                            break;
+                        }
+                    }
+                    
+                    if ($hasContent) {
+                        $this->testResults['presentation_content'] = [
+                            'status' => 'PASS',
+                            'message' => 'Content generated successfully'
+                        ];
+                        echo "✅ PASS: Content generated successfully\n";
+                    } else {
+                        $this->testResults['presentation_content'] = [
+                            'status' => 'FAIL',
+                            'message' => 'No content generated for slides'
+                        ];
+                        echo "❌ FAIL: No content generated\n";
+                    }
+                } else {
+                    $this->testResults['presentation_content'] = [
+                        'status' => 'FAIL',
+                        'message' => 'Invalid response format'
+                    ];
+                    echo "❌ FAIL: Invalid response format\n";
+                }
+            } else {
+                $this->testResults['presentation_content'] = [
+                    'status' => 'FAIL',
+                    'message' => 'Request failed: ' . $response->status()
+                ];
+                echo "❌ FAIL: Request failed\n";
+            }
+        } catch (\Exception $e) {
+            $this->testResults['presentation_content'] = [
+                'status' => 'FAIL',
+                'message' => 'Exception: ' . $e->getMessage()
+            ];
+            echo "❌ FAIL: Exception occurred\n";
+        }
+        
+        echo "\n";
+    }
+
+    /**
+     * Test math problem solving
+     */
+    private function testMathProblemSolving()
+    {
+        echo "Testing Math Problem Solving...\n";
+        
+        try {
+            $requestData = [
+                'problem_text' => 'Solve for x: 2x + 5 = 13',
+                'subject_area' => 'algebra',
+                'difficulty_level' => 'intermediate',
+                'include_explanation' => true
+            ];
+
+            $response = Http::timeout(30)->post(
+                $this->mathMicroserviceUrl . '/explain',
+                $requestData
+            );
+            
+            if ($response->successful()) {
+                $data = $response->json();
+                if ($data['success'] && isset($data['solution']['answer'])) {
+                    $this->testResults['math_solving'] = [
+                        'status' => 'PASS',
+                        'message' => 'Math problem solved successfully',
+                        'answer' => $data['solution']['answer']
+                    ];
+                    echo "✅ PASS: Math problem solved successfully\n";
+                    echo "   Answer: " . $data['solution']['answer'] . "\n";
+                } else {
+                    $this->testResults['math_solving'] = [
+                        'status' => 'FAIL',
+                        'message' => 'Invalid response format'
+                    ];
+                    echo "❌ FAIL: Invalid response format\n";
+                }
+            } else {
+                $this->testResults['math_solving'] = [
+                    'status' => 'FAIL',
+                    'message' => 'Request failed: ' . $response->status()
+                ];
+                echo "❌ FAIL: Request failed\n";
+            }
+        } catch (\Exception $e) {
+            $this->testResults['math_solving'] = [
+                'status' => 'FAIL',
+                'message' => 'Exception: ' . $e->getMessage()
+            ];
+            echo "❌ FAIL: Exception occurred\n";
+        }
+        
+        echo "\n";
+    }
+
+    /**
+     * Display test results summary
+     */
+    private function displayResults()
+    {
+        echo "📊 Test Results Summary\n";
+        echo "======================\n\n";
+
+        $passed = 0;
+        $failed = 0;
+
+        foreach ($this->testResults as $testName => $result) {
+            $status = $result['status'];
+            $message = $result['message'];
+            
+            if ($status === 'PASS') {
+                echo "✅ {$testName}: {$message}\n";
+                $passed++;
+            } else {
+                echo "❌ {$testName}: {$message}\n";
+                $failed++;
+            }
+        }
+
+        echo "\n";
+        echo "Total Tests: " . ($passed + $failed) . "\n";
+        echo "Passed: {$passed}\n";
+        echo "Failed: {$failed}\n";
+        echo "Success Rate: " . round(($passed / ($passed + $failed)) * 100, 1) . "%\n";
+
+        if ($failed === 0) {
+            echo "\n🎉 All tests passed! Microservices are working correctly.\n";
+        } else {
+            echo "\n⚠️  Some tests failed. Please check the microservice configurations.\n";
+        }
+    }
 }
 
-echo "\n🏁 Microservice integration test completed!\n";
-echo "\n📋 Summary of Features Tested:\n";
-echo "✅ Microservice availability check\n";
-echo "✅ PowerPoint generation with microservice\n";
-echo "✅ Text editing in existing presentations\n";
-echo "✅ Template changing without regeneration\n";
-echo "✅ Presentation info retrieval\n";
-echo "\n🚀 The FastAPI microservice is working perfectly!\n";
+// Run tests if called directly
+if (php_sapi_name() === 'cli') {
+    $test = new MicroserviceIntegrationTest();
+    $test->runAllTests();
+}

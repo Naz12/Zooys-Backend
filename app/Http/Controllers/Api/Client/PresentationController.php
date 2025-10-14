@@ -35,7 +35,7 @@ class PresentationController extends Controller
                 'language' => 'string|in:English,Spanish,French,German,Italian,Portuguese,Chinese,Japanese',
                 'tone' => 'string|in:Professional,Casual,Academic,Creative,Formal',
                 'length' => 'string|in:Short,Medium,Long',
-                'model' => 'string|in:Basic Model,Advanced Model,Premium Model',
+                'model' => 'string|in:Basic Model,Advanced Model,Premium Model,gpt-3.5-turbo,gpt-4',
                 'file' => 'required_if:input_type,file|file|mimes:pdf,doc,docx,txt|max:10240',
                 'url' => 'required_if:input_type,url|url',
                 'youtube_url' => 'required_if:input_type,youtube|url'
@@ -92,6 +92,67 @@ class PresentationController extends Controller
             return response()->json([
                 'success' => false,
                 'error' => 'Failed to generate presentation outline'
+            ], 500);
+        }
+    }
+
+    /**
+     * Generate full presentation content from outline
+     */
+    public function generateContent(Request $request, $aiResultId): JsonResponse
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'language' => 'string|in:English,Spanish,French,German,Italian,Portuguese,Chinese,Japanese',
+                'tone' => 'string|in:Professional,Casual,Academic,Creative,Formal',
+                'detail_level' => 'string|in:brief,detailed,comprehensive'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Validation failed',
+                    'details' => $validator->errors()
+                ], 422);
+            }
+
+            $userId = $request->user()->id;
+            $language = $request->input('language', 'English');
+            $tone = $request->input('tone', 'Professional');
+            $detailLevel = $request->input('detail_level', 'detailed');
+
+            // Generate full content using microservice
+            $result = $this->aiPresentationService->generateFullContent(
+                $aiResultId,
+                $userId,
+                $language,
+                $tone,
+                $detailLevel
+            );
+
+            if ($result['success']) {
+                return response()->json([
+                    'success' => true,
+                    'data' => $result['data'],
+                    'message' => $result['message']
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'error' => $result['error']
+                ], 500);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Content generation failed', [
+                'error' => $e->getMessage(),
+                'ai_result_id' => $aiResultId,
+                'user_id' => $request->user()->id ?? null
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to generate content: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -178,105 +239,6 @@ class PresentationController extends Controller
         }
     }
 
-    /**
-     * Generate full content for presentation slides
-     */
-    public function generateContent(Request $request, $aiResultId)
-    {
-        try {
-            // Increase timeout for content generation (can take 2-3 minutes)
-            ini_set('max_execution_time', 300); // 5 minutes
-            set_time_limit(300);
-            
-            $userId = auth()->id() ?? 5; // Use existing user ID for public access
-
-            // Check for duplicate requests and processing locks
-            $lockKey = "content_generation_{$aiResultId}_{$userId}";
-            $cacheKey = "content_result_{$aiResultId}_{$userId}";
-            
-            // Check if already processing
-            if (\Illuminate\Support\Facades\Cache::has($lockKey)) {
-                Log::info('Content generation already in progress', [
-                    'ai_result_id' => $aiResultId,
-                    'user_id' => $userId,
-                    'lock_key' => $lockKey
-                ]);
-                
-                return response()->json([
-                    'success' => false,
-                    'error' => 'Content generation already in progress',
-                    'status' => 'processing'
-                ], 409)->header('Access-Control-Allow-Origin', '*')
-                  ->header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-                  ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-            }
-            
-            // Check if result already exists and is recent (within 5 minutes)
-            if (\Illuminate\Support\Facades\Cache::has($cacheKey)) {
-                $cachedResult = \Illuminate\Support\Facades\Cache::get($cacheKey);
-                Log::info('Returning cached content generation result', [
-                    'ai_result_id' => $aiResultId,
-                    'user_id' => $userId,
-                    'cached_at' => $cachedResult['cached_at'] ?? 'unknown'
-                ]);
-                
-                return response()->json([
-                    'success' => true,
-                    'data' => $cachedResult['data'],
-                    'cached' => true,
-                    'cached_at' => $cachedResult['cached_at']
-                ])->header('Access-Control-Allow-Origin', '*')
-                  ->header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-                  ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-            }
-            
-            // Set processing lock (expires in 10 minutes)
-            \Illuminate\Support\Facades\Cache::put($lockKey, true, 600);
-            
-            try {
-                $result = $this->aiPresentationService->generateContent($aiResultId, $userId);
-                
-                // Cache successful result for 5 minutes
-                if ($result['success']) {
-                    \Illuminate\Support\Facades\Cache::put($cacheKey, [
-                        'data' => $result['data'],
-                        'cached_at' => now()->toISOString()
-                    ], 300);
-                }
-                
-                return $result;
-            } finally {
-                // Always remove the lock
-                \Illuminate\Support\Facades\Cache::forget($lockKey);
-            }
-
-            if (!$result['success']) {
-                return response()->json([
-                    'success' => false,
-                    'error' => $result['error']
-                ], 400);
-            }
-
-            return response()->json([
-                'success' => true,
-                'data' => $result['data']
-            ]);
-            
-        } catch (\Exception $e) {
-            Log::error('Content generation failed', [
-                'ai_result_id' => $aiResultId,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-            
-            return response()->json([
-                'success' => false,
-                'error' => 'Content generation failed: ' . $e->getMessage()
-            ], 500)->header('Access-Control-Allow-Origin', '*')
-              ->header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-              ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-        }
-    }
 
     /**
      * Generate PowerPoint presentation
@@ -728,6 +690,55 @@ class PresentationController extends Controller
         } finally {
             // Always remove the lock
             \Illuminate\Support\Facades\Cache::forget($lockKey);
+        }
+    }
+
+    /**
+     * Get progress status for a presentation operation
+     */
+    public function getProgressStatus(Request $request, $aiResultId): JsonResponse
+    {
+        try {
+            $operationId = $request->query('operation_id');
+            
+            if (!$operationId) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Operation ID is required'
+                ], 400);
+            }
+
+            // Call microservice to get progress
+            $microserviceUrl = config('services.presentation_microservice.url', 'http://localhost:8001');
+            $response = $this->aiPresentationService->callMicroservice(
+                $microserviceUrl . '/progress/' . $operationId,
+                []
+            );
+
+            if ($response['success']) {
+                $progressData = $response['data'];
+                $progressData['ai_result_id'] = $aiResultId;
+                $progressData['operation_id'] = $operationId;
+
+                return response()->json(new \App\Http\Resources\PresentationProgressResource($progressData));
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'error' => $response['error'] ?? 'Failed to get progress status'
+                ], 500);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Progress status check failed', [
+                'error' => $e->getMessage(),
+                'ai_result_id' => $aiResultId,
+                'operation_id' => $request->query('operation_id')
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to get progress status: ' . $e->getMessage()
+            ], 500);
         }
     }
 

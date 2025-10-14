@@ -49,8 +49,8 @@ class AIPresentationService
                 ];
             }
 
-            // Generate presentation outline using AI
-            $outline = $this->generateAIPresentationOutline($content['content'], $inputData);
+            // Generate presentation outline using microservice
+            $outline = $this->callMicroserviceForOutline($content['content'], $inputData);
 
             if (!$outline['success']) {
                 return [
@@ -780,59 +780,57 @@ Format the response as a JSON object with a 'content' field containing an array 
     }
 
     /**
-     * Generate AI presentation outline
+     * Call microservice for outline generation
      */
-    private function generateAIPresentationOutline($content, $inputData)
+    private function callMicroserviceForOutline($content, $inputData)
     {
         try {
             $language = $inputData['language'] ?? 'English';
             $tone = $inputData['tone'] ?? 'Professional';
             $length = $inputData['length'] ?? 'Medium';
-            $model = $inputData['model'] ?? 'Basic Model';
+            $model = $inputData['model'] ?? null;
 
-            // Determine slide count based on length
-            $slideCount = $this->getSlideCount($length);
+            // Prepare request data for microservice
+            $requestData = [
+                'content' => $content,
+                'language' => $language,
+                'tone' => $tone,
+                'length' => $length,
+                'model' => $model
+            ];
 
-            $prompt = "Create a {$tone} presentation outline for: {$content}
+            Log::info('Calling microservice for outline generation', [
+                'url' => $this->microserviceUrl . '/generate-outline',
+                'request_data' => $requestData,
+                'content_length' => strlen($content)
+            ]);
 
-Requirements: {$slideCount} slides, {$language} language
+            // Call microservice
+            $response = $this->callMicroservice($this->microserviceUrl . '/generate-outline', $requestData);
 
-Return JSON format:
-{
-  \"title\": \"Presentation Title\",
-  \"slides\": [
-    {
-      \"slide_number\": 1,
-      \"header\": \"Slide Title\",
-      \"subheaders\": [\"Point 1\", \"Point 2\"],
-      \"slide_type\": \"title\"
-    }
-  ],
-  \"estimated_duration\": \"X minutes\",
-  \"slide_count\": {$slideCount}
-}";
+            Log::info('Microservice response received', [
+                'success' => $response['success'] ?? false,
+                'response_keys' => array_keys($response),
+                'error' => $response['error'] ?? null
+            ]);
 
-            $aiResponse = $this->openAIService->generateResponse($prompt, 'gpt-3.5-turbo');
-
-            // Parse AI response
-            $outlineData = $this->parseAIOutlineResponse($aiResponse);
-
-            if (!$outlineData) {
+            if (!$response['success']) {
                 return [
                     'success' => false,
-                    'error' => 'Failed to parse AI response'
+                    'error' => $response['error'] ?? 'Microservice call failed'
                 ];
             }
 
             return [
                 'success' => true,
-                'data' => $outlineData
+                'data' => $response['data']
             ];
 
         } catch (\Exception $e) {
-            Log::error('AI outline generation failed', [
+            Log::error('Microservice outline generation failed', [
                 'error' => $e->getMessage(),
-                'content_length' => strlen($content)
+                'content_length' => strlen($content),
+                'trace' => $e->getTraceAsString()
             ]);
 
             return [
@@ -844,52 +842,118 @@ Return JSON format:
 
 
     /**
-     * Parse AI outline response
+     * Call microservice for content generation
      */
-    private function parseAIOutlineResponse($response)
+    public function callMicroserviceForContent($outline, $language = 'English', $tone = 'Professional', $detailLevel = 'detailed')
     {
         try {
-            // Try to extract JSON from response
-            $jsonStart = strpos($response, '{');
-            $jsonEnd = strrpos($response, '}') + 1;
+            // Prepare request data for microservice
+            $requestData = [
+                'outline' => $outline,
+                'language' => $language,
+                'tone' => $tone,
+                'detail_level' => $detailLevel
+            ];
 
-            if ($jsonStart === false || $jsonEnd === false) {
-                return null;
+            // Call microservice
+            $response = $this->callMicroservice($this->microserviceUrl . '/generate-content', $requestData);
+
+            if (!$response['success']) {
+                return [
+                    'success' => false,
+                    'error' => $response['error'] ?? 'Microservice call failed'
+                ];
             }
 
-            $jsonString = substr($response, $jsonStart, $jsonEnd - $jsonStart);
-            $data = json_decode($jsonString, true);
-
-            if (!$data || !isset($data['title']) || !isset($data['slides'])) {
-                return null;
-            }
-
-            return $data;
+            return [
+                'success' => true,
+                'data' => $response['data']
+            ];
 
         } catch (\Exception $e) {
-            Log::error('Failed to parse AI outline response', [
+            Log::error('Microservice content generation failed', [
                 'error' => $e->getMessage(),
-                'response' => substr($response, 0, 500)
+                'outline_title' => $outline['title'] ?? 'Unknown'
             ]);
 
-            return null;
+            return [
+                'success' => false,
+                'error' => 'Failed to generate content: ' . $e->getMessage()
+            ];
         }
     }
 
     /**
-     * Get slide count based on length
+     * Generate full presentation content from outline
      */
-    private function getSlideCount($length)
+    public function generateFullContent($aiResultId, $userId, $language = 'English', $tone = 'Professional', $detailLevel = 'detailed')
     {
-        switch (strtolower($length)) {
-            case 'short':
-                return 8;
-            case 'medium':
-                return 12;
-            case 'long':
-                return 18;
-            default:
-                return 12;
+        try {
+            Log::info('Starting full content generation', [
+                'ai_result_id' => $aiResultId,
+                'user_id' => $userId
+            ]);
+
+            // Get the AI result
+            $aiResult = AIResult::where('id', $aiResultId)
+                ->where('tool_type', 'presentation')
+                ->first();
+            
+            if (!$aiResult) {
+                return [
+                    'success' => false,
+                    'error' => 'Presentation not found'
+                ];
+            }
+
+            // Get outline from result data
+            $outline = $aiResult->result_data;
+            if (!$outline || !isset($outline['slides'])) {
+                return [
+                    'success' => false,
+                    'error' => 'Invalid outline data'
+                ];
+            }
+
+            // Generate content using microservice
+            $contentResult = $this->callMicroserviceForContent($outline, $language, $tone, $detailLevel);
+
+            if (!$contentResult['success']) {
+                return [
+                    'success' => false,
+                    'error' => $contentResult['error']
+                ];
+            }
+
+            // Update AI result with full content
+            $aiResult->update([
+                'result_data' => $contentResult['data'],
+                'metadata' => array_merge($aiResult->metadata ?? [], [
+                    'content_generated_at' => now()->toISOString(),
+                    'content_generated_by' => 'microservice',
+                    'language' => $language,
+                    'tone' => $tone,
+                    'detail_level' => $detailLevel
+                ])
+            ]);
+
+            return [
+                'success' => true,
+                'data' => $contentResult['data'],
+                'message' => 'Full content generated successfully'
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Full content generation failed', [
+                'error' => $e->getMessage(),
+                'ai_result_id' => $aiResultId,
+                'user_id' => $userId
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Failed to generate full content: ' . $e->getMessage()
+            ];
         }
     }
 
@@ -1174,7 +1238,7 @@ Return JSON format:
                 'has_generated_content' => isset($slides[0]['content']) && !empty($slides[0]['content'])
             ]);
 
-            // Call FastAPI microservice
+            // Call enhanced microservice with content generation capability
             $microserviceUrl = config('services.presentation_microservice.url', 'http://localhost:8001');
             $response = $this->callMicroservice($microserviceUrl . '/export', $requestData);
 
