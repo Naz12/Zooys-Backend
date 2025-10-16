@@ -2,17 +2,37 @@
 alwaysApply: true
 ---
 
-Search for existing code before creating new functions or components.
-Refactor duplicated code into reusable components, hooks, or utilities.
-Follow consistent file/folder naming conventions.
-Keep solutions simple — avoid overengineering.
-Ensure proper error handling in all async logic (try/catch, error boundaries, logging).
-Always provide meaningful loading states for async actions.
-Validate inputs on both client and server.
-Avoid unnecessary dependencies — solve with the chosen stack first.
-Write lightweight tests for critical business logic and APIs.
+## **🌐 GENERAL RULES (Token-Efficient)**
 
-create documentation .md files in /md folder
-create test files in /test folder
-keep agent communication files in /agent-communication folder
+### **Code Organization & Reusability**
+- **Search for existing code before creating new functions or components**
+- **Refactor duplicated code into reusable components, hooks, or utilities**
+- **Follow consistent file/folder naming conventions**
+- **Keep solutions simple — avoid overengineering**
+
+### **Error Handling & Performance**
+- **Ensure proper error handling in all async logic** (try/catch, error boundaries, logging)
+- **Always provide meaningful loading states for async actions**
+- **Validate inputs on both client and server**
+- **Avoid unnecessary dependencies** — solve with the chosen stack first
+
+### **File Management (Critical for Token Efficiency)**
+- **Create documentation .md files in /md folder ONLY when substantial documentation is needed** - NOT for routine responses
+- **Create test files in /test folder ONLY for proper unit/integration tests** - NOT for debugging sessions
+- **Don't use mock data without asking me first** - This includes test data, fake data, or any generated content
+- **Archive old documentation and test files** to reduce workspace clutter
+
+### **Agent Communication (Use Optimized System)**
+- **Use the token-optimized agent communication system** in `agent-communication/current/`
+- **Read `quick-status.md` first** for any session (30 lines max)
+- **Update communication files instead of creating new documentation**
+- **Keep active files under line limits** (quick-status: 30 lines, active-issues: 50 lines, recent-responses: 100 lines)
+
+---
+
+### **General Don'ts:**
+- ❌ **Don't create .md files for routine responses**
+- ❌ **Don't create test files for debugging sessions**
+- ❌ **Don't use mock/fake data without explicit permission**
+- ❌ **Don't ignore the optimized agent communication system**
 

@@ -1,7 +1,0 @@
-# Required PHP packages for document processing
-composer require phpoffice/phpword
-composer require smalot/pdfparser
-composer require intervention/image
-
-# Optional: For better performance
-composer require predis/predis

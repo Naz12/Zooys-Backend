@@ -599,9 +599,24 @@ class PresentationController extends Controller
     {
         $userId = auth()->id() ?? 1; // Use default user ID for public access
 
-        // Check for duplicate requests and processing locks
-        $lockKey = "export_generation_{$aiResultId}_{$userId}";
-        $cacheKey = "export_result_{$aiResultId}_{$userId}";
+        // Get the AI result to check last updated timestamp
+        $aiResult = \App\Models\AIResult::where('id', $aiResultId)
+            ->where('tool_type', 'presentation')
+            ->first();
+        
+        if (!$aiResult) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Presentation not found'
+            ], 404)->header('Access-Control-Allow-Origin', '*')
+              ->header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+              ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+        }
+        
+        // Create cache keys that include the last updated timestamp
+        $lastUpdated = $aiResult->updated_at->timestamp;
+        $lockKey = "export_generation_{$aiResultId}_{$userId}_{$lastUpdated}";
+        $cacheKey = "export_result_{$aiResultId}_{$userId}_{$lastUpdated}";
         
         // Check if already processing
         if (\Illuminate\Support\Facades\Cache::has($lockKey)) {
@@ -626,7 +641,8 @@ class PresentationController extends Controller
             Log::info('Returning cached export result', [
                 'ai_result_id' => $aiResultId,
                 'user_id' => $userId,
-                'cached_at' => $cachedResult['cached_at'] ?? 'unknown'
+                'cached_at' => $cachedResult['cached_at'] ?? 'unknown',
+                'last_updated' => $lastUpdated
             ]);
             
             return response()->json([

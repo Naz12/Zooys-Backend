@@ -111,7 +111,7 @@ class MathController extends Controller
                     'user_id' => $user->id,
                     'tool_id' => $tool->id,
                     'input' => $problemData['problem_text'] ?? 'Image uploaded',
-                    'output' => $result['solution_data']['final_answer'],
+                    'output' => $result['solution_data']['final_answer'] ?? $result['solution'] ?? 'No solution',
                     'meta' => json_encode([
                         'subject_area' => $problemData['subject_area'],
                         'difficulty_level' => $problemData['difficulty_level'],

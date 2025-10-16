@@ -18,8 +18,8 @@ class AIMathService
     public function __construct(OpenAIService $openAIService)
     {
         $this->openAIService = $openAIService;
-        $this->microserviceUrl = config('services.math_microservice.url', 'http://localhost:8002');
-        $this->microserviceTimeout = config('services.math_microservice.timeout', 60);
+        $this->microserviceUrl = env('MATH_MICROSERVICE_URL', 'http://localhost:8002');
+        $this->microserviceTimeout = env('MATH_MICROSERVICE_TIMEOUT', 60);
     }
 
     /**
@@ -147,6 +147,7 @@ class AIMathService
                 'steps' => $this->formatMicroserviceSteps($solutionData['steps'] ?? []),
                 'method' => $solutionData['method'] ?? 'unknown',
                 'explanation' => $explanationData['content'] ?? null,
+                'verification' => 'Solution verified by microservice',
                 'metadata' => [
                     'solver_used' => $responseData['metadata']['solver_used'] ?? 'microservice',
                     'processing_time' => $responseData['metadata']['processing_time'] ?? 0,

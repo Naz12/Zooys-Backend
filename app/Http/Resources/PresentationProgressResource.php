@@ -31,8 +31,11 @@ class PresentationProgressResource extends JsonResource
             'error_message' => $this->resource['error_message'] ?? null,
             'metadata' => [
                 'timestamp' => now()->toISOString(),
-                'service' => 'presentation_microservice'
+                'service' => 'presentation_service'
             ]
         ];
     }
 }
+
+
+

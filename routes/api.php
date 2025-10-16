@@ -43,6 +43,7 @@ Route::post('/presentations/generate-outline', [PresentationController::class, '
 Route::post('/presentations/{aiResultId}/generate-content', [PresentationController::class, 'generateContent']);
 Route::post('/presentations/{aiResultId}/export', [PresentationController::class, 'exportPresentation']);
 Route::get('/presentations/{aiResultId}/data', [PresentationController::class, 'getPresentationData']);
+Route::post('/presentations/{aiResultId}/save', [PresentationController::class, 'savePresentation']);
 Route::get('/files/download/{filename}', [PresentationController::class, 'downloadPresentation']);
 
 // 🔹 Public Presentation Management Routes
@@ -255,7 +256,6 @@ Route::middleware(['auth:sanctum', 'check.usage'])->group(function () {
     Route::get('/presentations/{aiResultId}', [PresentationController::class, 'getPresentation']);
     
     // Frontend Editing Endpoints (JSON-based)
-    Route::post('/presentations/{aiResultId}/save', [PresentationController::class, 'savePresentation']);
     Route::get('/presentations/{aiResultId}/status', [PresentationController::class, 'getProgressStatus']);
     Route::get('/presentations/microservice-status', [PresentationController::class, 'checkMicroserviceStatus']);
 });

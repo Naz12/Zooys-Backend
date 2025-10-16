@@ -25,7 +25,7 @@ class AIPresentationService
         $this->openAIService = $openAIService;
         $this->aiResultService = $aiResultService;
         $this->contentExtractionService = $contentExtractionService;
-        $this->microserviceUrl = config('services.powerpoint_microservice.url', 'http://localhost:8001');
+        $this->microserviceUrl = env('PRESENTATION_MICROSERVICE_URL', 'http://localhost:8001');
     }
 
     /**
@@ -1201,11 +1201,15 @@ Format the response as a JSON object with a 'content' field containing an array 
                         // Find matching slide in database
                         foreach ($slides as &$dbSlide) {
                             if (($dbSlide['slide_number'] ?? 0) == $slideIndex) {
+                                // Preserve the generated content from database first
+                                $preservedContent = $dbSlide['content'] ?? null;
+                                
                                 // Update with frontend changes but preserve generated content
                                 $dbSlide = array_merge($dbSlide, $frontendSlide);
-                                // If frontend slide has content, use it; otherwise keep database content
-                                if (!isset($frontendSlide['content']) && isset($dbSlide['content'])) {
-                                    // Keep the generated content from database
+                                
+                                // Always prioritize database content over frontend content
+                                if ($preservedContent && (!isset($frontendSlide['content']) || empty($frontendSlide['content']))) {
+                                    $dbSlide['content'] = $preservedContent;
                                 }
                                 break;
                             }
@@ -1231,11 +1235,12 @@ Format the response as a JSON object with a 'content' field containing an array 
             Log::info('Data being sent to microservice', [
                 'ai_result_id' => $aiResultId,
                 'user_id' => $userId,
-                'request_data' => $requestData,
                 'slides_count' => count($slides),
                 'first_slide_content' => $slides[0]['content'] ?? 'No content',
                 'first_slide_subheaders' => $slides[0]['subheaders'] ?? 'No subheaders',
-                'has_generated_content' => isset($slides[0]['content']) && !empty($slides[0]['content'])
+                'has_generated_content' => isset($slides[0]['content']) && !empty($slides[0]['content']),
+                'content_length' => isset($slides[0]['content']) ? strlen($slides[0]['content']) : 0,
+                'frontend_data_received' => isset($presentationData['slides']) ? count($presentationData['slides']) : 0
             ]);
 
             // Call enhanced microservice with content generation capability
@@ -1249,9 +1254,23 @@ Format the response as a JSON object with a 'content' field containing an array 
                 ];
             }
 
+            // Handle new response format with base64 file content
+            $filename = $response['data']['filename'] ?? 'presentation_' . $aiResultId . '.pptx';
+            $fileContent = base64_decode($response['data']['file_content']);
+            $fileSize = $response['data']['file_size'] ?? strlen($fileContent);
+            
+            // Save PowerPoint file to Laravel storage
+            $storagePath = 'presentations/' . $filename;
+            Storage::disk('public')->put($storagePath, $fileContent);
+            
+            // Generate download URL
+            $downloadUrl = Storage::disk('public')->url($storagePath);
+
             // Update AI result with export info
             $resultData = $aiResult->result_data;
-            $resultData['powerpoint_file'] = $response['data']['file_path'];
+            $resultData['powerpoint_file'] = $storagePath;
+            $resultData['powerpoint_filename'] = $filename;
+            $resultData['powerpoint_size'] = $fileSize;
             $resultData['exported_at'] = now()->toISOString();
 
             $aiResult->update([
@@ -1259,13 +1278,22 @@ Format the response as a JSON object with a 'content' field containing an array 
                 'metadata' => array_merge($aiResult->metadata ?? [], [
                     'exported_at' => now()->toISOString(),
                     'exported_by' => 'fastapi_microservice',
-                    'export_version' => ($aiResult->metadata['export_version'] ?? 0) + 1
+                    'export_version' => ($aiResult->metadata['export_version'] ?? 0) + 1,
+                    'file_size' => $fileSize,
+                    'slides_count' => $response['metadata']['slides_count'] ?? count($resultData['slides'] ?? [])
                 ])
             ]);
 
             return [
                 'success' => true,
-                'data' => $response['data'],
+                'data' => [
+                    'powerpoint_file' => $storagePath,
+                    'powerpoint_filename' => $filename,
+                    'download_url' => $downloadUrl,
+                    'file_size' => $fileSize,
+                    'slides_count' => $response['metadata']['slides_count'] ?? count($resultData['slides'] ?? []),
+                    'ai_result_id' => $aiResultId
+                ],
                 'message' => 'Presentation exported successfully using FastAPI microservice'
             ];
 
@@ -1404,8 +1432,22 @@ Format the response as a JSON object with a 'content' field containing an array 
                 ];
             }
 
+            // Handle new response format with base64 file content
+            $filename = $response['data']['filename'] ?? 'presentation_' . $aiResultId . '.pptx';
+            $fileContent = base64_decode($response['data']['file_content']);
+            $fileSize = $response['data']['file_size'] ?? strlen($fileContent);
+            
+            // Save PowerPoint file to Laravel storage
+            $storagePath = 'presentations/' . $filename;
+            Storage::disk('public')->put($storagePath, $fileContent);
+            
+            // Generate download URL
+            $downloadUrl = Storage::disk('public')->url($storagePath);
+
             // Update AI result with PowerPoint file
-            $resultData['powerpoint_file'] = $response['data']['file_path'];
+            $resultData['powerpoint_file'] = $storagePath;
+            $resultData['powerpoint_filename'] = $filename;
+            $resultData['powerpoint_size'] = $fileSize;
             $resultData['step'] = 'powerpoint_generated';
             $resultData['template_used'] = $templateData['template'] ?? 'corporate_blue';
 
@@ -1416,15 +1458,20 @@ Format the response as a JSON object with a 'content' field containing an array 
                     'color_scheme' => $templateData['color_scheme'] ?? 'blue',
                     'font_style' => $templateData['font_style'] ?? 'modern',
                     'generated_at' => now()->toISOString(),
-                    'generated_by' => 'fastapi_microservice'
+                    'generated_by' => 'fastapi_microservice',
+                    'file_size' => $fileSize,
+                    'slides_count' => $response['metadata']['slides_count'] ?? count($resultData['slides'] ?? [])
                 ])
             ]);
 
             return [
                 'success' => true,
                 'data' => [
-                    'powerpoint_file' => $response['data']['file_path'],
-                    'download_url' => $response['data']['download_url'],
+                    'powerpoint_file' => $storagePath,
+                    'powerpoint_filename' => $filename,
+                    'download_url' => $downloadUrl,
+                    'file_size' => $fileSize,
+                    'slides_count' => $response['metadata']['slides_count'] ?? count($resultData['slides'] ?? []),
                     'ai_result_id' => $aiResultId
                 ]
             ];

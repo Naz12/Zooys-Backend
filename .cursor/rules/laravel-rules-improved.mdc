@@ -2,111 +2,59 @@
 alwaysApply: true
 ---
 
-# 🏗️ Laravel Development Rules
+## **🔧 LARAVEL-SPECIFIC RULES**
 
-## 🚨 CRITICAL: Check Existing Modules First
-**ALWAYS** search for existing modules before implementing new code:
-- Search in `app/Services/` for similar functionality
-- Check `app/Services/Modules/ModuleRegistry.php` for available services
-- Review existing controllers in `app/Http/Controllers/`
-- Consider extending existing modules instead of creating new ones
-- Follow established patterns and architecture
+### **Service Architecture (Use Existing Modules)**
+- **ALWAYS check `app/Services/Modules/ModuleRegistry.php` before creating new services**
+- **Use existing services as dependencies** (FileUploadService, OpenAIService, AIResultService, AIPresentationService, AIMathService)
+- **Extend existing modules instead of creating duplicates** - You have 18+ services already available
+- **Follow the modular architecture pattern** established in your codebase
 
-## 📁 File Structure & Organization
-- Use Laravel's MVC structure properly: keep controllers thin, move business logic to services
-- we are using a python fast api microservice in this project,
-- Place new services in appropriate directories:
-  - Core modules: `app/Services/Modules/`
-  - Specialized services: `app/Services/`
-  - Controllers: `app/Http/Controllers/Api/Client/`
+### **Testing (Laravel Best Practices)**
+- **Write lightweight tests for critical business logic and APIs** - Use proper Laravel test structure in `/tests` folder
+- **Use Laravel's built-in testing features** (Feature tests, Unit tests, TestCase.php)
+- **Don't create debugging scripts in /test folder** - Use proper Laravel test methods
+- **Use existing test files** instead of creating new ones for similar functionality
 
-- Create test files in `test/` folder
+### **Laravel File Structure**
+- **Follow Laravel conventions** for controllers, models, services, and migrations
+- **Use Laravel's service container** for dependency injection
+- **Follow PSR-4 autoloading standards** for class organization
+- **Use Laravel's built-in validation** instead of custom validation logic
 
-## 🔧 Code Quality & Standards
-- Always validate requests with Form Request classes
-- Use Resource classes (API Resources) for consistent JSON responses
-- Centralize common logic in Services, Traits, or Helpers instead of duplicating
-- Follow Laravel coding style (PSR-12, naming conventions)
-- Use proper type hints and return types
+### **Database & Models**
+- **Use existing models** (AIResult, MathProblem, MathSolution, etc.) before creating new ones
+- **Follow Laravel migration patterns** for database changes
+- **Use Eloquent relationships** instead of manual joins
+- **Use Laravel's built-in authentication** and authorization features
 
-## 🛡️ Security & Error Handling
-- Secure environment variables with .env (never hardcode secrets)
-- Handle errors gracefully with custom exceptions + error response format
-- Always return proper HTTP status codes with messages
-- Validate all inputs on both client and server
-- Use Laravel's built-in security features (CSRF, XSS protection)
+### **API Development**
+- **Use existing API controllers** in `app/Http/Controllers/Api/` before creating new ones
+- **Follow RESTful conventions** for API endpoints
+- **Use Laravel's API resources** for response formatting
+- **Use existing middleware** for authentication and CORS
 
-## ⚡ Performance & Optimization
-- Optimize database queries: use Eloquent relationships, eager loading, pagination
-- Use queues/events for long-running tasks instead of blocking requests
-- Implement proper caching strategies
-- Avoid N+1 query problems
-- Use database indexes appropriately
+### **Configuration & Environment**
+- **Use Laravel's config system** for service URLs and settings
+- **Use environment variables** for sensitive data
+- **Follow Laravel's service provider pattern** for service registration
+- **Use Laravel's queue system** for background jobs
 
-## 📊 Monitoring & Testing
-- Add logging with Laravel's logger for important actions and errors
-- Write tests for controllers, services, and critical features (e.g., auth, payments, business logic)
-- Use meaningful log messages with context
-- Monitor performance and error rates
+### **Laravel-Specific Token Efficiency**
+- **Use Laravel's built-in features** instead of creating custom solutions
+- **Leverage existing Laravel packages** in your composer.json
+- **Use Laravel's artisan commands** for common tasks
+- **Follow Laravel's caching strategies** for performance
 
-## 🗄️ Database Requirements
-**CRITICAL:** This project MUST use MySQL as the primary database:
-- **REQUIRED**: MySQL database connection
-- **PROHIBITED**: SQLite, PostgreSQL, or other databases without explicit approval
-- **Configuration**: Use standard MySQL settings in .env file
-- **Setup**: Ensure MySQL service is running (XAMPP/WAMP)
-- **Database Name**: `zooys_backend`
-- **Never change to SQLite or other databases** - this breaks the project architecture
+---
 
-## 🏗️ Module Integration Rules
-- Register new modules in `ModuleRegistry` if they're part of the core architecture
-- Use existing services as dependencies when possible:
-  - `FileUploadService` for file handling
-  - `OpenAIService` for AI integration
-  - `AIResultService` for result persistence
-  - `UnifiedProcessingService` for content processing
-- Follow the established dependency patterns
-- Don't create duplicate functionality
+## **🚫 CRITICAL DON'TS (Token Waste Prevention)**
 
-## 🚫 What NOT to Do
-- Don't implement functionality directly in controllers
-- Don't create standalone services without proper integration
-- Don't bypass the existing modular architecture
-- Don't hardcode configuration values
-- Don't ignore existing error handling patterns
-- Don't create duplicate services when similar ones exist
-- **NEVER change database from MySQL to SQLite or other databases**
-- **NEVER modify database configuration without explicit approval**
 
-## 🤝 Agent Communication Rules
-**CRITICAL:** When working on issues reported by frontend agents, ALWAYS update the communication file:
-- **File Location:** `agent-communication.md` in project root
-- **Update Requirements:**
-  - Update "Frontend Requests" section when resolving issues
-  - Change status from "Pending" to "RESOLVED" with ✅ checkmark
-  - Add detailed resolution information
-  - Update timestamps to current time
-  - Move resolved issues to "Resolved Issues" section
-  - Update "Current Issues" to "NO CURRENT ISSUES" when all resolved
-- **Communication Protocol:**
-  - Frontend agents write requests in "Frontend Requests" section
-  - Backend agents respond in "Backend Responses" section
-  - Both agents update "Communication Log" for important updates
-  - Always update timestamps when making changes
-- **Status Updates:**
-  - Mark issues as "✅ RESOLVED" when completely fixed
-  - Provide clear action items for frontend agents
-  - Document all fixes and solutions implemented
-  - Keep communication file current and accurate
 
-## ✅ Code Review Checklist
-Before submitting code, ensure:
-- [ ] Existing modules were checked first
-- [ ] Code follows Laravel best practices
-- [ ] Proper error handling is implemented
-- [ ] Security considerations are addressed
-- [ ] Performance is optimized
-- [ ] Tests are written for critical functionality
-- [ ] Documentation is updated
-- [ ] Code is properly formatted and follows PSR-12
-- [ ] **Agent communication file updated with resolution status**
+### **Laravel-Specific Don'ts:**
+- ❌ **Don't create new services without checking ModuleRegistry first**
+- ❌ **Don't duplicate existing service functionality**
+- ❌ **Don't create debugging scripts in /test folder**
+- ❌ **Don't ignore Laravel's built-in features and conventions**
+
