@@ -2,15 +2,16 @@
 
 namespace App\Services;
 
+use App\Services\Modules\AIProcessingModule;
 use Illuminate\Support\Facades\Log;
 
 class FlashcardGenerationService
 {
-    protected $openAIService;
+    protected $aiProcessingModule;
 
-    public function __construct(OpenAIService $openAIService)
+    public function __construct(AIProcessingModule $aiProcessingModule)
     {
-        $this->openAIService = $openAIService;
+        $this->aiProcessingModule = $aiProcessingModule;
     }
 
     /**
@@ -32,12 +33,14 @@ class FlashcardGenerationService
             // Build AI prompt
             $prompt = $this->buildFlashcardPrompt($content, $count, $options);
             
-            // Generate flashcards using AI
-            $response = $this->openAIService->generateResponse($prompt);
+            // Generate flashcards using AI Manager
+            $result = $this->aiProcessingModule->generateText($prompt, $options);
             
-            if (!$response || $response === 'Sorry, I was unable to generate a summary at this time.') {
-                throw new \Exception('AI service returned empty response');
+            if (!$result['generated_content']) {
+                throw new \Exception('AI Manager service returned empty response');
             }
+            
+            $response = $result['generated_content'];
 
             // Parse response into flashcards
             $flashcards = $this->parseFlashcardResponse($response);
@@ -53,7 +56,8 @@ class FlashcardGenerationService
                     'total_generated' => count($flashcards),
                     'requested_count' => $count,
                     'content_word_count' => str_word_count($content),
-                    'generation_method' => 'ai'
+                    'generation_method' => 'ai_manager',
+                    'model_used' => $result['model_used'] ?? 'unknown'
                 ]
             ];
 
@@ -75,31 +79,16 @@ class FlashcardGenerationService
         $difficulty = $options['difficulty'] ?? 'intermediate';
         $style = $options['style'] ?? 'mixed';
         
-        $prompt = "Generate {$count} educational flashcards based on the following content:\n\n";
-        $prompt .= "CONTENT:\n{$content}\n\n";
-        
-        $prompt .= "REQUIREMENTS:\n";
-        $prompt .= "- Create a {$style} mix of question types\n";
-        $prompt .= "- Difficulty level: {$difficulty}\n";
-        $prompt .= "- Questions should be clear and specific\n";
-        $prompt .= "- Answers should be comprehensive and educational\n";
-        $prompt .= "- Cover key concepts, important details, and practical applications\n\n";
-        
-        $prompt .= "QUESTION TYPES TO INCLUDE:\n";
-        $prompt .= "- Definition questions (What is...?)\n";
-        $prompt .= "- Application questions (How does... work?)\n";
-        $prompt .= "- Analysis questions (Why does... happen?)\n";
-        $prompt .= "- Comparison questions (What's the difference between...?)\n";
-        $prompt .= "- Process questions (What are the steps to...?)\n\n";
-        
-        $prompt .= "FORMAT YOUR RESPONSE AS JSON ARRAY:\n";
-        $prompt .= "[\n";
-        $prompt .= "  {\n";
-        $prompt .= "    \"question\": \"Your question here\",\n";
-        $prompt .= "    \"answer\": \"Your detailed answer here\"\n";
-        $prompt .= "  }\n";
-        $prompt .= "]\n\n";
-        $prompt .= "Make sure the questions are educational, progressively challenging, and cover different aspects of the content. Focus on key concepts, important details, and practical applications.";
+        // More explicit prompt with examples
+        $prompt = "Create exactly {$count} flashcards about: {$content}\n\n";
+        $prompt .= "Format each flashcard exactly like this:\n";
+        $prompt .= "Question: [Your question here]\n";
+        $prompt .= "Answer: [Your answer here]\n\n";
+        $prompt .= "Example:\n";
+        $prompt .= "Question: What do spiders eat?\n";
+        $prompt .= "Answer: Spiders eat insects and other small animals.\n\n";
+        $prompt .= "Create {$difficulty} level questions with {$style} question types.\n";
+        $prompt .= "Make sure to create exactly {$count} flashcards, one after another.";
 
         return $prompt;
     }
@@ -165,7 +154,24 @@ class FlashcardGenerationService
         foreach ($lines as $line) {
             $line = trim($line);
             
-            if (strpos($line, '"question"') !== false) {
+            // Handle "Question: ..." format
+            if (preg_match('/^Question:\s*(.+)$/i', $line, $matches)) {
+                $currentCard['question'] = trim($matches[1]);
+            }
+            // Handle "Answer: ..." format
+            elseif (preg_match('/^Answer:\s*(.+)$/i', $line, $matches)) {
+                $currentCard['answer'] = trim($matches[1]);
+                
+                if (!empty($currentCard['question']) && !empty($currentCard['answer'])) {
+                    $flashcards[] = [
+                        'question' => $currentCard['question'],
+                        'answer' => $currentCard['answer']
+                    ];
+                    $currentCard = [];
+                }
+            }
+            // Fallback: try JSON format
+            elseif (strpos($line, '"question"') !== false) {
                 $currentCard['question'] = $this->extractValue($line);
             } elseif (strpos($line, '"answer"') !== false) {
                 $currentCard['answer'] = $this->extractValue($line);

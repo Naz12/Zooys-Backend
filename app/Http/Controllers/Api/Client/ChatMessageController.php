@@ -5,18 +5,18 @@ namespace App\Http\Controllers\Api\Client;
 use App\Http\Controllers\Controller;
 use App\Models\ChatSession;
 use App\Models\ChatMessage;
-use App\Services\OpenAIService;
+use App\Services\Modules\AIProcessingModule;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
 class ChatMessageController extends Controller
 {
-    private $openAIService;
+    private $aiProcessingModule;
 
-    public function __construct(OpenAIService $openAIService)
+    public function __construct(AIProcessingModule $aiProcessingModule)
     {
-        $this->openAIService = $openAIService;
+        $this->aiProcessingModule = $aiProcessingModule;
     }
 
     /**
@@ -210,7 +210,8 @@ class ChatMessageController extends Controller
             $prompt = $this->buildPrompt($userMessage, $context);
             
             // Get AI response
-            $response = $this->openAIService->generateResponse($prompt);
+            $result = $this->aiProcessingModule->answerQuestion($request->input('content'), $context);
+            $response = $result['answer'];
             
             return $response;
             

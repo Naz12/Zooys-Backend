@@ -4,20 +4,20 @@ namespace App\Services;
 
 use App\Models\MathProblem;
 use App\Models\MathSolution;
-use App\Services\OpenAIService;
+use App\Services\Modules\AIProcessingModule;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Http;
 
 class AIMathService
 {
-    private $openAIService;
+    private $aiProcessingModule;
     private $microserviceUrl;
     private $microserviceTimeout;
 
-    public function __construct(OpenAIService $openAIService)
+    public function __construct(AIProcessingModule $aiProcessingModule)
     {
-        $this->openAIService = $openAIService;
+        $this->aiProcessingModule = $aiProcessingModule;
         $this->microserviceUrl = env('MATH_MICROSERVICE_URL', 'http://localhost:8002');
         $this->microserviceTimeout = env('MATH_MICROSERVICE_TIMEOUT', 60);
     }

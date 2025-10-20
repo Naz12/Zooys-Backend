@@ -7,7 +7,6 @@ use App\Http\Controllers\Api\Client\AuthController;
 use App\Http\Controllers\Api\Client\StripeController;
 use App\Http\Controllers\Api\Client\PlanController;
 use App\Http\Controllers\Api\Client\SubscriptionController;
-use App\Http\Controllers\Api\Client\YoutubeController;
 use App\Http\Controllers\Api\Client\PdfController;
 use App\Http\Controllers\Api\Client\WriterController;
 use App\Http\Controllers\Api\Client\MathController;
@@ -90,7 +89,6 @@ Route::middleware(['auth:sanctum', 'check.usage'])->group(function () {
     Route::get('/usage', [SubscriptionController::class, 'usage']);
 
     // Tools
-    Route::post('/youtube/summarize', [YoutubeController::class, 'summarize']);
     Route::post('/pdf/summarize', [PdfController::class, 'summarize']);
     Route::post('/writer/run', [WriterController::class, 'run']);
     Route::post('/math/solve', [MathController::class, 'solve']);
@@ -171,6 +169,9 @@ Route::middleware(['auth:sanctum', 'check.usage'])->group(function () {
     
     // Content Summarization
     Route::post('/summarize', [SummarizeController::class, 'summarize']);
+    Route::post('/summarize/async', [SummarizeController::class, 'summarizeAsync']);
+    Route::get('/summarize/status/{jobId}', [SummarizeController::class, 'getJobStatus']);
+    Route::get('/summarize/result/{jobId}', [SummarizeController::class, 'getJobResult']);
     Route::post('/summarize/validate', [SummarizeController::class, 'validateFile']);
     
     // Document Chat

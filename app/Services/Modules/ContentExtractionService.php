@@ -3,7 +3,6 @@
 namespace App\Services\Modules;
 
 use App\Services\YouTubeService;
-use App\Services\PythonYouTubeService;
 use App\Services\EnhancedPDFProcessingService;
 use App\Services\EnhancedDocumentProcessingService;
 use App\Services\WordProcessingService;
@@ -13,7 +12,6 @@ use Illuminate\Support\Facades\Log;
 class ContentExtractionService
 {
     private $youtubeService;
-    private $pythonYouTubeService;
     private $pdfService;
     private $documentService;
     private $wordService;
@@ -21,14 +19,12 @@ class ContentExtractionService
 
     public function __construct(
         YouTubeService $youtubeService,
-        PythonYouTubeService $pythonYouTubeService,
         EnhancedPDFProcessingService $pdfService,
         EnhancedDocumentProcessingService $documentService,
         WordProcessingService $wordService,
         WebScrapingService $webScrapingService
     ) {
         $this->youtubeService = $youtubeService;
-        $this->pythonYouTubeService = $pythonYouTubeService;
         $this->pdfService = $pdfService;
         $this->documentService = $documentService;
         $this->wordService = $wordService;
@@ -112,15 +108,24 @@ class ContentExtractionService
             throw new \Exception('Invalid YouTube URL');
         }
 
-        // Get video metadata
-        $videoData = $this->youtubeService->getVideoDetails($videoId);
-        
-        if (!$videoData) {
-            throw new \Exception('Video not found or unavailable');
-        }
-
-        // Try to get full transcript using Python integration
+        // Try to get full transcript using YouTube Transcriber microservice
         $transcript = $this->youtubeService->getVideoContentWithCaptions($videoId);
+        
+        // Create minimal video data for metadata
+        $videoData = [
+            'id' => $videoId,
+            'title' => 'YouTube Video',
+            'description' => 'Video content extracted via transcription',
+            'channel_title' => 'Unknown',
+            'published_at' => null,
+            'duration' => null,
+            'view_count' => 0,
+            'like_count' => 0,
+            'comment_count' => 0,
+            'tags' => [],
+            'category_id' => null,
+            'thumbnail' => null,
+        ];
         
         if ($transcript) {
             // Use full transcript
@@ -314,5 +319,56 @@ class ContentExtractionService
             'language' => $result['metadata']['language'] ?? 'unknown',
             'has_transcript' => $result['metadata']['has_transcript'] ?? false,
         ];
+    }
+
+    /**
+     * Detect input type based on input content
+     */
+    public function detectInputType($input)
+    {
+        if (is_numeric($input)) {
+            return 'file';
+        }
+        
+        if (filter_var($input, FILTER_VALIDATE_URL)) {
+            if (strpos($input, 'youtube.com') !== false || strpos($input, 'youtu.be') !== false) {
+                return 'youtube';
+            }
+            return 'url';
+        }
+        
+        return 'text';
+    }
+
+    /**
+     * Validate input based on type
+     */
+    public function validateInput($input, $inputType)
+    {
+        switch ($inputType) {
+            case 'text':
+                if (empty(trim($input))) {
+                    throw new \Exception('Text input cannot be empty');
+                }
+                break;
+                
+            case 'url':
+            case 'youtube':
+                if (!filter_var($input, FILTER_VALIDATE_URL)) {
+                    throw new \Exception('Invalid URL format');
+                }
+                break;
+                
+            case 'file':
+                if (!is_numeric($input)) {
+                    throw new \Exception('File ID must be numeric');
+                }
+                break;
+                
+            default:
+                throw new \Exception("Unsupported input type: {$inputType}");
+        }
+        
+        return true;
     }
 }

@@ -7,18 +7,18 @@ use App\Models\History;
 use App\Models\Tool;
 use App\Models\ChatSession;
 use App\Models\ChatMessage;
-use App\Services\OpenAIService;
+use App\Services\Modules\AIProcessingModule;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
 class ChatController extends Controller
 {
-    protected $openAIService;
+    protected $aiProcessingModule;
 
-    public function __construct(OpenAIService $openAIService)
+    public function __construct(AIProcessingModule $aiProcessingModule)
     {
-        $this->openAIService = $openAIService;
+        $this->aiProcessingModule = $aiProcessingModule;
     }
 
     /**
@@ -128,38 +128,29 @@ class ChatController extends Controller
     }
 
     /**
-     * Generate AI response using OpenAI
+     * Generate AI response using AI Manager
      */
     private function generateAIResponse($messages, $model, $temperature, $maxTokens)
     {
         try {
-            $apiKey = config('services.openai.api_key');
-            $url = config('services.openai.url');
-
-            $response = \Illuminate\Support\Facades\Http::withHeaders([
-                'Authorization' => 'Bearer ' . $apiKey,
-                'Content-Type' => 'application/json',
-            ])->post($url, [
-                'model' => $model,
-                'messages' => $messages,
-                'max_tokens' => (int) $maxTokens,
-                'temperature' => (float) $temperature,
-            ]);
-
-            if ($response->failed()) {
-                Log::error('OpenAI API Error: ' . $response->body());
-                return null;
-            }
-
-            $data = $response->json();
+            // Extract the current message (last message in array)
+            $currentMessage = end($messages)['content'];
             
-            if (isset($data['choices'][0]['message']['content'])) {
-                return trim($data['choices'][0]['message']['content']);
+            // Build context from conversation history (excluding system message and current message)
+            $context = '';
+            foreach (array_slice($messages, 1, -1) as $msg) {
+                if ($msg['role'] !== 'system') {
+                    $context .= $msg['role'] . ': ' . $msg['content'] . "\n";
+                }
             }
-
-            return null;
+            
+            // Use AI Manager for Q&A with context
+            $result = $this->aiProcessingModule->answerQuestion($currentMessage, $context ?: null);
+            
+            return $result['answer'];
+            
         } catch (\Exception $e) {
-            Log::error('OpenAI API Error: ' . $e->getMessage());
+            Log::error('AI Manager API Error: ' . $e->getMessage());
             return null;
         }
     }

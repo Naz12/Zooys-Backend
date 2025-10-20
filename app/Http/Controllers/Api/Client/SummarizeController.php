@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Tool;
 use App\Models\History;
 use App\Services\Modules\UnifiedProcessingService;
-use App\Services\OpenAIService;
+use App\Services\Modules\AIProcessingModule;
 use App\Services\WebScrapingService;
 use App\Services\EnhancedPDFProcessingService;
 use App\Services\EnhancedDocumentProcessingService;
@@ -14,6 +14,7 @@ use App\Services\WordProcessingService;
 use App\Services\VectorDatabaseService;
 use App\Services\FileUploadService;
 use App\Services\AIResultService;
+use App\Services\SummarizeJobService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -22,7 +23,7 @@ use Illuminate\Support\Facades\Validator;
 class SummarizeController extends Controller
 {
     protected $unifiedProcessingService;
-    protected $openAIService;
+    protected $aiProcessingModule;
     protected $webScrapingService;
     protected $enhancedPDFService;
     protected $enhancedDocumentService;
@@ -30,20 +31,22 @@ class SummarizeController extends Controller
     protected $vectorService;
     protected $fileUploadService;
     protected $aiResultService;
+    protected $summarizeJobService;
 
     public function __construct(
         UnifiedProcessingService $unifiedProcessingService, 
-        OpenAIService $openAIService, 
+        AIProcessingModule $aiProcessingModule, 
         WebScrapingService $webScrapingService,
         EnhancedPDFProcessingService $enhancedPDFService,
         EnhancedDocumentProcessingService $enhancedDocumentService,
         WordProcessingService $wordService,
         VectorDatabaseService $vectorService,
         FileUploadService $fileUploadService,
-        AIResultService $aiResultService
+        AIResultService $aiResultService,
+        SummarizeJobService $summarizeJobService
     ) {
         $this->unifiedProcessingService = $unifiedProcessingService;
-        $this->openAIService = $openAIService;
+        $this->aiProcessingModule = $aiProcessingModule;
         $this->webScrapingService = $webScrapingService;
         $this->enhancedPDFService = $enhancedPDFService;
         $this->enhancedDocumentService = $enhancedDocumentService;
@@ -51,6 +54,7 @@ class SummarizeController extends Controller
         $this->vectorService = $vectorService;
         $this->fileUploadService = $fileUploadService;
         $this->aiResultService = $aiResultService;
+        $this->summarizeJobService = $summarizeJobService;
     }
 
     /**
@@ -59,6 +63,9 @@ class SummarizeController extends Controller
     public function summarize(Request $request)
     {
         try {
+            // Increase execution time for long-running operations (especially YouTube)
+            set_time_limit(600); // 10 minutes
+            
             // Debug: Log the incoming request
             Log::info('Summarize Request:', [
                 'content_type' => $request->input('content_type'),
@@ -481,8 +488,8 @@ class SummarizeController extends Controller
         $maxTokens = 12000;
         $truncatedText = $this->truncateTextForOpenAI($text, $maxTokens);
         
-        $prompt = $this->buildTextPrompt($truncatedText, $options);
-        $summary = $this->openAIService->generateResponse($prompt);
+        $result = $this->aiProcessingModule->summarize($truncatedText, $options);
+        $summary = $result['summary'];
 
         return [
             'summary' => $summary,
@@ -505,7 +512,12 @@ class SummarizeController extends Controller
     private function processLink($url, $options)
     {
         try {
-            // Real web scraping
+            // Check if it's a YouTube URL and use YouTube Transcriber
+            if (strpos($url, 'youtube.com') !== false || strpos($url, 'youtu.be') !== false) {
+                return $this->processYouTubeVideo($url, $options);
+            }
+            
+            // Real web scraping for non-YouTube URLs
             $scrapingResult = $this->webScrapingService->extractWebContent($url);
             
             if (!$scrapingResult['success']) {
@@ -532,9 +544,9 @@ class SummarizeController extends Controller
         $maxTokens = 12000;
         $truncatedContent = $this->truncateTextForOpenAI($content, $maxTokens);
         
-        // Generate summary using OpenAI
-        $prompt = $this->buildTextPrompt($truncatedContent, $options);
-        $summary = $this->openAIService->generateResponse($prompt);
+        // Generate summary using AI Manager
+        $result = $this->aiProcessingModule->summarize($truncatedContent, $options);
+        $summary = $result['summary'];
 
             return [
                 'summary' => $summary,
@@ -568,6 +580,72 @@ class SummarizeController extends Controller
                 'source_info' => [
                     'url' => $url,
                     'title' => 'Processing Failed',
+                    'word_count' => 0
+                ]
+            ];
+        }
+    }
+
+    /**
+     * Process YouTube video using YouTube Transcriber
+     */
+    private function processYouTubeVideo($videoUrl, $options)
+    {
+        try {
+            Log::info("Processing YouTube video: {$videoUrl}");
+            
+            // Use unified processing service for YouTube videos
+            $result = $this->unifiedProcessingService->processYouTubeVideo($videoUrl, $options);
+            
+            if (!$result['success']) {
+                return [
+                    'error' => $result['error'],
+                    'metadata' => [
+                        'content_type' => 'youtube',
+                        'processing_time' => '0.5s',
+                        'tokens_used' => 0,
+                        'confidence' => 0.0
+                    ],
+                    'source_info' => [
+                        'url' => $videoUrl,
+                        'title' => 'Failed to process YouTube video',
+                        'word_count' => 0
+                    ]
+                ];
+            }
+
+            return [
+                'summary' => $result['summary'],
+                'metadata' => [
+                    'content_type' => 'youtube',
+                    'processing_time' => '5-10 minutes',
+                    'tokens_used' => strlen($result['summary']) / 4,
+                    'confidence' => 0.95
+                ],
+                'source_info' => [
+                    'url' => $videoUrl,
+                    'title' => $result['metadata']['title'] ?? 'YouTube Video',
+                    'description' => 'Video content extracted via transcription',
+                    'author' => $result['metadata']['channel'] ?? 'Unknown',
+                    'published_date' => '',
+                    'word_count' => $result['metadata']['total_words'] ?? 0
+                ],
+                'ai_result' => $result['ai_result']
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('YouTube video processing error: ' . $e->getMessage());
+            return [
+                'error' => 'Failed to process YouTube video: ' . $e->getMessage(),
+                'metadata' => [
+                    'content_type' => 'youtube',
+                    'processing_time' => '0.5s',
+                    'tokens_used' => 0,
+                    'confidence' => 0.0
+                ],
+                'source_info' => [
+                    'url' => $videoUrl,
+                    'title' => 'Error processing YouTube video',
                     'word_count' => 0
                 ]
             ];
@@ -634,9 +712,9 @@ class SummarizeController extends Controller
             $maxTokens = 12000;
             $truncatedText = $this->truncateTextForOpenAI($pdfData['text'], $maxTokens);
             
-            // Generate summary using OpenAI
-            $prompt = $this->buildTextPrompt($truncatedText, $options);
-            $summary = $this->openAIService->generateResponse($prompt);
+            // Generate summary using AI Manager
+            $result = $this->aiProcessingModule->summarize($truncatedText, $options);
+            $summary = $result['summary'];
             
             return [
                 'summary' => $summary,
@@ -686,8 +764,8 @@ class SummarizeController extends Controller
     {
         // Mock image processing for now
         $content = "This is mock OCR text extracted from uploaded image ID: " . $uploadId;
-        $prompt = $this->buildTextPrompt($content, $options);
-        $summary = $this->openAIService->generateResponse($prompt);
+        $result = $this->aiProcessingModule->summarize($content, $options);
+        $summary = $result['summary'];
 
         return [
             'summary' => $summary,
@@ -710,27 +788,74 @@ class SummarizeController extends Controller
      */
     private function processAudio($uploadId, $options)
     {
-        // Mock audio transcription
-        $transcription = "This is a mock transcription of the uploaded audio file ID: " . $uploadId . ". The audio contains speech about various topics including technology, business, and innovation.";
-        
-        $prompt = $this->buildTextPrompt($transcription, $options);
-        $summary = $this->openAIService->generateResponse($prompt);
+        try {
+            // Get uploaded file
+            $upload = \App\Models\FileUpload::find($uploadId);
+            if (!$upload) {
+                throw new \Exception('Audio file not found');
+            }
 
-        return [
-            'summary' => $summary,
-            'metadata' => [
-                'content_type' => 'audio',
-                'processing_time' => '8.5s',
-                'tokens_used' => 2000,
-                'confidence' => 0.92
-            ],
-            'source_info' => [
-                'duration' => '5:30',
-                'audio_quality' => 'High',
-                'file_size' => '8.2MB',
-                'transcription' => $transcription
-            ]
-        ];
+            $filePath = storage_path('app/' . $upload->file_path);
+            if (!file_exists($filePath)) {
+                throw new \Exception('Audio file not found on disk');
+            }
+
+            // Use transcriber microservice for audio transcription
+            $transcriberService = app(\App\Services\YouTubeTranscriberService::class);
+            
+            // Create a temporary URL for the file (transcriber expects URL)
+            $fileUrl = url('storage/' . $upload->file_path);
+            
+            $transcriptionResult = $transcriberService->transcribe($fileUrl, [
+                'format' => 'article',
+                'language' => $options['language'] ?? 'auto'
+            ]);
+
+            if (!$transcriptionResult['success']) {
+                throw new \Exception('Audio transcription failed: ' . $transcriptionResult['error']);
+            }
+
+            $transcription = $transcriptionResult['subtitle_text'] ?? '';
+            
+            // Generate summary using AI Manager
+            $result = $this->aiProcessingModule->summarize($transcription, $options);
+            $summary = $result['summary'];
+
+            return [
+                'summary' => $summary,
+                'transcription' => $transcription,
+                'metadata' => [
+                    'content_type' => 'audio',
+                    'processing_time' => '5-10 minutes',
+                    'tokens_used' => strlen($transcription) / 4,
+                    'confidence' => 0.95,
+                    'transcriber_used' => true
+                ],
+                'source_info' => [
+                    'title' => $upload->original_name,
+                    'description' => 'Audio content transcribed and summarized',
+                    'file_size' => $upload->file_size,
+                    'word_count' => str_word_count($transcription)
+                ]
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Audio processing error: ' . $e->getMessage());
+            
+            return [
+                'error' => 'Failed to process audio file: ' . $e->getMessage(),
+                'metadata' => [
+                    'content_type' => 'audio',
+                    'processing_time' => '0.5s',
+                    'tokens_used' => 0,
+                    'confidence' => 0.0
+                ],
+                'source_info' => [
+                    'title' => 'Audio Processing Failed',
+                    'word_count' => 0
+                ]
+            ];
+        }
     }
 
     /**
@@ -738,27 +863,74 @@ class SummarizeController extends Controller
      */
     private function processVideo($uploadId, $options)
     {
-        // Mock video processing (audio extraction + transcription)
-        $transcription = "This is a mock transcription extracted from the audio track of uploaded video file ID: " . $uploadId . ". The video contains a presentation about artificial intelligence and machine learning applications.";
-        
-        $prompt = $this->buildTextPrompt($transcription, $options);
-        $summary = $this->openAIService->generateResponse($prompt);
+        try {
+            // Get uploaded file
+            $upload = \App\Models\FileUpload::find($uploadId);
+            if (!$upload) {
+                throw new \Exception('Video file not found');
+            }
 
-        return [
-            'summary' => $summary,
-            'metadata' => [
-                'content_type' => 'video',
-                'processing_time' => '12.3s',
-                'tokens_used' => 2500,
-                'confidence' => 0.90
-            ],
-            'source_info' => [
-                'duration' => '10:45',
-                'video_quality' => 'HD',
-                'file_size' => '45.6MB',
-                'transcription' => $transcription
-            ]
-        ];
+            $filePath = storage_path('app/' . $upload->file_path);
+            if (!file_exists($filePath)) {
+                throw new \Exception('Video file not found on disk');
+            }
+
+            // Use transcriber microservice for video transcription
+            $transcriberService = app(\App\Services\YouTubeTranscriberService::class);
+            
+            // Create a temporary URL for the file (transcriber expects URL)
+            $fileUrl = url('storage/' . $upload->file_path);
+            
+            $transcriptionResult = $transcriberService->transcribe($fileUrl, [
+                'format' => 'article',
+                'language' => $options['language'] ?? 'auto'
+            ]);
+
+            if (!$transcriptionResult['success']) {
+                throw new \Exception('Video transcription failed: ' . $transcriptionResult['error']);
+            }
+
+            $transcription = $transcriptionResult['subtitle_text'] ?? '';
+            
+            // Generate summary using AI Manager
+            $result = $this->aiProcessingModule->summarize($transcription, $options);
+            $summary = $result['summary'];
+
+            return [
+                'summary' => $summary,
+                'transcription' => $transcription,
+                'metadata' => [
+                    'content_type' => 'video',
+                    'processing_time' => '5-15 minutes',
+                    'tokens_used' => strlen($transcription) / 4,
+                    'confidence' => 0.95,
+                    'transcriber_used' => true
+                ],
+                'source_info' => [
+                    'title' => $upload->original_name,
+                    'description' => 'Video content transcribed and summarized',
+                    'file_size' => $upload->file_size,
+                    'word_count' => str_word_count($transcription)
+                ]
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Video processing error: ' . $e->getMessage());
+            
+            return [
+                'error' => 'Failed to process video file: ' . $e->getMessage(),
+                'metadata' => [
+                    'content_type' => 'video',
+                    'processing_time' => '0.5s',
+                    'tokens_used' => 0,
+                    'confidence' => 0.0
+                ],
+                'source_info' => [
+                    'title' => 'Video Processing Failed',
+                    'word_count' => 0
+                ]
+            ];
+        }
     }
 
     /**
@@ -877,5 +1049,200 @@ class SummarizeController extends Controller
         }
         
         return $truncated . "\n\n[Content truncated due to length - showing first " . number_format($maxTokens) . " tokens]";
+    }
+
+    /**
+     * Start async summarization job
+     */
+    public function summarizeAsync(Request $request)
+    {
+        try {
+            // Validate request
+            $validator = $this->validateRequest($request);
+            
+            if ($validator->fails()) {
+                return response()->json([
+                    'error' => 'Validation failed',
+                    'details' => $validator->errors()
+                ], 422);
+            }
+
+            $user = $request->user();
+            $contentType = $request->input('content_type');
+            $source = $request->input('source');
+            $options = $request->input('options', []);
+
+            // Create async job
+            $job = $this->summarizeJobService->createJob(
+                $user->id,
+                $contentType,
+                $source,
+                $options
+            );
+
+            // Start background processing
+            $this->processSummarizeJobAsync($job['id']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Summarization job started',
+                'job_id' => $job['id'],
+                'status' => $job['status'],
+                'poll_url' => url('/api/summarize/status/' . $job['id']),
+                'result_url' => url('/api/summarize/result/' . $job['id'])
+            ], 202);
+
+        } catch (\Exception $e) {
+            Log::error('Async summarize error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to start summarization job: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get job status
+     */
+    public function getJobStatus($jobId)
+    {
+        try {
+            $status = $this->summarizeJobService->getJobStatus($jobId);
+            
+            if (!$status) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Job not found'
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => $status
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Get job status error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to get job status: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get job result
+     */
+    public function getJobResult($jobId)
+    {
+        try {
+            $result = $this->summarizeJobService->getJobResult($jobId);
+            
+            if ($result === null) {
+                $status = $this->summarizeJobService->getJobStatus($jobId);
+                if (!$status) {
+                    return response()->json([
+                        'success' => false,
+                        'error' => 'Job not found'
+                    ], 404);
+                }
+
+                // Job not completed yet, return status
+                return response()->json([
+                    'success' => true,
+                    'status' => $status['status'],
+                    'message' => 'Job not completed yet',
+                    'data' => $status
+                ], 202);
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => $result
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Get job result error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to get job result: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Process summarize job in background
+     */
+    private function processSummarizeJobAsync($jobId)
+    {
+        // This would typically be queued, but for now we'll process synchronously
+        // In production, you'd use Laravel queues: dispatch(new ProcessSummarizeJob($jobId));
+        
+        try {
+            $job = $this->summarizeJobService->getJob($jobId);
+            if (!$job) {
+                return;
+            }
+
+            $this->summarizeJobService->updateJob($jobId, [
+                'status' => 'running',
+                'stage' => 'processing',
+                'progress' => 10
+            ]);
+
+            $this->summarizeJobService->addLog($jobId, 'Starting content processing');
+
+            // Process based on content type
+            $result = null;
+            if ($job['content_type'] === 'link') {
+                $result = $this->processLink($job['source']['url'], $job['options']);
+            } elseif ($job['content_type'] === 'text') {
+                $result = $this->processText($job['source']['text'], $job['options']);
+            } elseif ($job['content_type'] === 'file') {
+                $result = $this->processFile($job['source']['file_id'], $job['options']);
+            }
+
+            if ($result && !isset($result['error'])) {
+                $this->summarizeJobService->updateJob($jobId, [
+                    'status' => 'running',
+                    'stage' => 'summarizing',
+                    'progress' => 50
+                ]);
+
+                $this->summarizeJobService->addLog($jobId, 'Content extracted, starting summarization');
+
+                // Save result and complete job
+                $aiResult = $this->aiResultService->saveResult([
+                    'user_id' => $job['user_id'],
+                    'title' => $result['source_info']['title'] ?? 'Summarized Content',
+                    'content' => $result['summary'],
+                    'metadata' => $result['metadata'],
+                    'source_info' => $result['source_info']
+                ]);
+
+                $result['ai_result'] = $aiResult;
+
+                // Include bundle and merged_result for YouTube videos
+                if (isset($result['bundle'])) {
+                    $result['bundle'] = $result['bundle'];
+                }
+                if (isset($result['merged_result'])) {
+                    $result['merged_result'] = $result['merged_result'];
+                }
+
+                $this->summarizeJobService->completeJob($jobId, $result);
+                $this->summarizeJobService->addLog($jobId, 'Summarization completed successfully');
+
+            } else {
+                $error = $result['error'] ?? 'Unknown processing error';
+                $this->summarizeJobService->failJob($jobId, $error);
+                $this->summarizeJobService->addLog($jobId, 'Processing failed: ' . $error, 'error');
+            }
+
+        } catch (\Exception $e) {
+            $this->summarizeJobService->failJob($jobId, $e->getMessage());
+            $this->summarizeJobService->addLog($jobId, 'Job failed with exception: ' . $e->getMessage(), 'error');
+            Log::error('Process summarize job error: ' . $e->getMessage());
+        }
     }
 }

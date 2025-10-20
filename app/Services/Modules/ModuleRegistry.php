@@ -44,7 +44,7 @@ class ModuleRegistry
         self::registerModule('ai_summarization', [
             'class' => AISummarizationService::class,
             'description' => 'AI-powered content summarization',
-            'dependencies' => ['content_chunking'],
+            'dependencies' => ['content_chunking', 'ai_processing'],
             'config' => [
                 'max_tokens' => 1000,
                 'temperature' => 0.7,
@@ -70,10 +70,10 @@ class ModuleRegistry
         self::registerModule('youtube', [
             'class' => \App\Services\YouTubeService::class,
             'description' => 'YouTube video processing and caption extraction',
-            'dependencies' => ['content_extraction'],
+            'dependencies' => ['content_extraction', 'transcription'],
             'config' => [
                 'api_key' => config('services.youtube.api_key'),
-                'python_enabled' => true,
+                'transcriber_enabled' => true,
             ]
         ]);
 
@@ -124,6 +124,30 @@ class ModuleRegistry
                 'supported_tones' => ['Professional', 'Casual', 'Academic', 'Creative', 'Formal'],
                 'supported_lengths' => ['Short', 'Medium', 'Long'],
                 'python_script_path' => 'python/generate_presentation.py',
+            ]
+        ]);
+
+        // Register AI Processing Module
+        self::registerModule('ai_processing', [
+            'class' => AIProcessingModule::class,
+            'description' => 'AI text processing via AI API Manager microservice',
+            'dependencies' => [],
+            'config' => [
+                'api_url' => config('services.ai_manager.url'),
+                'timeout' => config('services.ai_manager.timeout'),
+                'supported_tasks' => ['summarize', 'generate', 'qa', 'translate', 'sentiment', 'code-review'],
+            ]
+        ]);
+
+        // Register Transcription Module
+        self::registerModule('transcription', [
+            'class' => TranscriptionModule::class,
+            'description' => 'YouTube video transcription via Transcriber microservice',
+            'dependencies' => [],
+            'config' => [
+                'api_url' => config('services.youtube_transcriber.url'),
+                'timeout' => config('services.youtube_transcriber.timeout'),
+                'supported_formats' => ['plain', 'json', 'srt', 'article'],
             ]
         ]);
     }

@@ -8,7 +8,7 @@ use App\Models\DocumentMetadata;
 use App\Models\History;
 use App\Models\Tool;
 use App\Services\VectorDatabaseService;
-use App\Services\OpenAIService;
+use App\Services\Modules\AIProcessingModule;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
@@ -16,12 +16,12 @@ use Illuminate\Support\Facades\Validator;
 class DocumentChatController extends Controller
 {
     private $vectorService;
-    private $openAIService;
+    private $aiProcessingModule;
     
-    public function __construct(VectorDatabaseService $vectorService, OpenAIService $openAIService)
+    public function __construct(VectorDatabaseService $vectorService, AIProcessingModule $aiProcessingModule)
     {
         $this->vectorService = $vectorService;
-        $this->openAIService = $openAIService;
+        $this->aiProcessingModule = $aiProcessingModule;
     }
     
     /**
@@ -171,7 +171,8 @@ class DocumentChatController extends Controller
         $prompt = $this->buildChatPrompt($query, $context, $conversationHistory);
         
         // Get AI response
-        $response = $this->openAIService->generateResponse($prompt);
+        $result = $this->aiProcessingModule->answerQuestion($request->input('query'), $context);
+        $response = $result['answer'];
         
         $processingTime = round((microtime(true) - $startTime) * 1000) / 1000;
         

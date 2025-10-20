@@ -4,16 +4,17 @@ namespace App\Services;
 
 use App\Models\DocumentChunk;
 use App\Models\DocumentMetadata;
+use App\Services\Modules\AIProcessingModule;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class VectorDatabaseService
 {
-    private $openAIService;
+    private $aiProcessingModule;
     
-    public function __construct(OpenAIService $openAIService)
+    public function __construct(AIProcessingModule $aiProcessingModule)
     {
-        $this->openAIService = $openAIService;
+        $this->aiProcessingModule = $aiProcessingModule;
     }
     
     /**
@@ -119,8 +120,8 @@ class VectorDatabaseService
     private function generateEmbedding($text)
     {
         try {
-            // Use OpenAI embeddings API
-            $response = $this->openAIService->generateEmbedding($text);
+            // Use AI Processing Module for embeddings
+            $response = $this->aiProcessingModule->generateEmbedding($text);
             return $response;
         } catch (\Exception $e) {
             Log::error("Failed to generate embedding: " . $e->getMessage());

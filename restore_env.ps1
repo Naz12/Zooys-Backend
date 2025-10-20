@@ -118,3 +118,12 @@ Write-Host "📝 Edit the .env file and add your YouTube API key, then run the k
 
 
 
+
+
+
+
+
+
+
+
+

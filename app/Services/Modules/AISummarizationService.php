@@ -2,18 +2,18 @@
 
 namespace App\Services\Modules;
 
-use App\Services\OpenAIService;
+use App\Services\Modules\AIProcessingModule;
 use Illuminate\Support\Facades\Log;
 
 class AISummarizationService
 {
-    private $openAIService;
+    private $aiProcessingModule;
     private $maxTokens;
     private $temperature;
 
-    public function __construct(OpenAIService $openAIService)
+    public function __construct(AIProcessingModule $aiProcessingModule)
     {
-        $this->openAIService = $openAIService;
+        $this->aiProcessingModule = $aiProcessingModule;
         $this->maxTokens = config('ai.summarization.max_tokens', 1000);
         $this->temperature = config('ai.summarization.temperature', 0.7);
     }
@@ -78,19 +78,19 @@ class AISummarizationService
      */
     private function summarizeChunk($chunk, $contentType, $options, $chunkIndex, $totalChunks)
     {
-        $prompt = $this->buildChunkPrompt($chunk, $contentType, $options, $chunkIndex, $totalChunks);
-        
         try {
-            $response = $this->openAIService->generateResponse($prompt);
+            $result = $this->aiProcessingModule->summarize($chunk['content'], $options);
             
             return [
                 'success' => true,
-                'summary' => $response,
-                'key_points' => $this->extractKeyPoints($response),
+                'summary' => $result['summary'],
+                'key_points' => $result['key_points'],
                 'metadata' => [
                     'chunk_size' => $chunk['character_count'],
                     'word_count' => $chunk['word_count'],
                     'processing_time' => microtime(true),
+                    'model_used' => $result['model_used'],
+                    'confidence_score' => $result['confidence_score']
                 ]
             ];
         } catch (\Exception $e) {
@@ -131,28 +131,12 @@ class AISummarizationService
      */
     private function combineSummaries($chunkSummaries, $contentType, $options)
     {
-        $mode = $options['mode'] ?? 'detailed';
-        $language = $options['language'] ?? 'en';
-        
         // Create combined content from chunk summaries
         $combinedContent = $this->buildCombinedContent($chunkSummaries);
         
-        $prompt = "Create a comprehensive summary from these {$contentType} content summaries:\n\n";
-        $prompt .= $combinedContent . "\n\n";
-        
-        if ($mode === 'brief') {
-            $prompt .= "Provide:\n1. Overall main topic (1 sentence)\n2. Key takeaway (1 sentence)";
-        } else {
-            $prompt .= "Provide:\n1. Main topic and themes\n2. Key points (5-7 bullet points)\n3. Target audience\n4. Educational value\n5. Overall rating (1-10)";
-        }
-        
-        if ($language !== 'en') {
-            $prompt .= "\n\nPlease respond in {$language} language.";
-        }
-        
         try {
-            $finalSummary = $this->openAIService->generateResponse($prompt);
-            return $finalSummary;
+            $result = $this->aiProcessingModule->summarize($combinedContent, $options);
+            return $result['summary'];
         } catch (\Exception $e) {
             Log::error("Final summary combination failed: " . $e->getMessage());
             return "Summary generation failed: " . $e->getMessage();

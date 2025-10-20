@@ -53,5 +53,17 @@ return [
         'api_key' => env('YOUTUBE_API_KEY'),
     ],
 
+    'ai_manager' => [
+        'url' => env('AI_MANAGER_URL', 'https://aimanager.akmicroservice.com'),
+        'api_key' => env('AI_MANAGER_API_KEY', '8eebab3587a5719950dfb3ee348737c6e244c13a5d6b3d35161071ee6a9d8c43'),
+        'timeout' => env('AI_MANAGER_TIMEOUT', 60),
+    ],
+
+    'youtube_transcriber' => [
+        'url' => env('YOUTUBE_TRANSCRIBER_URL', 'https://transcriber.akmicroservice.com'),
+        'client_key' => env('YOUTUBE_TRANSCRIBER_API_KEY', 'dev-local'),
+        'timeout' => env('YOUTUBE_TRANSCRIBER_TIMEOUT', 120),
+        'default_format' => env('YOUTUBE_TRANSCRIBER_FORMAT', 'plain'),
+    ],
 
 ];

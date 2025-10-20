@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use App\Models\AIResult;
-use App\Services\OpenAIService;
+use App\Services\Modules\AIProcessingModule;
 use App\Services\AIResultService;
 use App\Services\Modules\ContentExtractionService;
 use Illuminate\Support\Facades\Log;
@@ -12,17 +12,17 @@ use Illuminate\Support\Facades\Http;
 
 class AIPresentationService
 {
-    private $openAIService;
+    private $aiProcessingModule;
     private $aiResultService;
     private $contentExtractionService;
     private $microserviceUrl;
 
     public function __construct(
-        OpenAIService $openAIService,
+        AIProcessingModule $aiProcessingModule,
         AIResultService $aiResultService,
         ContentExtractionService $contentExtractionService
     ) {
-        $this->openAIService = $openAIService;
+        $this->aiProcessingModule = $aiProcessingModule;
         $this->aiResultService = $aiResultService;
         $this->contentExtractionService = $contentExtractionService;
         $this->microserviceUrl = env('PRESENTATION_MICROSERVICE_URL', 'http://localhost:8001');
@@ -319,7 +319,8 @@ Example format:
   ]
 }";
 
-        $response = $this->openAIService->generateResponse($prompt, 'gpt-4');
+        $result = $this->aiProcessingModule->generateText($prompt);
+        $response = $result['generated_content'];
 
         // Log the response for debugging
         Log::info('AI Content Generation Response', [
@@ -686,7 +687,8 @@ Please provide:
 
 Format the response as a JSON object with a 'content' field containing an array of bullet points.";
 
-        $response = $this->openAIService->generateResponse($prompt, 'gpt-4');
+        $result = $this->aiProcessingModule->generateText($prompt);
+        $response = $result['generated_content'];
 
         if (empty($response) || strpos($response, 'Sorry, I was unable') === 0) {
             // Fallback content if OpenAI fails
