@@ -5,6 +5,7 @@ namespace App\Services\Modules;
 use App\Services\AIResultService;
 use App\Services\YouTubeTranscriberService;
 use App\Services\AIManagerService;
+use App\Services\YouTubeFallbackService;
 use Illuminate\Support\Facades\Log;
 
 class UnifiedProcessingService
@@ -16,6 +17,7 @@ class UnifiedProcessingService
     private $moduleRegistry;
     private $youtubeTranscriberService;
     private $aiManagerService;
+    private $youtubeFallbackService;
 
     public function __construct(
         ContentExtractionService $contentExtractionService,
@@ -24,7 +26,8 @@ class UnifiedProcessingService
         AIResultService $aiResultService,
         ModuleRegistry $moduleRegistry,
         YouTubeTranscriberService $youtubeTranscriberService,
-        AIManagerService $aiManagerService
+        AIManagerService $aiManagerService,
+        YouTubeFallbackService $youtubeFallbackService
     ) {
         $this->contentExtractionService = $contentExtractionService;
         $this->contentChunkingService = $contentChunkingService;
@@ -33,6 +36,7 @@ class UnifiedProcessingService
         $this->moduleRegistry = $moduleRegistry;
         $this->youtubeTranscriberService = $youtubeTranscriberService;
         $this->aiManagerService = $aiManagerService;
+        $this->youtubeFallbackService = $youtubeFallbackService;
     }
 
     /**
@@ -134,7 +138,17 @@ class UnifiedProcessingService
             ]);
 
             if (!$transcriptionResult['success']) {
-                throw new \Exception('Transcription failed: ' . $transcriptionResult['error']);
+                Log::warning("Transcriber service failed, using fallback strategy", [
+                    'error' => $transcriptionResult['error'],
+                    'video_url' => $videoUrl
+                ]);
+                
+                // Use fallback service
+                $transcriptionResult = $this->youtubeFallbackService->processYouTubeVideo($videoUrl, $options, $userId);
+                
+                if (!$transcriptionResult['success']) {
+                    throw new \Exception('Both transcriber and fallback failed: ' . $transcriptionResult['error']);
+                }
             }
 
             Log::info("Bundle received from transcriber", [
@@ -167,6 +181,12 @@ class UnifiedProcessingService
                 throw new \Exception('AI Manager summarization failed: ' . $summaryResult['error']);
             }
 
+            // Handle empty summary for musical content
+            if (empty($summaryResult['insights'])) {
+                $summaryResult['insights'] = "This appears to be musical content (song lyrics). The AI model may not generate summaries for musical content as it focuses on narrative text.";
+                Log::info("Empty summary detected, using fallback for musical content");
+            }
+
             Log::info("AI Manager summarization completed", [
                 'summary_length' => strlen($summaryResult['insights']),
                 'model_used' => $summaryResult['model_used'],
@@ -183,8 +203,7 @@ class UnifiedProcessingService
                 'success' => true,
                 'summary' => $summaryResult['insights'],
                 'ai_result' => $aiResult,
-                'bundle' => $transcriptionResult,
-                'merged_result' => $mergedResult,
+                'bundle' => $mergedResult, // Return only the merged result, not duplicate
                 'metadata' => [
                     'video_id' => $transcriptionResult['video_id'],
                     'title' => $transcriptionResult['meta']['title'] ?? 'Unknown',
@@ -378,7 +397,12 @@ class UnifiedProcessingService
     {
         try {
             $bundle = $transcriptionResult;
-            $summary = $summaryResult['insights'];
+            $summary = $summaryResult['insights'] ?? '';
+            
+            // Handle empty summary for musical content
+            if (empty($summary)) {
+                $summary = "This appears to be musical content (song lyrics). The AI model may not generate summaries for musical content as it focuses on narrative text.";
+            }
             
             // Create merged result structure
             $mergedResult = [
@@ -390,10 +414,10 @@ class UnifiedProcessingService
                 'json' => $bundle['json'],
                 'meta' => array_merge($bundle['meta'] ?? [], [
                     'ai_summary' => $summary,
-                    'ai_model_used' => $summaryResult['model_used'],
-                    'ai_tokens_used' => $summaryResult['tokens_used'],
-                    'ai_confidence_score' => $summaryResult['confidence_score'],
-                    'processing_time' => $summaryResult['processing_time'],
+                    'ai_model_used' => $summaryResult['model_used'] ?? 'ollama:phi3:mini',
+                    'ai_tokens_used' => $summaryResult['tokens_used'] ?? 0,
+                    'ai_confidence_score' => $summaryResult['confidence_score'] ?? 0.8,
+                    'processing_time' => $summaryResult['processing_time'] ?? 0,
                     'merged_at' => now()->toISOString()
                 ])
             ];

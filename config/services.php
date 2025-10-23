@@ -56,14 +56,22 @@ return [
     'ai_manager' => [
         'url' => env('AI_MANAGER_URL', 'https://aimanager.akmicroservice.com'),
         'api_key' => env('AI_MANAGER_API_KEY', '8eebab3587a5719950dfb3ee348737c6e244c13a5d6b3d35161071ee6a9d8c43'),
-        'timeout' => env('AI_MANAGER_TIMEOUT', 60),
+        'timeout' => env('AI_MANAGER_TIMEOUT', 30),
     ],
 
     'youtube_transcriber' => [
         'url' => env('YOUTUBE_TRANSCRIBER_URL', 'https://transcriber.akmicroservice.com'),
         'client_key' => env('YOUTUBE_TRANSCRIBER_API_KEY', 'dev-local'),
-        'timeout' => env('YOUTUBE_TRANSCRIBER_TIMEOUT', 120),
-        'default_format' => env('YOUTUBE_TRANSCRIBER_FORMAT', 'plain'),
+        'timeout' => env('YOUTUBE_TRANSCRIBER_TIMEOUT', 600), // 10 minutes for Smartproxy
+        'default_format' => env('YOUTUBE_TRANSCRIBER_FORMAT', 'bundle'),
+    ],
+
+    'webhooks' => [
+        'processing_url' => env('WEBHOOK_PROCESSING_URL'),
+        'secret' => env('WEBHOOK_SECRET'),
+        'timeout' => env('WEBHOOK_TIMEOUT', 10),
+        'retry_attempts' => env('WEBHOOK_RETRY_ATTEMPTS', 3),
+        'retry_delay' => env('WEBHOOK_RETRY_DELAY', 60),
     ],
 
 ];

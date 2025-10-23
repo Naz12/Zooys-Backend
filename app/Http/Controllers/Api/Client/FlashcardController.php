@@ -10,7 +10,7 @@ use App\Models\FlashcardSet;
 use App\Models\Flashcard;
 use App\Services\Modules\ContentExtractionService;
 use App\Services\FlashcardGenerationService;
-use App\Services\FileUploadService;
+use App\Services\Modules\UniversalFileManagementModule;
 use App\Services\AIResultService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
@@ -19,18 +19,18 @@ class FlashcardController extends Controller
 {
     protected $contentExtractionService;
     protected $flashcardGenerationService;
-    protected $fileUploadService;
+    protected $universalFileModule;
     protected $aiResultService;
 
     public function __construct(
         ContentExtractionService $contentExtractionService,
         FlashcardGenerationService $flashcardGenerationService,
-        FileUploadService $fileUploadService,
+        UniversalFileManagementModule $universalFileModule,
         AIResultService $aiResultService
     ) {
         $this->contentExtractionService = $contentExtractionService;
         $this->flashcardGenerationService = $flashcardGenerationService;
-        $this->fileUploadService = $fileUploadService;
+        $this->universalFileModule = $universalFileModule;
         $this->aiResultService = $aiResultService;
     }
 
@@ -58,8 +58,7 @@ class FlashcardController extends Controller
             // Handle file upload if provided
             if ($request->hasFile('file')) {
                 $file = $request->file('file');
-                $uploadResult = $this->fileUploadService->uploadFile($file, $user->id, [
-                    'tool_type' => 'flashcards',
+                $uploadResult = $this->universalFileModule->uploadFile($file, $user->id, 'flashcards', [
                     'difficulty' => $difficulty,
                     'style' => $style
                 ]);

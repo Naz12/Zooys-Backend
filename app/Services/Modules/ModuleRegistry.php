@@ -150,6 +150,19 @@ class ModuleRegistry
                 'supported_formats' => ['plain', 'json', 'srt', 'article'],
             ]
         ]);
+
+        // Register Universal File Management Module
+        self::registerModule('universal_file_management', [
+            'class' => UniversalFileManagementModule::class,
+            'description' => 'Universal file upload, processing, and management for all AI tools',
+            'dependencies' => ['content_extraction', 'ai_processing', 'transcription'],
+            'config' => [
+                'supported_types' => ['pdf', 'doc', 'docx', 'txt', 'audio', 'video', 'image'],
+                'max_file_size' => '100MB',
+                'processing_pipeline' => ['upload', 'extract', 'process', 'store'],
+                'supported_tools' => ['summarize', 'math', 'document_chat', 'flashcards', 'presentations']
+            ]
+        ]);
     }
 
     /**

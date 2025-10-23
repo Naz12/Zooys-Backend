@@ -1,0 +1,265 @@
+{
+    "timestamp": "2025-10-21 07:43:56",
+    "total_duration": 385.77,
+    "test_results": {
+        "health_check": {
+            "success": false,
+            "error": "cURL error 28: Operation timed out after 10005 milliseconds with 0 bytes received (see https:\/\/curl.haxx.se\/libcurl\/c\/libcurl-errors.html) for https:\/\/transcriber.akmicroservice.com\/health"
+        },
+        "format_validation": {
+            "supported_formats": [
+                "plain",
+                "json",
+                "srt",
+                "article"
+            ],
+            "test_formats": [
+                "plain",
+                "json",
+                "srt",
+                "article",
+                "bundle"
+            ]
+        },
+        "video_tests": [
+            {
+                "video": {
+                    "url": "https:\/\/www.youtube.com\/watch?v=dQw4w9WgXcQ",
+                    "title": "Rick Astley - Never Gonna Give You Up",
+                    "expected_duration": "3:32",
+                    "description": "Classic music video with clear audio"
+                },
+                "result": {
+                    "success": false,
+                    "error": "V3 transcription job failed: error",
+                    "video_id": null,
+                    "subtitle_text": null
+                },
+                "duration": 44.9,
+                "success": false
+            },
+            {
+                "video": {
+                    "url": "https:\/\/www.youtube.com\/watch?v=9bZkp7q19f0",
+                    "title": "PSY - Gangnam Style",
+                    "expected_duration": "4:12",
+                    "description": "K-pop song with Korean and English lyrics"
+                },
+                "result": {
+                    "success": false,
+                    "error": "V3 transcription job failed: error",
+                    "video_id": null,
+                    "subtitle_text": null
+                },
+                "duration": 22.24,
+                "success": false
+            },
+            {
+                "video": {
+                    "url": "https:\/\/www.youtube.com\/watch?v=kJQP7kiw5Fk",
+                    "title": "Luis Fonsi - Despacito",
+                    "expected_duration": "4:41",
+                    "description": "Spanish song with clear pronunciation"
+                },
+                "result": {
+                    "success": false,
+                    "error": "V3 transcription job failed: error",
+                    "video_id": null,
+                    "subtitle_text": null
+                },
+                "duration": 22.1,
+                "success": false
+            },
+            {
+                "video": {
+                    "url": "https:\/\/www.youtube.com\/watch?v=YQHsXMglC9A",
+                    "title": "Adele - Hello",
+                    "expected_duration": "4:55",
+                    "description": "English ballad with clear vocals"
+                },
+                "result": {
+                    "success": false,
+                    "error": "V3 transcription job failed: error",
+                    "video_id": null,
+                    "subtitle_text": null
+                },
+                "duration": 22.38,
+                "success": false
+            },
+            {
+                "video": {
+                    "url": "https:\/\/www.youtube.com\/watch?v=YQHsXMglC9A",
+                    "title": "Ed Sheeran - Shape of You",
+                    "expected_duration": "3:53",
+                    "description": "Pop song with English lyrics"
+                },
+                "result": {
+                    "success": false,
+                    "error": "V3 transcription job failed: error",
+                    "video_id": null,
+                    "subtitle_text": null
+                },
+                "duration": 22.08,
+                "success": false
+            }
+        ],
+        "format_comparison": [
+            {
+                "format": "plain",
+                "result": {
+                    "success": false,
+                    "error": "V3 transcription job failed: error",
+                    "video_id": null,
+                    "subtitle_text": null
+                },
+                "duration": 43.76,
+                "success": false
+            },
+            {
+                "format": "json",
+                "result": {
+                    "success": false,
+                    "error": "V3 transcription job failed: error",
+                    "video_id": null,
+                    "subtitle_text": null
+                },
+                "duration": 43.88,
+                "success": false
+            },
+            {
+                "format": "srt",
+                "result": {
+                    "success": false,
+                    "error": "V3 transcription job failed: error",
+                    "video_id": null,
+                    "subtitle_text": null
+                },
+                "duration": 22.83,
+                "success": false
+            },
+            {
+                "format": "article",
+                "result": {
+                    "success": false,
+                    "error": "V3 transcription job failed: error",
+                    "video_id": null,
+                    "subtitle_text": null
+                },
+                "duration": 22.1,
+                "success": false
+            },
+            {
+                "format": "bundle",
+                "result": {
+                    "success": false,
+                    "error": "V3 transcription job failed: error",
+                    "video_id": null,
+                    "subtitle_text": null
+                },
+                "duration": 22.42,
+                "success": false
+            }
+        ],
+        "error_tests": [
+            {
+                "test": {
+                    "url": "https:\/\/www.youtube.com\/watch?v=invalid123",
+                    "description": "Invalid video ID",
+                    "expected": "Should fail gracefully"
+                },
+                "result": {
+                    "success": false,
+                    "error": "YouTube Transcriber service failed: 400",
+                    "video_id": null,
+                    "subtitle_text": null
+                },
+                "handled_correctly": true
+            },
+            {
+                "test": {
+                    "url": "https:\/\/www.youtube.com\/watch?v=",
+                    "description": "Empty video ID",
+                    "expected": "Should fail gracefully"
+                },
+                "result": {
+                    "success": false,
+                    "error": "YouTube Transcriber service failed: 400",
+                    "video_id": null,
+                    "subtitle_text": null
+                },
+                "handled_correctly": true
+            },
+            {
+                "test": {
+                    "url": "https:\/\/www.google.com",
+                    "description": "Non-YouTube URL",
+                    "expected": "Should fail gracefully"
+                },
+                "result": {
+                    "success": false,
+                    "error": "YouTube Transcriber service failed: 400",
+                    "video_id": null,
+                    "subtitle_text": null
+                },
+                "handled_correctly": true
+            }
+        ],
+        "performance": {
+            "concurrent_tests": [
+                {
+                    "video": {
+                        "url": "https:\/\/www.youtube.com\/watch?v=dQw4w9WgXcQ",
+                        "title": "Rick Astley - Never Gonna Give You Up",
+                        "expected_duration": "3:32",
+                        "description": "Classic music video with clear audio"
+                    },
+                    "result": {
+                        "success": false,
+                        "error": "V3 transcription job failed: error",
+                        "video_id": null,
+                        "subtitle_text": null
+                    },
+                    "success": false
+                },
+                {
+                    "video": {
+                        "url": "https:\/\/www.youtube.com\/watch?v=9bZkp7q19f0",
+                        "title": "PSY - Gangnam Style",
+                        "expected_duration": "4:12",
+                        "description": "K-pop song with Korean and English lyrics"
+                    },
+                    "result": {
+                        "success": false,
+                        "error": "V3 transcription job failed: error",
+                        "video_id": null,
+                        "subtitle_text": null
+                    },
+                    "success": false
+                },
+                {
+                    "video": {
+                        "url": "https:\/\/www.youtube.com\/watch?v=kJQP7kiw5Fk",
+                        "title": "Luis Fonsi - Despacito",
+                        "expected_duration": "4:41",
+                        "description": "Spanish song with clear pronunciation"
+                    },
+                    "result": {
+                        "success": false,
+                        "error": "V3 transcription job failed: error",
+                        "video_id": null,
+                        "subtitle_text": null
+                    },
+                    "success": false
+                }
+            ],
+            "total_duration": 67.62,
+            "success_rate": 0
+        }
+    },
+    "summary": {
+        "video_tests": 5,
+        "format_tests": 5,
+        "error_tests": 3,
+        "health_check_passed": false
+    }
+}

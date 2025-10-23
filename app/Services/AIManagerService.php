@@ -15,7 +15,7 @@ class AIManagerService
     {
         $this->apiUrl = config('services.ai_manager.url');
         $this->apiKey = config('services.ai_manager.api_key');
-        $this->timeout = config('services.ai_manager.timeout', 60);
+        $this->timeout = config('services.ai_manager.timeout', 30);
     }
 
     /**
@@ -38,10 +38,15 @@ class AIManagerService
     /**
      * Process text using AI Manager microservice
      */
-    public function processText($text, $task, $options = [])
+public function processText($text, $task, $options = [])
     {
-        $maxRetries = 3;
-        $retryDelay = 2; // seconds
+        // Check if service is available (circuit breaker)
+        if (!$this->isServiceAvailable()) {
+            throw new \Exception("AI Manager service is currently unavailable");
+        }
+
+        $maxRetries = 2; // Reduced retries
+        $retryDelay = 1; // Reduced delay
         
         for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
             try {
@@ -58,7 +63,8 @@ class AIManagerService
                     'options' => $options
                 ];
 
-                $response = Http::timeout($this->timeout)
+                $response = Http::timeout(60) // Increased timeout for AI processing
+                    ->connectTimeout(10) // Increased connection timeout
                     ->withHeaders([
                         'Accept' => 'application/json',
                         'Content-Type' => 'application/json',
@@ -92,8 +98,9 @@ class AIManagerService
                         'attempt' => $attempt
                     ]);
 
-                    // If this is the last attempt, return error
+                    // If this is the last attempt, mark service as unavailable and return error
                     if ($attempt === $maxRetries) {
+                        $this->markServiceUnavailable();
                         return [
                             'success' => false,
                             'error' => 'AI Manager API failed after ' . $maxRetries . ' attempts: ' . $response->status(),
@@ -113,8 +120,9 @@ class AIManagerService
                     'attempt' => $attempt
                 ]);
 
-                // If this is the last attempt, return error
+                // If this is the last attempt, mark service as unavailable and return error
                 if ($attempt === $maxRetries) {
+                    $this->markServiceUnavailable();
                     return [
                         'success' => false,
                         'error' => 'AI Manager service error: ' . $e->getMessage()
@@ -192,7 +200,7 @@ class AIManagerService
     public function checkHealth()
     {
         try {
-            $response = Http::timeout(10)
+            $response = Http::timeout(30)
                 ->withHeaders([
                     'Accept' => 'application/json',
                     'X-API-KEY' => $this->apiKey,
@@ -210,5 +218,34 @@ class AIManagerService
             ];
         }
     }
+
+    /**
+     * Check if service is available (circuit breaker)
+     */
+    private function isServiceAvailable()
+    {
+        $cacheKey = 'ai_manager_unavailable';
+        $unavailableUntil = \Illuminate\Support\Facades\Cache::get($cacheKey);
+        
+        if ($unavailableUntil && now()->timestamp < $unavailableUntil) {
+            return false;
+        }
+        
+        return true;
+    }
+
+    /**
+     * Mark service as unavailable for 5 minutes
+     */
+    private function markServiceUnavailable()
+    {
+        $cacheKey = 'ai_manager_unavailable';
+        $unavailableUntil = now()->addMinutes(5)->timestamp;
+        
+        \Illuminate\Support\Facades\Cache::put($cacheKey, $unavailableUntil, 300); // 5 minutes
+        
+        Log::warning("AI Manager service marked as unavailable until " . now()->addMinutes(5)->toISOString());
+    }
+
 }
 

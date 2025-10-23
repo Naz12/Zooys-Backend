@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api\Client;
 
 use App\Http\Controllers\Controller;
 use App\Services\AIPresentationService;
-use App\Services\FileUploadService;
+use App\Services\Modules\UniversalFileManagementModule;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
@@ -13,14 +13,14 @@ use Illuminate\Support\Facades\Validator;
 class PresentationController extends Controller
 {
     private $aiPresentationService;
-    private $fileUploadService;
+    private $universalFileModule;
 
     public function __construct(
         AIPresentationService $aiPresentationService,
-        FileUploadService $fileUploadService
+        UniversalFileManagementModule $universalFileModule
     ) {
         $this->aiPresentationService = $aiPresentationService;
-        $this->fileUploadService = $fileUploadService;
+        $this->universalFileModule = $universalFileModule;
     }
 
     /**
@@ -54,7 +54,7 @@ class PresentationController extends Controller
 
             // Handle file upload if input type is file
             if ($inputData['input_type'] === 'file' && $request->hasFile('file')) {
-                $fileUpload = $this->fileUploadService->uploadFile($request->file('file'), $userId);
+                $fileUpload = $this->universalFileModule->uploadFile($request->file('file'), $userId, 'presentations');
                 
                 if (!$fileUpload['success']) {
                     return response()->json([

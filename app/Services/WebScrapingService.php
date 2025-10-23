@@ -9,6 +9,100 @@ use Symfony\Component\DomCrawler\Crawler;
 class WebScrapingService
 {
     /**
+     * Extract content from web URL using Smartproxy endpoint
+     */
+    public function extractContent($url)
+    {
+        // Try Smartproxy endpoint first for web links
+        $smartproxyResult = $this->extractWithSmartproxy($url);
+        if ($smartproxyResult['success']) {
+            return $smartproxyResult;
+        }
+        
+        // Fallback to original method
+        return $this->extractWebContent($url);
+    }
+
+    /**
+     * Extract web content using Smartproxy endpoint
+     */
+    public function extractWithSmartproxy($url)
+    {
+        try {
+            Log::info("Web Scraping Smartproxy API Request", [
+                'url' => $url
+            ]);
+
+            $queryParams = [
+                'url' => $url,
+                'format' => 'article'
+            ];
+
+            $response = Http::timeout(120)
+                ->withHeaders([
+                    'Accept' => 'application/json',
+                    'X-Client-Key' => config('services.youtube_transcriber.client_key', 'dev-local'),
+                ])
+                ->get(config('services.youtube_transcriber.url', 'https://transcriber.akmicroservice.com') . '/scraper/smartproxy/subtitles', $queryParams);
+
+            if ($response->successful()) {
+                $data = $response->json();
+                
+                Log::info("Web Scraping Smartproxy API Response successful", [
+                    'url' => $url,
+                    'content_length' => strlen($data['subtitle_text'] ?? ''),
+                    'proxy_source' => $response->header('X-Proxy-Source')
+                ]);
+
+                return [
+                    'success' => true,
+                    'content' => $data['subtitle_text'] ?? '',
+                    'title' => $this->extractTitleFromUrl($url),
+                    'url' => $url,
+                    'source' => 'smartproxy'
+                ];
+            } else {
+                Log::error("Web Scraping Smartproxy API Response failed", [
+                    'status' => $response->status(),
+                    'response' => $response->body()
+                ]);
+                
+                return [
+                    'success' => false,
+                    'error' => 'Smartproxy web scraping failed: ' . $response->body()
+                ];
+            }
+        } catch (\Exception $e) {
+            Log::error("Web Scraping Smartproxy API Exception: " . $e->getMessage());
+            return [
+                'success' => false,
+                'error' => 'Smartproxy web scraping failed: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Extract title from URL (simple implementation)
+     */
+    private function extractTitleFromUrl($url)
+    {
+        $parsedUrl = parse_url($url);
+        $host = $parsedUrl['host'] ?? 'Unknown';
+        $path = $parsedUrl['path'] ?? '';
+        
+        // Extract a meaningful title from the path
+        if ($path && $path !== '/') {
+            $pathParts = explode('/', trim($path, '/'));
+            $lastPart = end($pathParts);
+            if ($lastPart) {
+                return ucwords(str_replace(['-', '_'], ' ', $lastPart));
+            }
+        }
+        
+        return $host;
+    }
+
+    /**
      * Extract content from web URL
      */
     public function extractWebContent($url)
@@ -68,7 +162,21 @@ class WebScrapingService
     private function isUrlAccessible($url)
     {
         try {
+            // Some sites block HEAD; fall back to lightweight GET
             $response = Http::timeout(10)->head($url);
+            if ($response->successful()) {
+                return true;
+            }
+        } catch (\Exception $e) {
+            // ignore and try GET
+        }
+
+        try {
+            $response = Http::timeout(10)
+                ->withHeaders([
+                    'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114 Safari/537.36'
+                ])
+                ->get($url);
             return $response->successful();
         } catch (\Exception $e) {
             return false;

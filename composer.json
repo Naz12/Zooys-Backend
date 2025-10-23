@@ -15,6 +15,7 @@
         "laravel/sanctum": "*",
         "laravel/tinker": "^2.10.1",
         "livewire/livewire": "^3.6",
+        "predis/predis": "*",
         "setasign/fpdi": "*",
         "smalot/pdfparser": "*",
         "stripe/stripe-php": "^17.6",

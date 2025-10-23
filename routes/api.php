@@ -7,7 +7,6 @@ use App\Http\Controllers\Api\Client\AuthController;
 use App\Http\Controllers\Api\Client\StripeController;
 use App\Http\Controllers\Api\Client\PlanController;
 use App\Http\Controllers\Api\Client\SubscriptionController;
-use App\Http\Controllers\Api\Client\PdfController;
 use App\Http\Controllers\Api\Client\WriterController;
 use App\Http\Controllers\Api\Client\MathController;
 use App\Http\Controllers\Api\Client\FlashcardController;
@@ -75,6 +74,655 @@ Route::options('/presentations/{aiResultId}', function () {
 // 🔹 Stripe webhook
 Route::post('/stripe/webhook', [StripeController::class, 'webhook']);
 
+// 🔹 Test route without middleware
+Route::get('/test-simple', function () {
+    return response()->json(['message' => 'Test route works']);
+});
+
+// 🔹 Test route with auth middleware only
+Route::middleware(['auth:sanctum'])->get('/test-auth-only', function (Request $request) {
+    return response()->json([
+        'message' => 'Auth route works',
+        'user' => $request->user() ? $request->user()->id : null
+    ]);
+});
+
+// 🔹 Test route with auth middleware outside group
+Route::middleware(['auth:sanctum'])->get('/test-auth-outside', function (Request $request) {
+    return response()->json([
+        'message' => 'Auth route outside group works',
+        'user' => $request->user() ? $request->user()->id : null
+    ]);
+});
+
+// 🔹 Test route without any middleware
+Route::get('/test-no-middleware', function (Request $request) {
+    return response()->json([
+        'message' => 'No middleware route works',
+        'token' => $request->bearerToken(),
+        'user' => $request->user() ? $request->user()->id : null
+    ]);
+});
+
+// 🔹 Test route to manually check token
+Route::get('/test-token-manual', function (Request $request) {
+    $token = $request->bearerToken();
+    $parts = explode('|', $token);
+
+    $tokenRecord = null;
+    if (count($parts) === 2) {
+        $tokenRecord = Laravel\Sanctum\PersonalAccessToken::where('token', hash('sha256', $parts[1]))->first();
+    }
+
+    return response()->json([
+        'message' => 'Manual token check',
+        'token' => $token,
+        'parts' => $parts,
+        'token_exists' => $tokenRecord ? true : false,
+        'token_id' => $tokenRecord ? $tokenRecord->id : null,
+        'user_id' => $tokenRecord ? $tokenRecord->tokenable_id : null
+    ]);
+});
+
+// 🔹 Test route with auth:sanctum middleware and debugging
+Route::middleware(['auth:sanctum'])->get('/test-auth-debug', function (Request $request) {
+    return response()->json([
+        'message' => 'Auth debug route works',
+        'user' => $request->user() ? $request->user()->id : null,
+        'token' => $request->bearerToken(),
+        'auth_check' => auth()->check(),
+        'auth_user' => auth()->user() ? auth()->user()->id : null
+    ]);
+});
+
+// 🔹 Test route with auth middleware (Laravel's built-in auth middleware)
+Route::middleware(['auth'])->get('/test-auth-builtin', function (Request $request) {
+    return response()->json([
+        'message' => 'Auth builtin route works',
+        'user' => $request->user() ? $request->user()->id : null,
+        'token' => $request->bearerToken(),
+        'auth_check' => auth()->check(),
+        'auth_user' => auth()->user() ? auth()->user()->id : null
+    ]);
+});
+
+// 🔹 Test route with no middleware to verify basic functionality
+Route::get('/test-no-auth', function (Request $request) {
+    return response()->json([
+        'message' => 'No auth route works',
+        'user' => $request->user() ? $request->user()->id : null,
+        'token' => $request->bearerToken(),
+        'auth_check' => auth()->check(),
+        'auth_user' => auth()->user() ? auth()->user()->id : null
+    ]);
+});
+
+// 🔹 Test route with full middleware class name
+Route::middleware([\Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class])->get('/test-auth-full', function (Request $request) {
+    return response()->json([
+        'message' => 'Auth full route works',
+        'user' => $request->user() ? $request->user()->id : null,
+        'token' => $request->bearerToken(),
+        'auth_check' => auth()->check(),
+        'auth_user' => auth()->user() ? auth()->user()->id : null
+    ]);
+});
+
+// 🔹 Test route with Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful middleware
+Route::middleware([\Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class])->get('/test-sanctum-stateful', function (Request $request) {
+    return response()->json([
+        'message' => 'Sanctum stateful route works',
+        'user' => $request->user() ? $request->user()->id : null,
+        'token' => $request->bearerToken(),
+        'auth_check' => auth()->check(),
+        'auth_user' => auth()->user() ? auth()->user()->id : null
+    ]);
+});
+
+// 🔹 Test route to manually authenticate and test summarize
+Route::post('/test-summarize-manual', function (Request $request) {
+    $token = $request->bearerToken();
+    $parts = explode('|', $token);
+
+    if (count($parts) !== 2) {
+        return response()->json(['error' => 'Invalid token format'], 401);
+    }
+
+    $tokenRecord = Laravel\Sanctum\PersonalAccessToken::where('token', hash('sha256', $parts[1]))->first();
+
+    if (!$tokenRecord) {
+        return response()->json(['error' => 'Token not found'], 401);
+    }
+
+    $user = $tokenRecord->tokenable;
+
+    if (!$user) {
+        return response()->json(['error' => 'User not found'], 401);
+    }
+
+    // Manually authenticate the user
+    // Manually authenticate the user
+    auth()->login($user);
+
+    // Test the summarize endpoint logic
+    $contentType = $request->input('content_type');
+    $source = $request->input('source');
+    $options = $request->input('options', []);
+
+    try {
+        $universalJobService = app(\App\Services\UniversalJobService::class);
+        $job = $universalJobService->createJob('summarize', [
+            'content_type' => $contentType,
+            'source' => $source
+        ], $options, $user->id);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Job created successfully',
+            'job_id' => $job['id'],
+            'status' => $job['status']
+        ]);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'error' => $e->getMessage()
+        ], 500);
+    }
+});
+
+// 🔹 Test route to manually fetch job status (bypasses auth middleware)
+Route::get('/test-status-manual/{jobId}', function (Request $request, $jobId) {
+    $token = $request->bearerToken();
+    $parts = explode('|', $token);
+
+    if (count($parts) !== 2) {
+        return response()->json(['error' => 'Invalid token format'], 401);
+    }
+
+    $tokenRecord = Laravel\Sanctum\PersonalAccessToken::where('token', hash('sha256', $parts[1]))->first();
+    if (!$tokenRecord || !$tokenRecord->tokenable) {
+        return response()->json(['error' => 'Unauthenticated'], 401);
+    }
+
+    auth()->login($tokenRecord->tokenable);
+
+    try {
+        $universalJobService = app(\App\Services\UniversalJobService::class);
+        $job = $universalJobService->getJob($jobId);
+        if (!$job) {
+            return response()->json(['error' => 'Job not found'], 404);
+        }
+        return response()->json($job);
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage()], 500);
+    }
+});
+
+// 🔹 Test route to manually fetch job result (bypasses auth middleware)
+Route::get('/test-result-manual/{jobId}', function (Request $request, $jobId) {
+    $token = $request->bearerToken();
+    $parts = explode('|', $token);
+
+    if (count($parts) !== 2) {
+        return response()->json(['error' => 'Invalid token format'], 401);
+    }
+
+    $tokenRecord = Laravel\Sanctum\PersonalAccessToken::where('token', hash('sha256', $parts[1]))->first();
+    if (!$tokenRecord || !$tokenRecord->tokenable) {
+        return response()->json(['error' => 'Unauthenticated'], 401);
+    }
+
+    auth()->login($tokenRecord->tokenable);
+
+    try {
+        $universalJobService = app(\App\Services\UniversalJobService::class);
+        $job = $universalJobService->getJob($jobId);
+        if (!$job) {
+            return response()->json(['error' => 'Job not found'], 404);
+        }
+        if (($job['status'] ?? '') !== 'completed') {
+            return response()->json(['error' => 'Job not completed', 'status' => $job['status'] ?? 'unknown'], 409);
+        }
+        return response()->json(['success' => true, 'data' => $job['result'] ?? null]);
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage()], 500);
+    }
+});
+
+// 🔹 Public status/result with manual bearer validation for frontend compatibility
+Route::get('/summarize/status/{jobId}', function (Request $request, $jobId) {
+    $token = $request->bearerToken();
+    $parts = explode('|', $token ?? '');
+    if (count($parts) !== 2) return response()->json(['error' => 'Unauthenticated'], 401);
+    $record = Laravel\Sanctum\PersonalAccessToken::where('token', hash('sha256', $parts[1]))->first();
+    if (!$record || !$record->tokenable) return response()->json(['error' => 'Unauthenticated'], 401);
+    auth()->login($record->tokenable);
+    $service = app(\App\Services\UniversalJobService::class);
+    $job = $service->getJob($jobId);
+    if (!$job) return response()->json(['error' => 'Job not found'], 404);
+    return response()->json([
+        'job_id' => $job['id'],
+        'status' => $job['status'] ?? 'unknown',
+        'progress' => $job['progress'] ?? 0,
+        'stage' => $job['stage'] ?? null,
+        'error' => $job['error'] ?? null,
+    ]);
+});
+
+Route::get('/summarize/result/{jobId}', function (Request $request, $jobId) {
+    $token = $request->bearerToken();
+    $parts = explode('|', $token ?? '');
+    if (count($parts) !== 2) return response()->json(['error' => 'Unauthenticated'], 401);
+    $record = Laravel\Sanctum\PersonalAccessToken::where('token', hash('sha256', $parts[1]))->first();
+    if (!$record || !$record->tokenable) return response()->json(['error' => 'Unauthenticated'], 401);
+    auth()->login($record->tokenable);
+    $service = app(\App\Services\UniversalJobService::class);
+    $job = $service->getJob($jobId);
+    if (!$job) return response()->json(['error' => 'Job not found'], 404);
+    if (($job['status'] ?? '') !== 'completed') {
+        return response()->json(['error' => 'Job not completed', 'status' => $job['status'] ?? 'unknown'], 409);
+    }
+    return response()->json(['success' => true, 'data' => $job['result'] ?? null]);
+});
+
+// 🔹 Test route to manually authenticate and upload file (bypasses auth middleware)
+Route::post('/test-upload-manual', function (Request $request) {
+    $token = $request->bearerToken();
+    $parts = explode('|', $token);
+
+    if (count($parts) !== 2) {
+        return response()->json(['error' => 'Invalid token format'], 401);
+    }
+
+    $tokenRecord = Laravel\Sanctum\PersonalAccessToken::where('token', hash('sha256', $parts[1]))->first();
+    if (!$tokenRecord || !$tokenRecord->tokenable) {
+        return response()->json(['error' => 'Unauthenticated'], 401);
+    }
+
+    auth()->login($tokenRecord->tokenable);
+
+    // Delegate to controller
+    return app(\App\Http\Controllers\Api\Client\FileUploadController::class)->upload($request);
+});
+
+// 🔹 Working summarize endpoint with manual authentication
+Route::post('/summarize/async', function (Request $request) {
+    $token = $request->bearerToken();
+    $parts = explode('|', $token);
+
+    if (count($parts) !== 2) {
+        return response()->json(['error' => 'Invalid token format'], 401);
+    }
+
+    $tokenRecord = Laravel\Sanctum\PersonalAccessToken::where('token', hash('sha256', $parts[1]))->first();
+
+    if (!$tokenRecord) {
+        return response()->json(['error' => 'Token not found'], 401);
+    }
+
+    $user = $tokenRecord->tokenable;
+
+    if (!$user) {
+        return response()->json(['error' => 'User not found'], 401);
+    }
+
+    // Manually authenticate the user
+    // Manually authenticate the user
+    auth()->login($user);
+
+    // Use the SummarizeController logic
+    $controller = app(\App\Http\Controllers\Api\Client\SummarizeController::class);
+    return $controller->summarizeAsync($request);
+});
+
+// 🔹 Specialized Async Summarize Endpoints
+// YouTube Video Summarization
+Route::post('/summarize/async/youtube', function (Request $request) {
+    $token = $request->bearerToken();
+    $parts = explode('|', $token);
+
+    if (count($parts) !== 2) {
+        return response()->json(['error' => 'Invalid token format'], 401);
+    }
+
+    $tokenRecord = Laravel\Sanctum\PersonalAccessToken::where('token', hash('sha256', $parts[1]))->first();
+
+    if (!$tokenRecord) {
+        return response()->json(['error' => 'Token not found'], 401);
+    }
+
+    $user = $tokenRecord->tokenable;
+
+    if (!$user) {
+        return response()->json(['error' => 'User not found'], 401);
+    }
+
+    // Manually authenticate the user
+    auth()->login($user);
+
+    // Validate YouTube URL
+    $request->validate([
+        'url' => 'required|url',
+        'options' => 'sometimes|array'
+    ]);
+    
+    // Additional YouTube URL validation
+    $url = $request->url;
+    if (!preg_match('/^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\/.+/', $url)) {
+        return response()->json(['error' => 'Invalid YouTube URL'], 422);
+    }
+
+    // Create request with YouTube-specific format
+    $youtubeRequest = new Request([
+        'content_type' => 'link',
+        'source' => [
+            'type' => 'url',
+            'data' => $request->url
+        ],
+        'options' => array_merge([
+            'language' => 'en',
+            'format' => 'bundle',
+            'focus' => 'summary'
+        ], $request->options ?? [])
+    ]);
+
+    $controller = app(\App\Http\Controllers\Api\Client\SummarizeController::class);
+    return $controller->summarizeAsync($youtubeRequest);
+});
+
+// Text Summarization
+Route::post('/summarize/async/text', function (Request $request) {
+    $token = $request->bearerToken();
+    $parts = explode('|', $token);
+
+    if (count($parts) !== 2) {
+        return response()->json(['error' => 'Invalid token format'], 401);
+    }
+
+    $tokenRecord = Laravel\Sanctum\PersonalAccessToken::where('token', hash('sha256', $parts[1]))->first();
+
+    if (!$tokenRecord) {
+        return response()->json(['error' => 'Token not found'], 401);
+    }
+
+    $user = $tokenRecord->tokenable;
+
+    if (!$user) {
+        return response()->json(['error' => 'User not found'], 401);
+    }
+
+    // Manually authenticate the user
+    auth()->login($user);
+
+    // Validate text content
+    $request->validate([
+        'text' => 'required|string|min:10',
+        'options' => 'sometimes|array'
+    ]);
+
+    // Create request with text-specific format
+    $textRequest = new Request([
+        'content_type' => 'text',
+        'source' => [
+            'type' => 'text',
+            'data' => $request->text
+        ],
+        'options' => array_merge([
+            'language' => 'en',
+            'format' => 'detailed',
+            'focus' => 'summary'
+        ], $request->options ?? [])
+    ]);
+
+    $controller = app(\App\Http\Controllers\Api\Client\SummarizeController::class);
+    return $controller->summarizeAsync($textRequest);
+});
+
+// Audio/Video File Summarization
+Route::post('/summarize/async/audiovideo', function (Request $request) {
+    $token = $request->bearerToken();
+    $parts = explode('|', $token);
+
+    if (count($parts) !== 2) {
+        return response()->json(['error' => 'Invalid token format'], 401);
+    }
+
+    $tokenRecord = Laravel\Sanctum\PersonalAccessToken::where('token', hash('sha256', $parts[1]))->first();
+
+    if (!$tokenRecord) {
+        return response()->json(['error' => 'Token not found'], 401);
+    }
+
+    $user = $tokenRecord->tokenable;
+
+    if (!$user) {
+        return response()->json(['error' => 'User not found'], 401);
+    }
+
+    // Manually authenticate the user
+    auth()->login($user);
+
+    // Validate file upload
+    $request->validate([
+        'file' => 'required|file|mimes:mp3,mp4,avi,mov,wav,m4a|max:50000', // 50MB max
+        'options' => 'sometimes|array'
+    ]);
+
+    // Use Universal File Management Module for file upload
+    $universalFileModule = app(\App\Services\Modules\UniversalFileManagementModule::class);
+    
+    // Upload file using the universal file management
+    $uploadResult = $universalFileModule->uploadFile($request->file('file'), $user->id, $request->options ?? []);
+    
+    if (!$uploadResult['success']) {
+        return response()->json([
+            'error' => 'File upload failed',
+            'details' => $uploadResult['error'] ?? 'Unknown error'
+        ], 400);
+    }
+    
+    $fileId = $uploadResult['file_upload']['id'];
+    
+    // Create request with file-specific format
+    $fileRequest = new Request([
+        'content_type' => 'audio', // Use 'audio' as content type for validation
+        'source' => [
+            'type' => 'file',
+            'data' => (string)$fileId // Ensure file ID is string
+        ],
+        'options' => array_merge([
+            'language' => 'en',
+            'format' => 'bundle',
+            'focus' => 'summary'
+        ], $request->options ?? [])
+    ]);
+
+    $controller = app(\App\Http\Controllers\Api\Client\SummarizeController::class);
+    return $controller->summarizeAsync($fileRequest);
+});
+
+// File Upload Summarization
+Route::post('/summarize/async/file', function (Request $request) {
+    $token = $request->bearerToken();
+    $parts = explode('|', $token);
+
+    if (count($parts) !== 2) {
+        return response()->json(['error' => 'Invalid token format'], 401);
+    }
+
+    $tokenRecord = Laravel\Sanctum\PersonalAccessToken::where('token', hash('sha256', $parts[1]))->first();
+
+    if (!$tokenRecord) {
+        return response()->json(['error' => 'Token not found'], 401);
+    }
+
+    $user = $tokenRecord->tokenable;
+
+    if (!$user) {
+        return response()->json(['error' => 'User not found'], 401);
+    }
+
+    // Manually authenticate the user
+    auth()->login($user);
+
+    // Validate file upload (supports multiple file types)
+    $request->validate([
+        'file' => 'required|file|mimes:pdf,doc,docx,txt,mp3,mp4,avi,mov,wav,m4a|max:50000', // 50MB max
+        'options' => 'sometimes|string' // Accept as string and parse to array
+    ]);
+
+    // Parse options from JSON string if needed
+    $options = $request->options ?? [];
+    if (is_string($options)) {
+        $options = json_decode($options, true) ?? [];
+    }
+
+    // Use Universal File Management Module for file upload
+    $universalFileModule = app(\App\Services\Modules\UniversalFileManagementModule::class);
+    
+    // Upload file using the universal file management
+    $uploadResult = $universalFileModule->uploadFile($request->file('file'), $user->id, $options);
+    
+    if (!$uploadResult['success']) {
+        return response()->json([
+            'error' => 'File upload failed',
+            'details' => $uploadResult['error'] ?? 'Unknown error'
+        ], 400);
+    }
+    
+    $fileId = $uploadResult['file_upload']['id'];
+    
+    // Create request with file-specific format for job scheduling
+    $fileRequest = new Request([
+        'content_type' => 'pdf', // Use 'pdf' as content type for validation
+        'source' => [
+            'type' => 'file',
+            'data' => (string)$fileId // Ensure file ID is string
+        ],
+        'options' => array_merge([
+            'language' => 'en',
+            'format' => 'detailed',
+            'focus' => 'summary'
+        ], $options)
+    ]);
+
+    $controller = app(\App\Http\Controllers\Api\Client\SummarizeController::class);
+    return $controller->summarizeAsync($fileRequest);
+});
+
+// Link Summarization (for any URL)
+Route::post('/summarize/link', function (Request $request) {
+    $token = $request->bearerToken();
+    $parts = explode('|', $token);
+
+    if (count($parts) !== 2) {
+        return response()->json(['error' => 'Invalid token format'], 401);
+    }
+
+    $tokenRecord = Laravel\Sanctum\PersonalAccessToken::where('token', hash('sha256', $parts[1]))->first();
+
+    if (!$tokenRecord) {
+        return response()->json(['error' => 'Token not found'], 401);
+    }
+
+    $user = $tokenRecord->tokenable;
+
+    if (!$user) {
+        return response()->json(['error' => 'User not found'], 401);
+    }
+
+    // Manually authenticate the user
+    auth()->login($user);
+
+    // Validate URL
+    $request->validate([
+        'url' => 'required|url',
+        'options' => 'sometimes|array'
+    ]);
+
+    // Create request with link-specific format
+    $linkRequest = new Request([
+        'content_type' => 'link',
+        'source' => [
+            'type' => 'url',
+            'data' => $request->url
+        ],
+        'options' => array_merge([
+            'language' => 'en',
+            'format' => 'bundle',
+            'focus' => 'summary'
+        ], $request->options ?? [])
+    ]);
+
+    $controller = app(\App\Http\Controllers\Api\Client\SummarizeController::class);
+    return $controller->summarizeAsync($linkRequest);
+});
+
+// Image Summarization
+Route::post('/summarize/async/image', function (Request $request) {
+    $token = $request->bearerToken();
+    $parts = explode('|', $token);
+
+    if (count($parts) !== 2) {
+        return response()->json(['error' => 'Invalid token format'], 401);
+    }
+
+    $tokenRecord = Laravel\Sanctum\PersonalAccessToken::where('token', hash('sha256', $parts[1]))->first();
+
+    if (!$tokenRecord) {
+        return response()->json(['error' => 'Token not found'], 401);
+    }
+
+    $user = $tokenRecord->tokenable;
+
+    if (!$user) {
+        return response()->json(['error' => 'User not found'], 401);
+    }
+
+    // Manually authenticate the user
+    auth()->login($user);
+
+    // Validate image file
+    $request->validate([
+        'file' => 'required|file|mimes:jpg,jpeg,png,gif,bmp,webp|max:10000', // 10MB max
+        'options' => 'sometimes|array'
+    ]);
+
+    // Use Universal File Management Module for file upload
+    $universalFileModule = app(\App\Services\Modules\UniversalFileManagementModule::class);
+    
+    // Upload file using the universal file management
+    $uploadResult = $universalFileModule->uploadFile($request->file('file'), $user->id, $request->options ?? []);
+    
+    if (!$uploadResult['success']) {
+        return response()->json([
+            'error' => 'File upload failed',
+            'details' => $uploadResult['error'] ?? 'Unknown error'
+        ], 400);
+    }
+    
+    $fileId = $uploadResult['file_upload']['id'];
+    
+    // Create request with image-specific format
+    $imageRequest = new Request([
+        'content_type' => 'image',
+        'source' => [
+            'type' => 'file',
+            'data' => (string)$fileId // Ensure file ID is string
+        ],
+        'options' => array_merge([
+            'language' => 'en',
+            'format' => 'detailed',
+            'focus' => 'summary'
+        ], $request->options ?? [])
+    ]);
+
+    $controller = app(\App\Http\Controllers\Api\Client\SummarizeController::class);
+    return $controller->summarizeAsync($imageRequest);
+});
+
+
 // 🔹 Authenticated
 Route::middleware(['auth:sanctum', 'check.usage'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -88,8 +736,7 @@ Route::middleware(['auth:sanctum', 'check.usage'])->group(function () {
     Route::get('/subscription/history', [SubscriptionController::class, 'history']);
     Route::get('/usage', [SubscriptionController::class, 'usage']);
 
-    // Tools
-    Route::post('/pdf/summarize', [PdfController::class, 'summarize']);
+    // Tools (PDF summarization moved to /api/summarize/async)
     Route::post('/writer/run', [WriterController::class, 'run']);
     Route::post('/math/solve', [MathController::class, 'solve']);
     Route::get('/math/problems', [MathController::class, 'index']);
@@ -147,6 +794,23 @@ Route::middleware(['auth:sanctum', 'check.usage'])->group(function () {
     Route::get('/ai-results/stats', [AIResultController::class, 'stats']);
     
     Route::post('/diagram/generate', [DiagramController::class, 'generate']);
+});
+
+// 🔹 Admin Processing Dashboard Routes
+Route::middleware(['auth:sanctum'])->prefix('admin')->group(function () {
+    Route::get('/processing/overview', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getOverview']);
+    Route::get('/processing/statistics', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getStatistics']);
+    Route::get('/processing/performance', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getPerformanceMetrics']);
+    Route::get('/processing/health', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getSystemHealth']);
+    Route::get('/processing/cache', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getCacheStatistics']);
+    Route::get('/processing/batch', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getBatchStatistics']);
+    Route::get('/processing/jobs', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getJobStatistics']);
+    Route::get('/processing/activity', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getRecentActivity']);
+    Route::get('/processing/trends', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getProcessingTrends']);
+    Route::get('/processing/file-types', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getFileTypeDistribution']);
+    Route::get('/processing/tools', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getToolUsageDistribution']);
+    Route::post('/processing/cache/clear', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'clearCache']);
+    Route::post('/processing/cache/warm', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'warmUpCache']);
     
     // AI Chat
     Route::post('/chat', [ChatController::class, 'chat']);
@@ -170,8 +834,7 @@ Route::middleware(['auth:sanctum', 'check.usage'])->group(function () {
     // Content Summarization
     Route::post('/summarize', [SummarizeController::class, 'summarize']);
     Route::post('/summarize/async', [SummarizeController::class, 'summarizeAsync']);
-    Route::get('/summarize/status/{jobId}', [SummarizeController::class, 'getJobStatus']);
-    Route::get('/summarize/result/{jobId}', [SummarizeController::class, 'getJobResult']);
+    // status/result endpoints are defined outside the auth group with manual bearer validation
     Route::post('/summarize/validate', [SummarizeController::class, 'validateFile']);
     
     // Document Chat

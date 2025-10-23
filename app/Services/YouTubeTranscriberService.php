@@ -15,16 +15,146 @@ class YouTubeTranscriberService
     {
         $this->apiUrl = config('services.youtube_transcriber.url');
         $this->clientKey = config('services.youtube_transcriber.client_key');
-        $this->timeout = config('services.youtube_transcriber.timeout', 120);
+        $this->timeout = config('services.youtube_transcriber.timeout', 600); // 10 minutes for Smartproxy
         
         // Increase execution time for long-running transcriptions
         set_time_limit(600); // 10 minutes
     }
 
     /**
-     * Transcribe YouTube video using the Transcriber microservice
+     * Transcribe YouTube video using the new Smartproxy endpoint (synchronous)
      */
     public function transcribe($videoUrl, $options = [])
+    {
+        // Try Smartproxy endpoint first (synchronous)
+        $smartproxyResult = $this->transcribeWithSmartproxy($videoUrl, $options);
+        if ($smartproxyResult['success']) {
+            return $smartproxyResult;
+        }
+        
+        // Fallback to original method (async job-based)
+        return $this->transcribeOriginal($videoUrl, $options);
+    }
+
+    /**
+     * Check if Smartproxy endpoint is available and working
+     */
+    public function isSmartproxyAvailable()
+    {
+        try {
+            $response = Http::timeout(10)
+                ->withHeaders([
+                    'Accept' => 'application/json',
+                    'X-Client-Key' => $this->clientKey,
+                ])
+                ->get($this->apiUrl . '/scraper/smartproxy/subtitles', [
+                    'url' => 'https://www.youtube.com/watch?v=jNQXAC9IVRw', // Test with short video
+                    'format' => 'plain'
+                ]);
+
+            return $response->successful();
+        } catch (\Exception $e) {
+            Log::warning("Smartproxy availability check failed: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Transcribe using the new Smartproxy endpoint
+     */
+    public function transcribeWithSmartproxy($videoUrl, $options = [])
+    {
+        $format = $options['format'] ?? 'bundle';
+        $meta = $options['meta'] ?? false;
+
+        try {
+            Log::info("YouTube Transcriber Smartproxy API Request", [
+                'video_url' => $videoUrl,
+                'format' => $format
+            ]);
+
+            $queryParams = [
+                'url' => $videoUrl,
+                'format' => $format
+            ];
+
+            if ($meta) {
+                $queryParams['include_meta'] = '1';
+            }
+
+            $response = Http::timeout(600) // 10 minutes for Smartproxy
+                ->connectTimeout(30) // 30 seconds connection timeout
+                ->withHeaders([
+                    'Accept' => 'application/json',
+                    'X-Client-Key' => $this->clientKey,
+                ])
+                ->get($this->apiUrl . '/scraper/smartproxy/subtitles', $queryParams);
+
+            if ($response->successful()) {
+                $data = $response->json();
+                
+                // Handle different formats
+                $contentField = 'subtitle_text';
+                if ($format === 'bundle' && isset($data['article_text'])) {
+                    $contentField = 'article_text';
+                }
+                
+                $content = $data[$contentField] ?? '';
+                
+                Log::info("YouTube Transcriber Smartproxy API Response successful", [
+                    'video_id' => $data['video_id'] ?? null,
+                    'format' => $data['format'] ?? $format,
+                    'content_length' => strlen($content),
+                    'proxy_source' => $response->header('X-Proxy-Source')
+                ]);
+
+                $result = [
+                    'success' => true,
+                    'video_id' => $data['video_id'] ?? null,
+                    'language' => $data['language'] ?? null,
+                    'format' => $data['format'] ?? $format,
+                    'subtitle_text' => $content,
+                    'meta' => $data['meta'] ?? null
+                ];
+                
+                // For bundle format, also include the article field
+                if ($format === 'bundle' && isset($data['article_text'])) {
+                    $result['article'] = $data['article_text'];
+                }
+                
+                // For bundle format, include json_items if available
+                if ($format === 'bundle' && isset($data['json_items'])) {
+                    $result['json'] = [
+                        'segments' => $data['json_items']
+                    ];
+                }
+                
+                return $result;
+            } else {
+                Log::error("YouTube Transcriber Smartproxy API Response failed", [
+                    'status' => $response->status(),
+                    'response' => $response->body(),
+                    'headers' => $response->headers()
+                ]);
+                
+                return [
+                    'success' => false,
+                    'error' => 'Smartproxy transcription failed: ' . $response->body()
+                ];
+            }
+        } catch (\Exception $e) {
+            Log::error("YouTube Transcriber Smartproxy API Exception: " . $e->getMessage());
+            return [
+                'success' => false,
+                'error' => 'Smartproxy transcription failed: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Original transcribe method as fallback
+     */
+    public function transcribeOriginal($videoUrl, $options = [])
     {
         $format = $options['format'] ?? config('services.youtube_transcriber.default_format', 'article');
         $language = $options['language'] ?? 'auto';
@@ -55,11 +185,11 @@ class YouTubeTranscriberService
                 $queryParams['meta'] = 'true';
             }
 
-            // Use the new V3 async endpoints
+            // Use the correct /transcribe/ytd endpoint
             $response = Http::timeout($this->timeout)
                 ->withHeaders([
                     'X-Client-Key' => $this->clientKey,
-                ])->get($this->apiUrl . '/subtitles', $queryParams);
+                ])->get($this->apiUrl . '/transcribe/ytd', $queryParams);
 
             if ($response->status() === 202) {
                 // V3 async job - need to poll
@@ -83,21 +213,37 @@ class YouTubeTranscriberService
             if ($response->successful()) {
                 $data = $response->json();
                 
+                // Handle different formats
+                $contentField = 'subtitle_text';
+                if ($format === 'bundle' && isset($data['article_text'])) {
+                    $contentField = 'article_text';
+                }
+                
+                $content = $data[$contentField] ?? '';
+                
                 Log::info("YouTube Transcriber API Success", [
                     'video_id' => $data['video_id'] ?? 'unknown',
                     'language' => $data['language'] ?? 'unknown',
                     'format' => $data['format'] ?? 'unknown',
-                    'content_length' => strlen($data['subtitle_text'] ?? '')
+                    'content_field' => $contentField,
+                    'content_length' => strlen($content)
                 ]);
 
-                return [
+                $result = [
                     'success' => true,
                     'video_id' => $data['video_id'] ?? null,
                     'language' => $data['language'] ?? null,
                     'format' => $data['format'] ?? $format,
-                    'subtitle_text' => $data['subtitle_text'] ?? '',
+                    'subtitle_text' => $content,
                     'meta' => $data['meta'] ?? null
                 ];
+                
+                // For bundle format, also include the article field
+                if ($format === 'bundle' && isset($data['article_text'])) {
+                    $result['article'] = $data['article_text'];
+                }
+                
+                return $result;
             } else {
                 Log::error("YouTube Transcriber API failed", [
                     'status' => $response->status(),
@@ -266,22 +412,38 @@ class YouTubeTranscriberService
             if ($resultResponse->successful()) {
                 $data = $resultResponse->json();
                 
+                // Handle different formats
+                $contentField = 'subtitle_text';
+                if ($format === 'bundle' && isset($data['article_text'])) {
+                    $contentField = 'article_text';
+                }
+                
+                $content = $data[$contentField] ?? '';
+                
                 Log::info("V3 Job result fetched successfully", [
                     'job_key' => $jobKey,
                     'video_id' => $data['video_id'] ?? 'unknown',
                     'language' => $data['language'] ?? 'unknown',
                     'format' => $data['format'] ?? 'unknown',
-                    'content_length' => strlen($data['subtitle_text'] ?? '')
+                    'content_field' => $contentField,
+                    'content_length' => strlen($content)
                 ]);
 
-                return [
+                $result = [
                     'success' => true,
                     'video_id' => $data['video_id'] ?? null,
                     'language' => $data['language'] ?? null,
                     'format' => $data['format'] ?? $format,
-                    'subtitle_text' => $data['subtitle_text'] ?? '',
+                    'subtitle_text' => $content,
                     'meta' => $data['meta'] ?? null
                 ];
+                
+                // For bundle format, also include the article field
+                if ($format === 'bundle' && isset($data['article_text'])) {
+                    $result['article'] = $data['article_text'];
+                }
+                
+                return $result;
             } else {
                 Log::error("V3 Job result fetch failed", [
                     'job_key' => $jobKey,

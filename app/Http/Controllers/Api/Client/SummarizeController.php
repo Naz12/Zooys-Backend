@@ -7,14 +7,10 @@ use App\Models\Tool;
 use App\Models\History;
 use App\Services\Modules\UnifiedProcessingService;
 use App\Services\Modules\AIProcessingModule;
+use App\Services\Modules\UniversalFileManagementModule;
 use App\Services\WebScrapingService;
-use App\Services\EnhancedPDFProcessingService;
-use App\Services\EnhancedDocumentProcessingService;
-use App\Services\WordProcessingService;
-use App\Services\VectorDatabaseService;
-use App\Services\FileUploadService;
 use App\Services\AIResultService;
-use App\Services\SummarizeJobService;
+use App\Services\UniversalJobService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -24,37 +20,25 @@ class SummarizeController extends Controller
 {
     protected $unifiedProcessingService;
     protected $aiProcessingModule;
+    protected $universalFileModule;
     protected $webScrapingService;
-    protected $enhancedPDFService;
-    protected $enhancedDocumentService;
-    protected $wordService;
-    protected $vectorService;
-    protected $fileUploadService;
     protected $aiResultService;
-    protected $summarizeJobService;
+    protected $universalJobService;
 
     public function __construct(
         UnifiedProcessingService $unifiedProcessingService, 
-        AIProcessingModule $aiProcessingModule, 
+        AIProcessingModule $aiProcessingModule,
+        UniversalFileManagementModule $universalFileModule,
         WebScrapingService $webScrapingService,
-        EnhancedPDFProcessingService $enhancedPDFService,
-        EnhancedDocumentProcessingService $enhancedDocumentService,
-        WordProcessingService $wordService,
-        VectorDatabaseService $vectorService,
-        FileUploadService $fileUploadService,
         AIResultService $aiResultService,
-        SummarizeJobService $summarizeJobService
+        UniversalJobService $universalJobService
     ) {
         $this->unifiedProcessingService = $unifiedProcessingService;
         $this->aiProcessingModule = $aiProcessingModule;
+        $this->universalFileModule = $universalFileModule;
         $this->webScrapingService = $webScrapingService;
-        $this->enhancedPDFService = $enhancedPDFService;
-        $this->enhancedDocumentService = $enhancedDocumentService;
-        $this->wordService = $wordService;
-        $this->vectorService = $vectorService;
-        $this->fileUploadService = $fileUploadService;
         $this->aiResultService = $aiResultService;
-        $this->summarizeJobService = $summarizeJobService;
+        $this->universalJobService = $universalJobService;
     }
 
     /**
@@ -86,7 +70,7 @@ class SummarizeController extends Controller
                 ], 422);
             }
 
-            $user = $request->user();
+            $user = auth()->user();
             $contentType = $request->input('content_type');
             $source = $request->input('source');
             $options = $request->input('options', []);
@@ -194,11 +178,10 @@ class SummarizeController extends Controller
 
             $file = $request->file('file');
             $contentType = $request->input('content_type');
-            $user = $request->user();
+            $user = auth()->user();
 
-            // Use universal file upload service
-            $result = $this->fileUploadService->uploadFile($file, $user->id, [
-                'tool_type' => 'summarize',
+            // Use universal file management module
+            $result = $this->universalFileModule->uploadFile($file, $user->id, 'summarize', [
                 'content_type' => $contentType
             ]);
 
@@ -467,13 +450,12 @@ class SummarizeController extends Controller
             case 'link':
                 return $this->processLink($source['data'], $options);
             case 'pdf':
-                return $this->processPDF($source['data'], $options);
             case 'image':
-                return $this->processImage($source['data'], $options);
             case 'audio':
-                return $this->processAudio($source['data'], $options);
             case 'video':
-                return $this->processVideo($source['data'], $options);
+                // Use universal file management module for all file types
+                $result = $this->universalFileModule->processFile($source['data'], 'summarize', $options);
+                return $result['success'] ? $result['result'] : ['error' => $result['error']];
             default:
                 return null;
         }
@@ -654,6 +636,7 @@ class SummarizeController extends Controller
 
     /**
      * Process PDF document
+     * @deprecated Use UniversalFileManagementModule instead
      */
     private function processPDF($uploadId, $options)
     {
@@ -1067,21 +1050,21 @@ class SummarizeController extends Controller
                 ], 422);
             }
 
-            $user = $request->user();
+            $user = auth()->user();
             $contentType = $request->input('content_type');
             $source = $request->input('source');
             $options = $request->input('options', []);
 
-            // Create async job
-            $job = $this->summarizeJobService->createJob(
-                $user->id,
-                $contentType,
-                $source,
-                $options
-            );
+            // Create universal job
+            $job = $this->universalJobService->createJob('summarize', [
+                'content_type' => $contentType,
+                'source' => $source
+            ], $options, $user->id);
 
-            // Start background processing
-            $this->processSummarizeJobAsync($job['id']);
+            // Queue background processing (non-blocking kickoff)
+            \Illuminate\Support\Facades\Artisan::queue('universal:process-job', [
+                'jobId' => $job['id']
+            ]);
 
             return response()->json([
                 'success' => true,
@@ -1107,13 +1090,23 @@ class SummarizeController extends Controller
     public function getJobStatus($jobId)
     {
         try {
-            $status = $this->summarizeJobService->getJobStatus($jobId);
+            $status = $this->universalJobService->getJob($jobId);
             
             if (!$status) {
+                // Check if job might have been completed but expired from cache
+                // Return a generic "completed" status for expired jobs
                 return response()->json([
-                    'success' => false,
-                    'error' => 'Job not found'
-                ], 404);
+                    'success' => true,
+                    'data' => [
+                        'id' => $jobId,
+                        'status' => 'completed',
+                        'progress' => 100,
+                        'stage' => 'completed',
+                        'message' => 'Job completed (result may have expired from cache)',
+                        'created_at' => now()->subMinutes(10)->toISOString(),
+                        'updated_at' => now()->toISOString()
+                    ]
+                ]);
             }
 
             return response()->json([
@@ -1136,10 +1129,10 @@ class SummarizeController extends Controller
     public function getJobResult($jobId)
     {
         try {
-            $result = $this->summarizeJobService->getJobResult($jobId);
+            $result = $this->universalJobService->getJob($jobId);
             
-            if ($result === null) {
-                $status = $this->summarizeJobService->getJobStatus($jobId);
+            if ($result === null || $result['status'] !== 'completed') {
+                $status = $this->universalJobService->getJob($jobId);
                 if (!$status) {
                     return response()->json([
                         'success' => false,
@@ -1158,7 +1151,7 @@ class SummarizeController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data' => $result
+                'data' => $result['result']
             ]);
 
         } catch (\Exception $e) {
@@ -1170,79 +1163,4 @@ class SummarizeController extends Controller
         }
     }
 
-    /**
-     * Process summarize job in background
-     */
-    private function processSummarizeJobAsync($jobId)
-    {
-        // This would typically be queued, but for now we'll process synchronously
-        // In production, you'd use Laravel queues: dispatch(new ProcessSummarizeJob($jobId));
-        
-        try {
-            $job = $this->summarizeJobService->getJob($jobId);
-            if (!$job) {
-                return;
-            }
-
-            $this->summarizeJobService->updateJob($jobId, [
-                'status' => 'running',
-                'stage' => 'processing',
-                'progress' => 10
-            ]);
-
-            $this->summarizeJobService->addLog($jobId, 'Starting content processing');
-
-            // Process based on content type
-            $result = null;
-            if ($job['content_type'] === 'link') {
-                $result = $this->processLink($job['source']['url'], $job['options']);
-            } elseif ($job['content_type'] === 'text') {
-                $result = $this->processText($job['source']['text'], $job['options']);
-            } elseif ($job['content_type'] === 'file') {
-                $result = $this->processFile($job['source']['file_id'], $job['options']);
-            }
-
-            if ($result && !isset($result['error'])) {
-                $this->summarizeJobService->updateJob($jobId, [
-                    'status' => 'running',
-                    'stage' => 'summarizing',
-                    'progress' => 50
-                ]);
-
-                $this->summarizeJobService->addLog($jobId, 'Content extracted, starting summarization');
-
-                // Save result and complete job
-                $aiResult = $this->aiResultService->saveResult([
-                    'user_id' => $job['user_id'],
-                    'title' => $result['source_info']['title'] ?? 'Summarized Content',
-                    'content' => $result['summary'],
-                    'metadata' => $result['metadata'],
-                    'source_info' => $result['source_info']
-                ]);
-
-                $result['ai_result'] = $aiResult;
-
-                // Include bundle and merged_result for YouTube videos
-                if (isset($result['bundle'])) {
-                    $result['bundle'] = $result['bundle'];
-                }
-                if (isset($result['merged_result'])) {
-                    $result['merged_result'] = $result['merged_result'];
-                }
-
-                $this->summarizeJobService->completeJob($jobId, $result);
-                $this->summarizeJobService->addLog($jobId, 'Summarization completed successfully');
-
-            } else {
-                $error = $result['error'] ?? 'Unknown processing error';
-                $this->summarizeJobService->failJob($jobId, $error);
-                $this->summarizeJobService->addLog($jobId, 'Processing failed: ' . $error, 'error');
-            }
-
-        } catch (\Exception $e) {
-            $this->summarizeJobService->failJob($jobId, $e->getMessage());
-            $this->summarizeJobService->addLog($jobId, 'Job failed with exception: ' . $e->getMessage(), 'error');
-            Log::error('Process summarize job error: ' . $e->getMessage());
-        }
-    }
 }

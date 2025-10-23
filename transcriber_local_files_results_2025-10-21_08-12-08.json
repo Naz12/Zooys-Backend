@@ -1,0 +1,42 @@
+[
+    {
+        "success": false,
+        "file": {
+            "path": "test files\/test audio.mp3",
+            "name": "test audio.mp3",
+            "type": "audio",
+            "description": "Test audio file for transcription"
+        },
+        "uploaded_file": {
+            "path": "uploads\/test_1761034300_test audio.mp3",
+            "filename": "test_1761034300_test audio.mp3",
+            "size": 7833037
+        },
+        "file_url": "http:\/\/localhost:8000\/storage\/uploads\/test_1761034300_test audio.mp3",
+        "transcription": {
+            "success": false,
+            "error": "Job failed: error"
+        },
+        "processing_time": 12.14
+    },
+    {
+        "success": false,
+        "file": {
+            "path": "test files\/test video.mp4",
+            "name": "test video.mp4",
+            "type": "video",
+            "description": "Test video file for transcription"
+        },
+        "uploaded_file": {
+            "path": "uploads\/test_1761034314_test video.mp4",
+            "filename": "test_1761034314_test video.mp4",
+            "size": 25039778
+        },
+        "file_url": "http:\/\/localhost:8000\/storage\/uploads\/test_1761034314_test video.mp4",
+        "transcription": {
+            "success": false,
+            "error": "Job failed: error"
+        },
+        "processing_time": 12.17
+    }
+]

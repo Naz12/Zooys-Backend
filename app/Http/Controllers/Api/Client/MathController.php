@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 use App\Models\Tool;
 use App\Models\History;
 use App\Services\AIMathService;
-use App\Services\FileUploadService;
+use App\Services\Modules\UniversalFileManagementModule;
 use App\Services\AIResultService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -15,16 +15,16 @@ use Illuminate\Support\Facades\Storage;
 class MathController extends Controller
 {
     protected $aiMathService;
-    protected $fileUploadService;
+    protected $universalFileModule;
     protected $aiResultService;
 
     public function __construct(
         AIMathService $aiMathService,
-        FileUploadService $fileUploadService,
+        UniversalFileManagementModule $universalFileModule,
         AIResultService $aiResultService
     ) {
         $this->aiMathService = $aiMathService;
-        $this->fileUploadService = $fileUploadService;
+        $this->universalFileModule = $universalFileModule;
         $this->aiResultService = $aiResultService;
     }
 
@@ -55,9 +55,8 @@ class MathController extends Controller
             if ($request->hasFile('problem_image')) {
                 $file = $request->file('problem_image');
                 
-                // Use universal file upload service
-                $uploadResult = $this->fileUploadService->uploadFile($file, $user->id, [
-                    'tool_type' => 'math',
+                // Use universal file management module
+                $uploadResult = $this->universalFileModule->uploadFile($file, $user->id, 'math', [
                     'problem_type' => 'image',
                     'subject_area' => $request->input('subject_area', 'maths'),
                     'difficulty_level' => $request->input('difficulty_level', 'intermediate')
@@ -230,9 +229,9 @@ class MathController extends Controller
         $user = $request->user();
         $mathProblem = $this->aiMathService->getMathProblem($id, $user->id);
 
-        // Delete associated file through universal file upload system if exists
+        // Delete associated file through universal file management module if exists
         if ($mathProblem->file_upload_id) {
-            $this->fileUploadService->deleteFile($mathProblem->file_upload_id);
+            $this->universalFileModule->deleteFile($mathProblem->file_upload_id);
         }
 
         $mathProblem->delete();

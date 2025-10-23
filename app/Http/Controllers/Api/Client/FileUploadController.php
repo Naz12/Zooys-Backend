@@ -42,6 +42,7 @@ class FileUploadController extends Controller
 
         if ($result['success']) {
             return response()->json([
+                'success' => true,
                 'message' => 'File uploaded successfully',
                 'file_upload' => $result['file_upload'],
                 'file_url' => $result['file_url']
