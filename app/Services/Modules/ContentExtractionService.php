@@ -3,7 +3,7 @@
 namespace App\Services\Modules;
 
 use App\Services\YouTubeService;
-use App\Services\EnhancedPDFProcessingService;
+use App\Services\DocumentExtractionMicroservice;
 use App\Services\EnhancedDocumentProcessingService;
 use App\Services\WordProcessingService;
 use App\Services\WebScrapingService;
@@ -12,22 +12,19 @@ use Illuminate\Support\Facades\Log;
 class ContentExtractionService
 {
     private $youtubeService;
-    private $pdfService;
+    private $documentExtractionService;
     private $documentService;
-    private $wordService;
     private $webScrapingService;
 
     public function __construct(
         YouTubeService $youtubeService,
-        EnhancedPDFProcessingService $pdfService,
+        DocumentExtractionMicroservice $documentExtractionService,
         EnhancedDocumentProcessingService $documentService,
-        WordProcessingService $wordService,
         WebScrapingService $webScrapingService
     ) {
         $this->youtubeService = $youtubeService;
-        $this->pdfService = $pdfService;
+        $this->documentExtractionService = $documentExtractionService;
         $this->documentService = $documentService;
-        $this->wordService = $wordService;
         $this->webScrapingService = $webScrapingService;
     }
 
@@ -199,7 +196,99 @@ class ContentExtractionService
     }
 
     /**
-     * Extract content from document file
+     * Extract content from Word document
+     */
+    private function extractFromWord($filePath, $options)
+    {
+        $result = $this->wordService->extractTextFromWord($filePath);
+        
+        if (!$result['success']) {
+            throw new \Exception($result['error']);
+        }
+
+        return [
+            'success' => true,
+            'content' => $result['text'],
+            'metadata' => array_merge($result['metadata'], [
+                'source_type' => 'word',
+                'word_count' => $result['word_count'],
+                'character_count' => $result['character_count'],
+                'paragraphs' => $result['paragraphs'],
+            ])
+        ];
+    }
+
+    /**
+     * Extract content from text file
+     */
+    private function extractFromTxt($filePath, $options)
+    {
+        $result = $this->txtService->extractTextFromTxt($filePath);
+        
+        if (!$result['success']) {
+            throw new \Exception($result['error']);
+        }
+
+        return [
+            'success' => true,
+            'content' => $result['text'],
+            'metadata' => array_merge($result['metadata'], [
+                'source_type' => 'txt',
+                'word_count' => $result['word_count'],
+                'character_count' => $result['character_count'],
+                'lines' => $result['lines'],
+            ])
+        ];
+    }
+
+    /**
+     * Extract content from PowerPoint file
+     */
+    private function extractFromPpt($filePath, $options)
+    {
+        $result = $this->pptService->extractTextFromPpt($filePath);
+        
+        if (!$result['success']) {
+            throw new \Exception($result['error']);
+        }
+
+        return [
+            'success' => true,
+            'content' => $result['text'],
+            'metadata' => array_merge($result['metadata'], [
+                'source_type' => 'ppt',
+                'word_count' => $result['word_count'],
+                'character_count' => $result['character_count'],
+                'slides' => $result['slides'],
+            ])
+        ];
+    }
+
+    /**
+     * Extract content from Excel file
+     */
+    private function extractFromExcel($filePath, $options)
+    {
+        $result = $this->excelService->extractTextFromExcel($filePath);
+        
+        if (!$result['success']) {
+            throw new \Exception($result['error']);
+        }
+
+        return [
+            'success' => true,
+            'content' => $result['text'],
+            'metadata' => array_merge($result['metadata'], [
+                'source_type' => 'excel',
+                'word_count' => $result['word_count'],
+                'character_count' => $result['character_count'],
+                'sheets' => $result['sheets'],
+            ])
+        ];
+    }
+
+    /**
+     * Extract content from document file (legacy)
      */
     private function extractFromDocument($filePath, $options)
     {
@@ -223,7 +312,7 @@ class ContentExtractionService
     /**
      * Extract content from uploaded file
      */
-    private function extractFromFile($fileId, $options)
+    public function extractFromFile($fileId, $options)
     {
         $fileUpload = \App\Models\FileUpload::find($fileId);
         
@@ -231,18 +320,37 @@ class ContentExtractionService
             throw new \Exception('File not found');
         }
 
-        $filePath = storage_path('app/' . $fileUpload->file_path);
+        // Check if file exists in public storage first, then app storage
+        $publicPath = storage_path('app/public/' . $fileUpload->file_path);
+        $appPath = storage_path('app/' . $fileUpload->file_path);
+        
+        if (file_exists($publicPath)) {
+            $filePath = $publicPath;
+        } elseif (file_exists($appPath)) {
+            $filePath = $appPath;
+        } else {
+            throw new \Exception('File not found at expected location: ' . $fileUpload->file_path);
+        }
+        
         $fileType = strtolower($fileUpload->file_type);
         
-        switch ($fileType) {
-            case 'pdf':
-                return $this->extractFromPDF($filePath, $options);
-            case 'doc':
-            case 'docx':
-                return $this->extractFromDocument($filePath, $options);
-            default:
-                throw new \Exception("Unsupported file type: {$fileType}");
+        // Use the document extraction microservice
+        $result = $this->documentExtractionService->extractText($filePath, $fileType, $options);
+        
+        if (!$result['success']) {
+            throw new \Exception($result['error'] ?? 'Document extraction failed');
         }
+
+        return [
+            'success' => true,
+            'content' => $result['text'],
+            'metadata' => array_merge($result['metadata'], [
+                'source_type' => $fileType,
+                'word_count' => $result['word_count'],
+                'character_count' => $result['character_count'],
+                'extraction_method' => $result['extraction_method'] ?? 'microservice'
+            ])
+        ];
     }
 
     /**

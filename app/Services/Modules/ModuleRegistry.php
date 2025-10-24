@@ -79,7 +79,7 @@ class ModuleRegistry
 
         // Register PDF module
         self::registerModule('pdf', [
-            'class' => \App\Services\EnhancedPDFProcessingService::class,
+            'class' => \App\Services\PythonPDFProcessingService::class,
             'description' => 'PDF document processing and text extraction',
             'dependencies' => ['content_extraction'],
             'config' => [

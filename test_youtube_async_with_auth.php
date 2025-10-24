@@ -158,3 +158,4 @@ echo "✅ If YouTube async endpoint works: Authentication is properly configured
 echo "✅ If direct transcriber works: Service is working independently\n";
 echo "❌ If both fail: There's a configuration or service issue\n";
 
+

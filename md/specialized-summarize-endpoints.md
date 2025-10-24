@@ -326,3 +326,4 @@ POST /api/summarize/async/text
 The specialized endpoints are more intuitive and easier to use! 🚀
 
 
+

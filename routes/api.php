@@ -347,34 +347,7 @@ Route::post('/test-upload-manual', function (Request $request) {
 });
 
 // 🔹 Working summarize endpoint with manual authentication
-Route::post('/summarize/async', function (Request $request) {
-    $token = $request->bearerToken();
-    $parts = explode('|', $token);
-
-    if (count($parts) !== 2) {
-        return response()->json(['error' => 'Invalid token format'], 401);
-    }
-
-    $tokenRecord = Laravel\Sanctum\PersonalAccessToken::where('token', hash('sha256', $parts[1]))->first();
-
-    if (!$tokenRecord) {
-        return response()->json(['error' => 'Token not found'], 401);
-    }
-
-    $user = $tokenRecord->tokenable;
-
-    if (!$user) {
-        return response()->json(['error' => 'User not found'], 401);
-    }
-
-    // Manually authenticate the user
-    // Manually authenticate the user
-    auth()->login($user);
-
-    // Use the SummarizeController logic
-    $controller = app(\App\Http\Controllers\Api\Client\SummarizeController::class);
-    return $controller->summarizeAsync($request);
-});
+// Generic /summarize/async endpoint removed - use specialized endpoints instead
 
 // 🔹 Specialized Async Summarize Endpoints
 // YouTube Video Summarization

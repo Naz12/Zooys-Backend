@@ -5,7 +5,7 @@ namespace App\Services\Modules;
 use App\Services\FileUploadService;
 use App\Services\WebScrapingService;
 use App\Services\YouTubeService;
-use App\Services\EnhancedPDFProcessingService;
+use App\Services\PythonPDFProcessingService;
 use App\Services\AIMathService;
 use App\Services\FlashcardGenerationService;
 use App\Services\AIPresentationService;
@@ -32,7 +32,7 @@ class UniversalFileManagementModule
         FileUploadService $fileUploadService,
         WebScrapingService $webScrapingService,
         YouTubeService $youtubeService,
-        EnhancedPDFProcessingService $pdfProcessingService,
+        PythonPDFProcessingService $pdfProcessingService,
         AIMathService $aiMathService,
         FlashcardGenerationService $flashcardService,
         AIPresentationService $presentationService,
@@ -101,7 +101,7 @@ class UniversalFileManagementModule
             throw new \Exception('File not found');
         }
 
-        return $this->contentExtractionService->extractFromFile($file, $options);
+        return $this->contentExtractionService->extractFromFile($fileId, $options);
     }
 
     /**
@@ -261,5 +261,117 @@ class UniversalFileManagementModule
                 'error' => 'Web URL processing failed: ' . $e->getMessage()
             ];
         }
+    }
+
+    /**
+     * Process file for various operations
+     */
+    public function processFile($fileId, $toolType, $options = [])
+    {
+        try {
+            Log::info("Processing file {$fileId} with tool type {$toolType}");
+            
+            // Get the file
+            $file = \App\Models\FileUpload::find($fileId);
+            if (!$file) {
+                throw new \Exception('File not found');
+            }
+
+            // Extract content from file
+            $extractionResult = $this->extractFromFile($fileId, $options);
+            
+            if (!$extractionResult['success']) {
+                throw new \Exception($extractionResult['error'] ?? 'Content extraction failed');
+            }
+
+            $content = $extractionResult['content'];
+            
+            // Process based on tool type
+            switch ($toolType) {
+                case 'summarize':
+                    return $this->processForSummarize($content, $options);
+                
+                case 'math':
+                    return $this->processForMath($content, $options);
+                
+                case 'flashcards':
+                    return $this->processForFlashcards($content, $options);
+                
+                case 'presentation':
+                    return $this->processForPresentation($content, $options);
+                
+                default:
+                    throw new \Exception("Unsupported tool type: {$toolType}");
+            }
+            
+        } catch (\Exception $e) {
+            Log::error("File processing failed", [
+                'file_id' => $fileId,
+                'tool_type' => $toolType,
+                'error' => $e->getMessage()
+            ]);
+            
+            return [
+                'success' => false,
+                'error' => 'File processing failed: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Process content for math problems
+     */
+    public function processForMath($content, $options = [])
+    {
+        $text = $content['text'];
+        $result = $this->aiMathService->generateMathProblems($text, $options);
+        
+        return [
+            'success' => true,
+            'result' => $result,
+            'metadata' => [
+                'file_type' => 'math',
+                'original_length' => strlen($text),
+                'tokens_used' => $result['tokens_used'] ?? 0
+            ]
+        ];
+    }
+
+    /**
+     * Process content for flashcards
+     */
+    public function processForFlashcards($content, $options = [])
+    {
+        $text = $content['text'];
+        $result = $this->flashcardService->generateFlashcards($text, $options);
+        
+        return [
+            'success' => true,
+            'result' => $result,
+            'metadata' => [
+                'file_type' => 'flashcards',
+                'original_length' => strlen($text),
+                'tokens_used' => $result['tokens_used'] ?? 0
+            ]
+        ];
+    }
+
+    /**
+     * Process content for presentation
+     */
+    public function processForPresentation($content, $options = [])
+    {
+        $text = $content['text'];
+        $result = $this->presentationService->generatePresentation($text, $options);
+        
+        return [
+            'success' => true,
+            'result' => $result,
+            'metadata' => [
+                'file_type' => 'presentation',
+                'original_length' => strlen($text),
+                'tokens_used' => $result['tokens_used'] ?? 0
+            ]
+        ];
     }
 }

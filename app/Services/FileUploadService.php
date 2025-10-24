@@ -130,7 +130,7 @@ class FileUploadService
             switch ($fileUpload->file_type) {
                 case 'pdf':
                     // Use existing PDF processing service
-                    $pdfService = app(\App\Services\EnhancedPDFProcessingService::class);
+                    $pdfService = app(\App\Services\PythonPDFProcessingService::class);
                     $result = $pdfService->extractTextFromPDF($filePath);
                     if ($result['success']) {
                         $content = $result['text'];

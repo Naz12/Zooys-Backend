@@ -146,3 +146,4 @@ echo "1. If working: Use this endpoint for YouTube processing\n";
 echo "2. If failing: Check authentication requirements\n";
 echo "3. If network issues: Check connectivity to transcriber service\n";
 
+

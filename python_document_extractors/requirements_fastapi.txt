@@ -1,0 +1,23 @@
+# FastAPI and server
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# Document processing (existing)
+PyPDF2==3.0.1
+pdfplumber==0.10.3
+PyMuPDF==1.23.8
+pytesseract==0.3.10
+Pillow==10.1.0
+python-docx==0.8.11
+docx2txt==0.8
+python-pptx==0.6.21
+openpyxl==3.1.2
+xlrd==2.0.1
+pandas==2.1.4
+chardet==5.2.0
+
+# Additional FastAPI dependencies
+pydantic==2.5.0
+httpx==0.25.2
+

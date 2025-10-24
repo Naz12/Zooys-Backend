@@ -163,3 +163,4 @@ echo "1. If working: Update YouTubeTranscriberService to use X-Client-Key header
 echo "2. If failing: Check if API key is valid or needs renewal\n";
 echo "3. If network issues: Check connectivity to transcriber service\n";
 
+

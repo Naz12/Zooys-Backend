@@ -93,3 +93,4 @@ echo "3. ✅ Create mock transcription for testing\n";
 echo "4. ✅ Remove transcriber dependency\n";
 echo "5. ✅ Process YouTube videos synchronously\n";
 
+

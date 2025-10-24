@@ -70,3 +70,4 @@ echo "✅ If successful: Fallback service is working independently\n";
 echo "❌ If failed: Check AI Manager service and configuration\n";
 echo "🔍 This bypasses the transcriber completely\n";
 
+

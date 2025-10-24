@@ -217,3 +217,4 @@ The frontend should:
 3. Get final result from `/summarize/result/{job_id}`
 4. Display the `bundle` data with `summary` and `article`
 
+

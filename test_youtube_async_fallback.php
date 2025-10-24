@@ -141,3 +141,4 @@ echo "✅ If successful: Fallback strategy is working in production\n";
 echo "❌ If failed: Check queue worker and service configuration\n";
 echo "🔍 The fallback should activate when transcriber fails\n";
 
+
