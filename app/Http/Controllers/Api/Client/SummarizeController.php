@@ -1071,8 +1071,8 @@ class SummarizeController extends Controller
                 'message' => 'Summarization job started',
                 'job_id' => $job['id'],
                 'status' => $job['status'],
-                'poll_url' => url('/api/summarize/status/' . $job['id']),
-                'result_url' => url('/api/summarize/result/' . $job['id'])
+                'poll_url' => url('/api/status/' . $job['id']),
+                'result_url' => url('/api/result/' . $job['id'])
             ], 202);
 
         } catch (\Exception $e) {
@@ -1084,83 +1084,5 @@ class SummarizeController extends Controller
         }
     }
 
-    /**
-     * Get job status
-     */
-    public function getJobStatus($jobId)
-    {
-        try {
-            $status = $this->universalJobService->getJob($jobId);
-            
-            if (!$status) {
-                // Check if job might have been completed but expired from cache
-                // Return a generic "completed" status for expired jobs
-                return response()->json([
-                    'success' => true,
-                    'data' => [
-                        'id' => $jobId,
-                        'status' => 'completed',
-                        'progress' => 100,
-                        'stage' => 'completed',
-                        'message' => 'Job completed (result may have expired from cache)',
-                        'created_at' => now()->subMinutes(10)->toISOString(),
-                        'updated_at' => now()->toISOString()
-                    ]
-                ]);
-            }
-
-            return response()->json([
-                'success' => true,
-                'data' => $status
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('Get job status error: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'error' => 'Failed to get job status: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * Get job result
-     */
-    public function getJobResult($jobId)
-    {
-        try {
-            $result = $this->universalJobService->getJob($jobId);
-            
-            if ($result === null || $result['status'] !== 'completed') {
-                $status = $this->universalJobService->getJob($jobId);
-                if (!$status) {
-                    return response()->json([
-                        'success' => false,
-                        'error' => 'Job not found'
-                    ], 404);
-                }
-
-                // Job not completed yet, return status
-                return response()->json([
-                    'success' => true,
-                    'status' => $status['status'],
-                    'message' => 'Job not completed yet',
-                    'data' => $status
-                ], 202);
-            }
-
-            return response()->json([
-                'success' => true,
-                'data' => $result['result']
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('Get job result error: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'error' => 'Failed to get job result: ' . $e->getMessage()
-            ], 500);
-        }
-    }
 
 }

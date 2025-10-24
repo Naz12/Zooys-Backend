@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\Client\ChatMessageController;
 use App\Http\Controllers\Api\Client\SummarizeController;
 use App\Http\Controllers\Api\Client\DocumentChatController;
 use App\Http\Controllers\Api\Client\PresentationController;
+use App\Http\Controllers\Api\Client\FileExtractionController;
 
 // Admin Controllers
 use App\Http\Controllers\Api\Admin\AdminAuthController;
@@ -290,14 +291,18 @@ Route::get('/test-result-manual/{jobId}', function (Request $request, $jobId) {
     }
 });
 
-// 🔹 Public status/result with manual bearer validation for frontend compatibility
-Route::get('/summarize/status/{jobId}', function (Request $request, $jobId) {
+// 🔹 Universal Status and Result endpoints with manual bearer validation for frontend compatibility
+Route::get('/status', function (Request $request) {
     $token = $request->bearerToken();
     $parts = explode('|', $token ?? '');
     if (count($parts) !== 2) return response()->json(['error' => 'Unauthenticated'], 401);
     $record = Laravel\Sanctum\PersonalAccessToken::where('token', hash('sha256', $parts[1]))->first();
     if (!$record || !$record->tokenable) return response()->json(['error' => 'Unauthenticated'], 401);
     auth()->login($record->tokenable);
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
     $service = app(\App\Services\UniversalJobService::class);
     $job = $service->getJob($jobId);
     if (!$job) return response()->json(['error' => 'Job not found'], 404);
@@ -307,16 +312,23 @@ Route::get('/summarize/status/{jobId}', function (Request $request, $jobId) {
         'progress' => $job['progress'] ?? 0,
         'stage' => $job['stage'] ?? null,
         'error' => $job['error'] ?? null,
+        'tool_type' => $job['tool_type'] ?? null,
+        'created_at' => $job['created_at'] ?? null,
+        'updated_at' => $job['updated_at'] ?? null
     ]);
 });
 
-Route::get('/summarize/result/{jobId}', function (Request $request, $jobId) {
+Route::get('/result', function (Request $request) {
     $token = $request->bearerToken();
     $parts = explode('|', $token ?? '');
     if (count($parts) !== 2) return response()->json(['error' => 'Unauthenticated'], 401);
     $record = Laravel\Sanctum\PersonalAccessToken::where('token', hash('sha256', $parts[1]))->first();
     if (!$record || !$record->tokenable) return response()->json(['error' => 'Unauthenticated'], 401);
     auth()->login($record->tokenable);
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
     $service = app(\App\Services\UniversalJobService::class);
     $job = $service->getJob($jobId);
     if (!$job) return response()->json(['error' => 'Job not found'], 404);
@@ -697,7 +709,7 @@ Route::post('/summarize/async/image', function (Request $request) {
 
 
 // 🔹 Authenticated
-Route::middleware(['auth:sanctum', 'check.usage'])->group(function () {
+Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', fn (Request $request) => $request->user());
 
@@ -767,6 +779,13 @@ Route::middleware(['auth:sanctum', 'check.usage'])->group(function () {
     Route::get('/ai-results/stats', [AIResultController::class, 'stats']);
     
     Route::post('/diagram/generate', [DiagramController::class, 'generate']);
+    
+    // File Processing and Conversion
+    Route::post('/file-processing/convert', [FileExtractionController::class, 'convertDocument']);
+    Route::post('/file-processing/extract', [FileExtractionController::class, 'extractContent']);
+    Route::get('/file-processing/conversion-capabilities', [FileExtractionController::class, 'getCapabilities']);
+    Route::get('/file-processing/extraction-capabilities', [FileExtractionController::class, 'getExtractionCapabilities']);
+    Route::get('/file-processing/health', [FileExtractionController::class, 'checkHealth']);
 });
 
 // 🔹 Admin Processing Dashboard Routes

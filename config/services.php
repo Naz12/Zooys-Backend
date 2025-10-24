@@ -36,4 +36,10 @@ return [
         'timeout' => env('DOCUMENT_EXTRACTION_TIMEOUT', 300),
     ],
 
+    'document_converter' => [
+        'url' => env('DOCUMENT_CONVERTER_URL', 'http://localhost:8004'),
+        'api_key' => env('DOCUMENT_CONVERTER_API_KEY', 'test-api-key-123'),
+        'timeout' => env('DOCUMENT_CONVERTER_TIMEOUT', 300),
+    ],
+
 ];

@@ -245,6 +245,12 @@ class UniversalJobService
             case 'document_chat':
                 return $this->processDocumentChatJobWithStages($job['id'], $input, $options);
             
+            case 'document_conversion':
+                return $this->processDocumentConversionJobWithStages($job['id'], $input, $options);
+            
+            case 'content_extraction':
+                return $this->processContentExtractionJobWithStages($job['id'], $input, $options);
+            
             default:
                 throw new \Exception("Unsupported tool type: {$toolType}");
         }
@@ -1285,6 +1291,290 @@ class UniversalJobService
             ];
         } catch (\Exception $e) {
             $this->failJob($jobId, "Document chat processing failed: " . $e->getMessage());
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Process document conversion job with stages
+     */
+    private function processDocumentConversionJobWithStages($jobId, $input, $options)
+    {
+        try {
+            // Stage 1: File Validation
+            $this->updateJob($jobId, [
+                'stage' => 'validating_file',
+                'progress' => 10
+            ]);
+            $this->addLog($jobId, "Validating file for conversion", 'info');
+
+            if (!isset($input['file_id'])) {
+                $this->failJob($jobId, "Document conversion requires a file_id");
+                return ['success' => false, 'error' => 'Document conversion requires a file_id'];
+            }
+
+            // Stage 2: File Processing
+            $this->updateJob($jobId, [
+                'stage' => 'processing_file',
+                'progress' => 30
+            ]);
+            $this->addLog($jobId, "Processing file for conversion", 'info');
+
+            // Get file from storage
+            $file = \App\Models\FileUpload::find($input['file_id']);
+            if (!$file) {
+                $this->failJob($jobId, "File not found");
+                return ['success' => false, 'error' => 'File not found'];
+            }
+
+            // Stage 3: Document Conversion
+            $this->updateJob($jobId, [
+                'stage' => 'converting_document',
+                'progress' => 60
+            ]);
+            $this->addLog($jobId, "Converting document to {$input['target_format']}", 'info');
+
+            // Use DocumentConverterService
+            $documentConverterService = app(\App\Services\DocumentConverterService::class);
+            
+            // Use Storage facade to get the correct path (includes 'public' directory)
+            $filePath = \Illuminate\Support\Facades\Storage::path($file->file_path);
+            
+            $this->addLog($jobId, "Using file path: {$filePath}", 'info');
+            
+            Log::info('Calling microservice with options', [
+                'options' => $options,
+                'options_type' => gettype($options)
+            ]);
+            
+            $conversionResult = $documentConverterService->convertDocument(
+                $filePath,
+                $input['target_format'],
+                $options
+            );
+
+            if (!$conversionResult || !isset($conversionResult['job_id'])) {
+                $this->failJob($jobId, "Conversion failed to start");
+                return ['success' => false, 'error' => 'Conversion failed to start'];
+            }
+
+            // Stage 4: Monitoring Conversion
+            $this->updateJob($jobId, [
+                'stage' => 'monitoring_conversion',
+                'progress' => 80
+            ]);
+            $this->addLog($jobId, "Monitoring conversion progress", 'info');
+
+            // Poll for completion
+            $maxAttempts = 60; // 5 minutes max
+            $attempt = 0;
+            
+            $finalStatus = null;
+            while ($attempt < $maxAttempts) {
+                sleep(5); // Wait 5 seconds between checks
+                $attempt++;
+                
+                $status = $documentConverterService->checkJobStatus($conversionResult['job_id']);
+                
+                if (isset($status['status']) && $status['status'] === 'completed') {
+                    $finalStatus = $status; // Store the final status
+                    break;
+                } elseif (isset($status['status']) && $status['status'] === 'failed') {
+                    $this->failJob($jobId, "Conversion failed: " . ($status['error'] ?? 'Unknown error'));
+                    return ['success' => false, 'error' => 'Conversion failed'];
+                }
+            }
+
+            if ($attempt >= $maxAttempts) {
+                $this->failJob($jobId, "Conversion timeout");
+                return ['success' => false, 'error' => 'Conversion timeout'];
+            }
+
+            // Stage 5: Finalizing
+            $this->updateJob($jobId, [
+                'stage' => 'finalizing',
+                'progress' => 90
+            ]);
+            $this->addLog($jobId, "Finalizing conversion result", 'info');
+
+            // Use the final status response (since result endpoint returns null)
+            $result = $finalStatus;
+            
+            if (!$result || !isset($result['status']) || $result['status'] !== 'completed') {
+                $this->failJob($jobId, "Failed to get conversion result");
+                return ['success' => false, 'error' => 'Failed to get conversion result'];
+            }
+
+            // Store converted file - handle both file_paths and output_files
+            $filePath = $result['file_paths'][0] ?? $result['output_files'][0] ?? null;
+            if (!$filePath) {
+                $this->failJob($jobId, "No output file found in conversion result");
+                return ['success' => false, 'error' => 'No output file found'];
+            }
+            
+            $convertedFile = $documentConverterService->storeFile(
+                $filePath,
+                $input['original_filename'] . '.' . $input['target_format']
+            );
+
+            return [
+                'success' => true,
+                'data' => [
+                    'conversion_result' => $result,
+                    'converted_file' => $convertedFile,
+                    'original_file' => [
+                        'id' => $file->id,
+                        'filename' => $file->original_filename,
+                        'size' => $file->file_size
+                    ]
+                ],
+                'metadata' => [
+                    'file_count' => 1,
+                    'conversion_format' => $input['target_format'],
+                    'confidence_score' => 1.0,
+                    'processing_stages' => ['validating_file', 'processing_file', 'converting_document', 'monitoring_conversion', 'finalizing']
+                ]
+            ];
+
+        } catch (\Exception $e) {
+            $this->failJob($jobId, "Document conversion failed: " . $e->getMessage());
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Process content extraction job with stages
+     */
+    private function processContentExtractionJobWithStages($jobId, $input, $options)
+    {
+        try {
+            // Stage 1: File Validation
+            $this->updateJob($jobId, [
+                'stage' => 'validating_file',
+                'progress' => 10
+            ]);
+            $this->addLog($jobId, "Validating file for content extraction", 'info');
+
+            if (!isset($input['file_id'])) {
+                $this->failJob($jobId, "Content extraction requires a file_id");
+                return ['success' => false, 'error' => 'Content extraction requires a file_id'];
+            }
+
+            // Stage 2: File Processing
+            $this->updateJob($jobId, [
+                'stage' => 'processing_file',
+                'progress' => 30
+            ]);
+            $this->addLog($jobId, "Processing file for content extraction", 'info');
+
+            // Get file from storage
+            $file = \App\Models\FileUpload::find($input['file_id']);
+            if (!$file) {
+                $this->failJob($jobId, "File not found");
+                return ['success' => false, 'error' => 'File not found'];
+            }
+
+            // Stage 3: Content Extraction
+            $this->updateJob($jobId, [
+                'stage' => 'extracting_content',
+                'progress' => 60
+            ]);
+            $this->addLog($jobId, "Extracting content from document", 'info');
+
+            // Use DocumentConverterService
+            $documentConverterService = app(\App\Services\DocumentConverterService::class);
+            
+            // Use Storage facade to get the correct path (includes 'public' directory)
+            $filePath = \Illuminate\Support\Facades\Storage::path($file->file_path);
+            
+            $this->addLog($jobId, "Using file path: {$filePath}", 'info');
+            
+            $extractionResult = $documentConverterService->extractContent(
+                $filePath,
+                $input['extraction_type'],
+                $input['language'],
+                $options
+            );
+
+            if (!$extractionResult || !isset($extractionResult['job_id'])) {
+                $this->failJob($jobId, "Content extraction failed to start");
+                return ['success' => false, 'error' => 'Content extraction failed to start'];
+            }
+
+            // Stage 4: Monitoring Extraction
+            $this->updateJob($jobId, [
+                'stage' => 'monitoring_extraction',
+                'progress' => 80
+            ]);
+            $this->addLog($jobId, "Monitoring content extraction progress", 'info');
+
+            // Poll for completion
+            $maxAttempts = 60; // 5 minutes max
+            $attempt = 0;
+            
+            $finalStatus = null;
+            while ($attempt < $maxAttempts) {
+                sleep(5); // Wait 5 seconds between checks
+                $attempt++;
+                
+                $status = $documentConverterService->checkJobStatus($extractionResult['job_id']);
+                
+                if (isset($status['status']) && $status['status'] === 'completed') {
+                    $finalStatus = $status; // Store the final status
+                    break;
+                } elseif (isset($status['status']) && $status['status'] === 'failed') {
+                    $this->failJob($jobId, "Content extraction failed: " . ($status['error'] ?? 'Unknown error'));
+                    return ['success' => false, 'error' => 'Content extraction failed'];
+                }
+            }
+
+            if ($attempt >= $maxAttempts) {
+                $this->failJob($jobId, "Content extraction timeout");
+                return ['success' => false, 'error' => 'Content extraction timeout'];
+            }
+
+            // Stage 5: Finalizing
+            $this->updateJob($jobId, [
+                'stage' => 'finalizing',
+                'progress' => 90
+            ]);
+            $this->addLog($jobId, "Finalizing content extraction result", 'info');
+
+            // Use the final status response (since result endpoint returns null)
+            $result = $finalStatus;
+            
+            if (!$result || !isset($result['status']) || $result['status'] !== 'completed') {
+                $this->failJob($jobId, "Failed to get extraction result");
+                return ['success' => false, 'error' => 'Failed to get extraction result'];
+            }
+
+            return [
+                'success' => true,
+                'data' => [
+                    'extraction_result' => $result,
+                    'original_file' => [
+                        'id' => $file->id,
+                        'filename' => $file->original_filename,
+                        'size' => $file->file_size
+                    ],
+                    'extracted_content' => $result['content'] ?? '',
+                    'metadata' => $result['metadata'] ?? [],
+                    'word_count' => $result['word_count'] ?? 0,
+                    'page_count' => $result['page_count'] ?? 0,
+                    'language_detected' => $result['language_detected'] ?? $input['language'],
+                    'extraction_method' => $result['extraction_method'] ?? 'unknown'
+                ],
+                'metadata' => [
+                    'file_count' => 1,
+                    'extraction_type' => $input['extraction_type'],
+                    'language' => $input['language'],
+                    'confidence_score' => 0.9,
+                    'processing_stages' => ['validating_file', 'processing_file', 'extracting_content', 'monitoring_extraction', 'finalizing']
+                ]
+            ];
+
+        } catch (\Exception $e) {
+            $this->failJob($jobId, "Content extraction failed: " . $e->getMessage());
             return ['success' => false, 'error' => $e->getMessage()];
         }
     }
