@@ -99,3 +99,4 @@ if __name__ == "__main__":
     result = extract_text_from_txt(txt_filepath)
     print(json.dumps(result, indent=2))
 
+

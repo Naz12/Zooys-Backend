@@ -23,7 +23,7 @@ class FileUploadController extends Controller
     public function upload(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'file' => 'required|file|max:10240', // 10MB max
+            'file' => 'required|file|max:51200', // 50MB max
             'metadata' => 'sometimes|array'
         ]);
 

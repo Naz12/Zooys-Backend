@@ -81,3 +81,4 @@ echo "If the microservice is not running, start it with:\n";
 echo "python start_document_service.py\n";
 ?>
 
+

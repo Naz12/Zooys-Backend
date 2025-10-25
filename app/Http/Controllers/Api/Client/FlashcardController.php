@@ -38,7 +38,7 @@ class FlashcardController extends Controller
     {
         $request->validate([
             'input' => 'required_without:file|string',
-            'file' => 'required_without:input|file|max:10240',
+            'file' => 'required_without:input|file|max:51200', // 50MB max
             'input_type' => 'string|in:text,url,youtube,file',
             'count' => 'integer|min:1|max:40',
             'difficulty' => 'string|in:beginner,intermediate,advanced',

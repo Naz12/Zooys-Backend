@@ -36,7 +36,7 @@ class PresentationController extends Controller
                 'tone' => 'string|in:Professional,Casual,Academic,Creative,Formal',
                 'length' => 'string|in:Short,Medium,Long',
                 'model' => 'string|in:Basic Model,Advanced Model,Premium Model,gpt-3.5-turbo,gpt-4',
-                'file' => 'required_if:input_type,file|file|mimes:pdf,doc,docx,txt|max:10240',
+                'file' => 'required_if:input_type,file|file|mimes:pdf,doc,docx,txt|max:51200', // 50MB max
                 'url' => 'required_if:input_type,url|url',
                 'youtube_url' => 'required_if:input_type,youtube|url'
             ]);

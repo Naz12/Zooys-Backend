@@ -35,7 +35,7 @@ class MathController extends Controller
     {
         $request->validate([
             'problem_text' => 'required_without:problem_image|string',
-            'problem_image' => 'required_without:problem_text|image|max:10240',
+            'problem_image' => 'required_without:problem_text|image|max:51200', // 50MB max
             'subject_area' => 'nullable|string|in:algebra,geometry,calculus,statistics,trigonometry,arithmetic,maths',
             'difficulty_level' => 'nullable|string|in:beginner,intermediate,advanced'
         ]);

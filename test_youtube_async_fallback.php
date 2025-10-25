@@ -142,3 +142,4 @@ echo "❌ If failed: Check queue worker and service configuration\n";
 echo "🔍 The fallback should activate when transcriber fails\n";
 
 
+

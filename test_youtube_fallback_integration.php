@@ -93,3 +93,4 @@ echo "❌ If failed: Check service dependencies and configuration\n";
 echo "🔍 The fallback should activate when transcriber fails\n";
 
 
+
