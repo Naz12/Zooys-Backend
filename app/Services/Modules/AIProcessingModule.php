@@ -48,7 +48,23 @@ class AIProcessingModule
         $summary = '';
         $keyPoints = [];
         
-        if (isset($result['data']['raw_output']['data']['raw_output']['summary'])) {
+        // Log the actual response structure for debugging
+        Log::info('AI Manager Response Structure:', [
+            'result_keys' => array_keys($result),
+            'data_keys' => isset($result['data']) ? array_keys($result['data']) : 'no_data',
+            'full_result' => $result
+        ]);
+        
+        // Check for the actual structure from your example
+        if (isset($result['summary'])) {
+            // Direct summary at root level (from your example)
+            $summary = $result['summary'];
+            $keyPoints = $result['key_points'] ?? [];
+        } elseif (isset($result['data']['summary'])) {
+            // Direct summary in data
+            $summary = $result['data']['summary'];
+            $keyPoints = $result['data']['key_points'] ?? [];
+        } elseif (isset($result['data']['raw_output']['data']['raw_output']['summary'])) {
             // Deepest nested structure from AI Manager
             $summary = $result['data']['raw_output']['data']['raw_output']['summary'];
             $keyPoints = $result['data']['raw_output']['data']['raw_output']['key_points'] ?? [];
@@ -60,13 +76,15 @@ class AIProcessingModule
             // Alternative nested structure
             $summary = $result['data']['raw_output']['summary'];
             $keyPoints = $result['data']['raw_output']['key_points'] ?? [];
-        } elseif (isset($result['data']['summary'])) {
-            // Direct data structure
-            $summary = $result['data']['summary'];
-            $keyPoints = $result['data']['key_points'] ?? [];
         } elseif (isset($result['insights'])) {
             // Fallback to insights
             $summary = $result['insights'];
+        } else {
+            // If no summary found, log the structure and use a fallback
+            Log::warning('No summary found in AI Manager response', [
+                'result_structure' => $result
+            ]);
+            $summary = 'Summary not available - AI response structure not recognized';
         }
         
         return [

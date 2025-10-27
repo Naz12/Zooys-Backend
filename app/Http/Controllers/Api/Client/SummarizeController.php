@@ -1071,8 +1071,8 @@ class SummarizeController extends Controller
                 'message' => 'Summarization job started',
                 'job_id' => $job['id'],
                 'status' => $job['status'],
-                'poll_url' => url('/api/status/' . $job['id']),
-                'result_url' => url('/api/result/' . $job['id'])
+                'poll_url' => url('/api/status?job_id=' . $job['id']),
+                'result_url' => url('/api/result?job_id=' . $job['id'])
             ], 202);
 
         } catch (\Exception $e) {
@@ -1080,6 +1080,91 @@ class SummarizeController extends Controller
             return response()->json([
                 'success' => false,
                 'error' => 'Failed to start summarization job: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Summarize file content using document converter microservice
+     */
+    public function summarizeFileAsync(Request $request)
+    {
+        try {
+            // Validate file_id
+            $request->validate([
+                'file_id' => 'required|string|exists:file_uploads,id',
+                'options' => 'sometimes|string' // Accept as string and parse to array
+            ]);
+
+            // Parse options from JSON string if needed
+            $options = $request->options ?? [];
+            if (is_string($options)) {
+                $options = json_decode($options, true) ?? [];
+            }
+
+            // Use Universal File Management Module to get file
+            $fileResult = $this->universalFileModule->getFile($request->file_id);
+            
+            if (!$fileResult['success']) {
+                return response()->json([
+                    'error' => 'File not found',
+                    'details' => $fileResult['error'] ?? 'File does not exist'
+                ], 404);
+            }
+            
+            $fileRecord = $fileResult['file'];
+            $fileId = $request->file_id;
+            
+            // Use Document Converter Service for content extraction
+            $documentConverterService = app(\App\Services\DocumentConverterService::class);
+            
+            // Extract content using the microservice
+            $filePath = \Illuminate\Support\Facades\Storage::path($fileRecord->file_path);
+            
+            try {
+                $extractionResult = $documentConverterService->extractContent($filePath, 'text', $options['language'] ?? 'eng', [
+                    'include_formatting' => $options['include_formatting'] ?? true,
+                    'max_pages' => $options['max_pages'] ?? 10
+                ]);
+                
+                // Check if extraction was successful
+                if (!isset($extractionResult['content']) || empty($extractionResult['content'])) {
+                    return response()->json([
+                        'error' => 'Content extraction failed',
+                        'details' => 'No text content extracted from file'
+                    ], 400);
+                }
+                
+                $extractedText = $extractionResult['content'];
+                
+            } catch (\Exception $e) {
+                return response()->json([
+                    'error' => 'Content extraction failed',
+                    'details' => $e->getMessage()
+                ], 400);
+            }
+            
+            // Create request with extracted content for AI processing
+            $contentRequest = new Request([
+                'content_type' => 'text',
+                'source' => [
+                    'type' => 'text',
+                    'data' => $extractedText
+                ],
+                'options' => array_merge([
+                    'language' => 'en',
+                    'format' => 'detailed',
+                    'focus' => 'summary'
+                ], $options)
+            ]);
+
+            return $this->summarizeAsync($contentRequest);
+            
+        } catch (\Exception $e) {
+            Log::error('File summarization failed: ' . $e->getMessage());
+            return response()->json([
+                'error' => 'File summarization failed',
+                'details' => $e->getMessage()
             ], 500);
         }
     }

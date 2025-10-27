@@ -179,7 +179,19 @@ class UniversalFileManagementModule
      */
     public function getFile($fileId)
     {
-        return \App\Models\FileUpload::find($fileId);
+        $file = \App\Models\FileUpload::find($fileId);
+        
+        if (!$file) {
+            return [
+                'success' => false,
+                'error' => 'File not found'
+            ];
+        }
+        
+        return [
+            'success' => true,
+            'file' => $file
+        ];
     }
 
     /**

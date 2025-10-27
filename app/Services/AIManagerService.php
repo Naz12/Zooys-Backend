@@ -45,8 +45,8 @@ public function processText($text, $task, $options = [])
             throw new \Exception("AI Manager service is currently unavailable");
         }
 
-        $maxRetries = 2; // Reduced retries
-        $retryDelay = 1; // Reduced delay
+        $maxRetries = 2; // Reduced retries to fail faster
+        $retryDelay = 5; // Increased delay between retries
         
         for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
             try {
@@ -63,8 +63,8 @@ public function processText($text, $task, $options = [])
                     'options' => $options
                 ];
 
-                $response = Http::timeout(60) // Increased timeout for AI processing
-                    ->connectTimeout(10) // Increased connection timeout
+                $response = Http::timeout($this->timeout) // Use config timeout
+                    ->connectTimeout(15) // Increased connection timeout
                     ->withHeaders([
                         'Accept' => 'application/json',
                         'Content-Type' => 'application/json',
@@ -114,23 +114,33 @@ public function processText($text, $task, $options = [])
                 }
 
             } catch (\Exception $e) {
+                $isTimeout = strpos($e->getMessage(), 'timeout') !== false || 
+                           strpos($e->getMessage(), 'timed out') !== false ||
+                           strpos($e->getMessage(), 'Operation timed out') !== false;
+                
                 Log::warning("AI Manager API Error", [
                     'error' => $e->getMessage(),
                     'task' => $task,
-                    'attempt' => $attempt
+                    'attempt' => $attempt,
+                    'is_timeout' => $isTimeout
                 ]);
 
                 // If this is the last attempt, mark service as unavailable and return error
                 if ($attempt === $maxRetries) {
                     $this->markServiceUnavailable();
+                    $errorMessage = $isTimeout ? 
+                        'AI Manager service is currently overloaded and taking longer than ' . $this->timeout . ' seconds to respond. Please try again later.' : 
+                        'AI Manager service error: ' . $e->getMessage();
+                    
                     return [
                         'success' => false,
-                        'error' => 'AI Manager service error: ' . $e->getMessage()
+                        'error' => $errorMessage
                     ];
                 }
                 
-                // Wait before retry
-                sleep($retryDelay);
+                // For timeout errors, wait longer before retry
+                $waitTime = $isTimeout ? $retryDelay * 2 : $retryDelay;
+                sleep($waitTime);
             }
         }
         
@@ -200,11 +210,19 @@ public function processText($text, $task, $options = [])
     public function checkHealth()
     {
         try {
+            // Test with a simple process-text request instead of health endpoint
+            $testData = [
+                'text' => 'test',
+                'task' => 'summarize',
+                'options' => []
+            ];
+
             $response = Http::timeout(30)
                 ->withHeaders([
                     'Accept' => 'application/json',
+                    'Content-Type' => 'application/json',
                     'X-API-KEY' => $this->apiKey,
-                ])->get($this->apiUrl . '/health');
+                ])->post($this->apiUrl . '/api/process-text', $testData);
 
             return [
                 'success' => $response->successful(),
@@ -235,16 +253,32 @@ public function processText($text, $task, $options = [])
     }
 
     /**
-     * Mark service as unavailable for 5 minutes
+     * Mark service as unavailable for 2 minutes (reduced from 5 minutes)
      */
     private function markServiceUnavailable()
     {
         $cacheKey = 'ai_manager_unavailable';
-        $unavailableUntil = now()->addMinutes(5)->timestamp;
+        $unavailableUntil = now()->addMinutes(2)->timestamp; // Reduced from 5 to 2 minutes
         
-        \Illuminate\Support\Facades\Cache::put($cacheKey, $unavailableUntil, 300); // 5 minutes
+        \Illuminate\Support\Facades\Cache::put($cacheKey, $unavailableUntil, 120); // 2 minutes
         
-        Log::warning("AI Manager service marked as unavailable until " . now()->addMinutes(5)->toISOString());
+        Log::warning("AI Manager service marked as unavailable until " . now()->addMinutes(2)->toISOString());
+    }
+
+    /**
+     * Reset circuit breaker (for manual recovery)
+     */
+    public function resetCircuitBreaker()
+    {
+        $cacheKey = 'ai_manager_unavailable';
+        \Illuminate\Support\Facades\Cache::forget($cacheKey);
+        
+        Log::info("AI Manager circuit breaker reset manually");
+        
+        return [
+            'success' => true,
+            'message' => 'Circuit breaker reset successfully'
+        ];
     }
 
 }

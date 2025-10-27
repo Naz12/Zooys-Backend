@@ -42,4 +42,10 @@ return [
         'timeout' => env('DOCUMENT_CONVERTER_TIMEOUT', 300),
     ],
 
+    'ai_manager' => [
+        'url' => env('AI_MANAGER_URL', 'http://localhost:8005'),
+        'api_key' => env('AI_MANAGER_API_KEY', 'test-api-key-123'),
+        'timeout' => env('AI_MANAGER_TIMEOUT', 180), // Increased to 3 minutes
+    ],
+
 ];

@@ -488,26 +488,26 @@ Route::post('/summarize/async/audiovideo', function (Request $request) {
     // Manually authenticate the user
     auth()->login($user);
 
-    // Validate file upload
+    // Validate file_id
     $request->validate([
-        'file' => 'required|file|mimes:mp3,mp4,avi,mov,wav,m4a|max:50000', // 50MB max
+        'file_id' => 'required|string|exists:file_uploads,id',
         'options' => 'sometimes|array'
     ]);
 
-    // Use Universal File Management Module for file upload
+    // Use Universal File Management Module to get file
     $universalFileModule = app(\App\Services\Modules\UniversalFileManagementModule::class);
     
-    // Upload file using the universal file management
-    $uploadResult = $universalFileModule->uploadFile($request->file('file'), $user->id, $request->options ?? []);
+    // Get file using universal file management
+    $fileResult = $universalFileModule->getFile($request->file_id);
     
-    if (!$uploadResult['success']) {
+    if (!$fileResult['success']) {
         return response()->json([
-            'error' => 'File upload failed',
-            'details' => $uploadResult['error'] ?? 'Unknown error'
-        ], 400);
+            'error' => 'File not found',
+            'details' => $fileResult['error'] ?? 'File does not exist'
+        ], 404);
     }
     
-    $fileId = $uploadResult['file_upload']['id'];
+    $fileId = $request->file_id;
     
     // Create request with file-specific format
     $fileRequest = new Request([
@@ -527,74 +527,6 @@ Route::post('/summarize/async/audiovideo', function (Request $request) {
     return $controller->summarizeAsync($fileRequest);
 });
 
-// File Upload Summarization
-Route::post('/summarize/async/file', function (Request $request) {
-    $token = $request->bearerToken();
-    $parts = explode('|', $token);
-
-    if (count($parts) !== 2) {
-        return response()->json(['error' => 'Invalid token format'], 401);
-    }
-
-    $tokenRecord = Laravel\Sanctum\PersonalAccessToken::where('token', hash('sha256', $parts[1]))->first();
-
-    if (!$tokenRecord) {
-        return response()->json(['error' => 'Token not found'], 401);
-    }
-
-    $user = $tokenRecord->tokenable;
-
-    if (!$user) {
-        return response()->json(['error' => 'User not found'], 401);
-    }
-
-    // Manually authenticate the user
-    auth()->login($user);
-
-    // Validate file upload (supports multiple file types)
-    $request->validate([
-        'file' => 'required|file|mimes:pdf,doc,docx,txt,mp3,mp4,avi,mov,wav,m4a|max:50000', // 50MB max
-        'options' => 'sometimes|string' // Accept as string and parse to array
-    ]);
-
-    // Parse options from JSON string if needed
-    $options = $request->options ?? [];
-    if (is_string($options)) {
-        $options = json_decode($options, true) ?? [];
-    }
-
-    // Use Universal File Management Module for file upload
-    $universalFileModule = app(\App\Services\Modules\UniversalFileManagementModule::class);
-    
-    // Upload file using the universal file management
-    $uploadResult = $universalFileModule->uploadFile($request->file('file'), $user->id, $options);
-    
-    if (!$uploadResult['success']) {
-        return response()->json([
-            'error' => 'File upload failed',
-            'details' => $uploadResult['error'] ?? 'Unknown error'
-        ], 400);
-    }
-    
-    $fileId = $uploadResult['file_upload']['id'];
-    
-    // Create request with file-specific format for job scheduling
-    $fileRequest = new Request([
-        'content_type' => 'pdf', // Use 'pdf' as content type for validation
-        'source' => [
-            'type' => 'file',
-            'data' => (string)$fileId // Ensure file ID is string
-        ],
-        'options' => array_merge([
-            'language' => 'en',
-            'format' => 'detailed',
-            'focus' => 'summary'
-        ], $options)
-    ]);
-
-    $controller = app(\App\Http\Controllers\Api\Client\SummarizeController::class);
-    return $controller->summarizeAsync($fileRequest);
-});
 
 // Link Summarization (for any URL)
 Route::post('/summarize/link', function (Request $request) {
@@ -668,26 +600,26 @@ Route::post('/summarize/async/image', function (Request $request) {
     // Manually authenticate the user
     auth()->login($user);
 
-    // Validate image file
+    // Validate file_id
     $request->validate([
-        'file' => 'required|file|mimes:jpg,jpeg,png,gif,bmp,webp|max:10000', // 10MB max
+        'file_id' => 'required|string|exists:file_uploads,id',
         'options' => 'sometimes|array'
     ]);
 
-    // Use Universal File Management Module for file upload
+    // Use Universal File Management Module to get file
     $universalFileModule = app(\App\Services\Modules\UniversalFileManagementModule::class);
     
-    // Upload file using the universal file management
-    $uploadResult = $universalFileModule->uploadFile($request->file('file'), $user->id, $request->options ?? []);
+    // Get file using universal file management
+    $fileResult = $universalFileModule->getFile($request->file_id);
     
-    if (!$uploadResult['success']) {
+    if (!$fileResult['success']) {
         return response()->json([
-            'error' => 'File upload failed',
-            'details' => $uploadResult['error'] ?? 'Unknown error'
-        ], 400);
+            'error' => 'File not found',
+            'details' => $fileResult['error'] ?? 'File does not exist'
+        ], 404);
     }
     
-    $fileId = $uploadResult['file_upload']['id'];
+    $fileId = $request->file_id;
     
     // Create request with image-specific format
     $imageRequest = new Request([
@@ -786,6 +718,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/file-processing/conversion-capabilities', [FileExtractionController::class, 'getCapabilities']);
     Route::get('/file-processing/extraction-capabilities', [FileExtractionController::class, 'getExtractionCapabilities']);
     Route::get('/file-processing/health', [FileExtractionController::class, 'checkHealth']);
+    
+    // File Upload Summarization
+    Route::post('/summarize/async/file', [\App\Http\Controllers\Api\Client\SummarizeController::class, 'summarizeFileAsync']);
 });
 
 // 🔹 Admin Processing Dashboard Routes

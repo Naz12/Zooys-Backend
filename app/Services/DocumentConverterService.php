@@ -126,11 +126,12 @@ class DocumentConverterService
     }
 
     /**
-     * Extract content from document
+     * Extract content from document (asynchronous)
      */
     public function extractContent($filePath, $extractionType = 'text', $language = 'eng', $options = [])
     {
         try {
+            // Start extraction job
             $response = Http::timeout(120)
                 ->withHeaders(['X-API-Key' => $this->apiKey])
                 ->attach('file', file_get_contents($filePath), basename($filePath))
@@ -141,11 +142,60 @@ class DocumentConverterService
                     'max_pages' => $options['max_pages'] ?? 10
                 ]);
             
-            if ($response->successful()) {
-                return $response->json();
+            if (!$response->successful()) {
+                throw new \Exception('Content extraction failed: ' . $response->body());
             }
             
-            throw new \Exception('Content extraction failed: ' . $response->body());
+            $jobData = $response->json();
+            $jobId = $jobData['job_id'];
+            
+            Log::info("Content extraction job started", ['job_id' => $jobId]);
+            
+            // Poll for completion
+            $maxAttempts = 60; // 2 minutes max
+            $attempt = 0;
+            
+            while ($attempt < $maxAttempts) {
+                sleep(2); // Wait 2 seconds between checks
+                $attempt++;
+                
+                $statusResponse = Http::timeout(30)
+                    ->withHeaders(['X-API-Key' => $this->apiKey])
+                    ->get($this->baseUrl . '/v1/status', ['job_id' => $jobId]);
+                
+                if (!$statusResponse->successful()) {
+                    throw new \Exception('Failed to check extraction status: ' . $statusResponse->body());
+                }
+                
+                $status = $statusResponse->json();
+                
+                if ($status['status'] === 'completed') {
+                    // Get the result
+                    $resultResponse = Http::timeout(30)
+                        ->withHeaders(['X-API-Key' => $this->apiKey])
+                        ->get($this->baseUrl . '/v1/result', ['job_id' => $jobId]);
+                    
+                    if (!$resultResponse->successful()) {
+                        throw new \Exception('Failed to get extraction result: ' . $resultResponse->body());
+                    }
+                    
+                    $result = $resultResponse->json();
+                    Log::info("Content extraction completed", ['job_id' => $jobId]);
+                    return $result;
+                }
+                
+                if ($status['status'] === 'failed') {
+                    throw new \Exception('Content extraction failed: ' . ($status['error'] ?? 'Unknown error'));
+                }
+                
+                Log::info("Content extraction in progress", [
+                    'job_id' => $jobId,
+                    'status' => $status['status'],
+                    'attempt' => $attempt
+                ]);
+            }
+            
+            throw new \Exception('Content extraction timeout after ' . ($maxAttempts * 2) . ' seconds');
 
         } catch (\Exception $e) {
             Log::error('Content extraction failed: ' . $e->getMessage());

@@ -34,7 +34,7 @@ class FileExtractionController extends Controller
         try {
             // Validate request
             $validator = Validator::make($request->all(), [
-                'file' => 'required|file|mimes:pdf,doc,docx,ppt,pptx,xls,xlsx,txt,html,jpg,jpeg,png|max:50000', // 50MB max
+                'file_id' => 'required|string|exists:file_uploads,id',
                 'target_format' => 'required|string|in:pdf,png,jpg,jpeg,docx,txt,html',
                 'options' => 'sometimes|array'
             ]);
@@ -48,22 +48,22 @@ class FileExtractionController extends Controller
             }
 
             $user = auth()->user();
-            $file = $request->file('file');
+            $fileId = $request->input('file_id');
             $targetFormat = $request->input('target_format');
             $options = $request->input('options', []);
 
-            // Upload file using universal file management
-            $uploadResult = $this->universalFileModule->uploadFile($file, $user->id, $options);
+            // Get file using universal file management
+            $fileResult = $this->universalFileModule->getFile($fileId);
             
-            if (!$uploadResult['success']) {
+            if (!$fileResult['success']) {
                 return response()->json([
                     'success' => false,
-                    'error' => 'File upload failed',
-                    'details' => $uploadResult['error'] ?? 'Unknown error'
-                ], 400);
+                    'error' => 'File not found',
+                    'details' => $fileResult['error'] ?? 'File does not exist'
+                ], 404);
             }
 
-            $fileId = $uploadResult['file_upload']['id'];
+            $fileRecord = $fileResult['file'];
 
             // Create universal job for document conversion
             Log::info('Creating document conversion job with options', [
@@ -74,8 +74,8 @@ class FileExtractionController extends Controller
             $job = $this->universalJobService->createJob('document_conversion', [
                 'file_id' => $fileId,
                 'target_format' => $targetFormat,
-                'original_filename' => $file->getClientOriginalName(),
-                'file_size' => $file->getSize()
+                'original_filename' => $fileRecord->original_filename,
+                'file_size' => $fileRecord->file_size
             ], $options, $user->id);
 
             // Queue background processing
@@ -109,7 +109,7 @@ class FileExtractionController extends Controller
         try {
             // Validate request
             $validator = Validator::make($request->all(), [
-                'file' => 'required|file|mimes:pdf,doc,docx,ppt,pptx,xls,xlsx,txt,jpg,jpeg,png,bmp,gif|max:50000', // 50MB max
+                'file_id' => 'required|string|exists:file_uploads,id',
                 'extraction_type' => 'sometimes|string|in:text,metadata,both',
                 'language' => 'sometimes|string|in:eng,spa,fra,deu,ita,por,rus,chi,jpn,kor,ara',
                 'include_formatting' => 'sometimes|boolean',
@@ -126,25 +126,25 @@ class FileExtractionController extends Controller
             }
 
             $user = auth()->user();
-            $file = $request->file('file');
+            $fileId = $request->input('file_id');
             $extractionType = $request->input('extraction_type', 'text');
             $language = $request->input('language', 'eng');
             $includeFormatting = $request->input('include_formatting', false);
             $maxPages = $request->input('max_pages', 10);
             $options = $request->input('options', []);
 
-            // Upload file using universal file management
-            $uploadResult = $this->universalFileModule->uploadFile($file, $user->id, $options);
+            // Get file using universal file management
+            $fileResult = $this->universalFileModule->getFile($fileId);
             
-            if (!$uploadResult['success']) {
+            if (!$fileResult['success']) {
                 return response()->json([
                     'success' => false,
-                    'error' => 'File upload failed',
-                    'details' => $uploadResult['error'] ?? 'Unknown error'
-                ], 400);
+                    'error' => 'File not found',
+                    'details' => $fileResult['error'] ?? 'File does not exist'
+                ], 404);
             }
 
-            $fileId = $uploadResult['file_upload']['id'];
+            $fileRecord = $fileResult['file'];
 
             // Create universal job for content extraction
             $job = $this->universalJobService->createJob('content_extraction', [
@@ -153,8 +153,8 @@ class FileExtractionController extends Controller
                 'language' => $language,
                 'include_formatting' => $includeFormatting,
                 'max_pages' => $maxPages,
-                'original_filename' => $file->getClientOriginalName(),
-                'file_size' => $file->getSize()
+                'original_filename' => $fileRecord->original_filename,
+                'file_size' => $fileRecord->file_size
             ], $options, $user->id);
 
             // Queue background processing
