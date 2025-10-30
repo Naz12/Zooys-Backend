@@ -3,6 +3,7 @@
 namespace App\Services\Modules;
 
 use Illuminate\Support\Facades\Log;
+use App\Services\Modules\SubscriptionBillingModule;
 
 class ModuleRegistry
 {
@@ -161,6 +162,20 @@ class ModuleRegistry
                 'max_file_size' => '100MB',
                 'processing_pipeline' => ['upload', 'extract', 'process', 'store'],
                 'supported_tools' => ['summarize', 'math', 'document_chat', 'flashcards', 'presentations']
+            ]
+        ]);
+
+        // Register Subscription Billing Module
+        self::registerModule('subscription_billing', [
+            'class' => SubscriptionBillingModule::class,
+            'description' => 'Subscription and billing management with Stripe integration',
+            'dependencies' => [],
+            'config' => [
+                'grace_period_days' => 3,
+                'usage_alert_thresholds' => [80, 100],
+                'stripe_enabled' => true,
+                'monthly_billing_cycle' => true,
+                'auto_reset_usage' => true,
             ]
         ]);
     }

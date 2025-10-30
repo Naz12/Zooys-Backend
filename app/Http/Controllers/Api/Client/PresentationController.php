@@ -36,7 +36,7 @@ class PresentationController extends Controller
                 'tone' => 'string|in:Professional,Casual,Academic,Creative,Formal',
                 'length' => 'string|in:Short,Medium,Long',
                 'model' => 'string|in:Basic Model,Advanced Model,Premium Model,gpt-3.5-turbo,gpt-4',
-                'file' => 'required_if:input_type,file|file|mimes:pdf,doc,docx,txt|max:51200', // 50MB max
+                'file_id' => 'required_if:input_type,file|string|exists:file_uploads,id',
                 'url' => 'required_if:input_type,url|url',
                 'youtube_url' => 'required_if:input_type,youtube|url'
             ]);
@@ -52,19 +52,23 @@ class PresentationController extends Controller
             $inputData = $request->all();
             $userId = auth()->id() ?? 5; // Use existing user ID for public access
 
-            // Handle file upload if input type is file
-            if ($inputData['input_type'] === 'file' && $request->hasFile('file')) {
-                $fileUpload = $this->universalFileModule->uploadFile($request->file('file'), $userId, 'presentations');
+            // Handle file-based presentations using Universal File Management
+            if ($inputData['input_type'] === 'file' && $request->has('file_id')) {
+                $fileId = $request->input('file_id');
                 
-                if (!$fileUpload['success']) {
+                // Use Universal File Management Module to get file
+                $universalFileModule = app(\App\Services\Modules\UniversalFileManagementModule::class);
+                $fileResult = $universalFileModule->getFile($fileId);
+                
+                if (!$fileResult['success']) {
                     return response()->json([
                         'success' => false,
-                        'error' => 'File upload failed: ' . $fileUpload['error']
-                    ], 400);
+                        'error' => 'File not found: ' . $fileResult['error']
+                    ], 404);
                 }
-
-                $inputData['file_path'] = $fileUpload['file_path'];
-                $inputData['file_type'] = $fileUpload['file_type'];
+                
+                $inputData['file_path'] = $fileResult['file']['file_path'];
+                $inputData['file_type'] = $fileResult['file']['file_type'];
             }
 
             // Generate presentation outline

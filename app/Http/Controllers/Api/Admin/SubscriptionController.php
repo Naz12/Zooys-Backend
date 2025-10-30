@@ -250,4 +250,103 @@ class SubscriptionController extends Controller
             'message' => 'Subscription data exported successfully'
         ]);
     }
+
+    /**
+     * Bulk activate subscriptions
+     */
+    public function bulkActivate(Request $request)
+    {
+        $request->validate([
+            'subscription_ids' => 'required|array',
+            'subscription_ids.*' => 'exists:subscriptions,id',
+        ]);
+
+        $subscriptionIds = $request->subscription_ids;
+        $activatedCount = 0;
+
+        foreach ($subscriptionIds as $subscriptionId) {
+            try {
+                $subscription = Subscription::findOrFail($subscriptionId);
+                $subscription->update(['active' => true]);
+                $activatedCount++;
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error("Failed to activate subscription {$subscriptionId}: " . $e->getMessage());
+            }
+        }
+
+        return response()->json([
+            'message' => "Bulk activation completed. {$activatedCount} subscriptions activated.",
+            'activated_count' => $activatedCount,
+            'total_requested' => count($subscriptionIds),
+        ]);
+    }
+
+    /**
+     * Bulk cancel subscriptions
+     */
+    public function bulkCancel(Request $request)
+    {
+        $request->validate([
+            'subscription_ids' => 'required|array',
+            'subscription_ids.*' => 'exists:subscriptions,id',
+            'immediately' => 'boolean',
+        ]);
+
+        $subscriptionIds = $request->subscription_ids;
+        $immediately = $request->immediately ?? false;
+        $cancelledCount = 0;
+
+        foreach ($subscriptionIds as $subscriptionId) {
+            try {
+                $subscription = Subscription::findOrFail($subscriptionId);
+                $subscription->update([
+                    'active' => false,
+                    'ends_at' => $immediately ? now() : $subscription->usage_reset_date,
+                ]);
+                $cancelledCount++;
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error("Failed to cancel subscription {$subscriptionId}: " . $e->getMessage());
+            }
+        }
+
+        return response()->json([
+            'message' => "Bulk cancellation completed. {$cancelledCount} subscriptions cancelled.",
+            'cancelled_count' => $cancelledCount,
+            'total_requested' => count($subscriptionIds),
+            'immediately' => $immediately,
+        ]);
+    }
+
+    /**
+     * Apply grace period to subscription
+     */
+    public function applyGracePeriod(Subscription $subscription)
+    {
+        $gracePeriodDays = config('services.subscription.grace_period_days', 3);
+        
+        $subscription->update([
+            'grace_period_ends_at' => now()->addDays($gracePeriodDays),
+        ]);
+
+        return response()->json([
+            'message' => 'Grace period applied successfully',
+            'subscription' => $subscription->load(['user', 'plan']),
+            'grace_period_ends_at' => $subscription->grace_period_ends_at,
+        ]);
+    }
+
+    /**
+     * Get payment history for subscription
+     */
+    public function paymentHistory(Subscription $subscription)
+    {
+        $paymentHistory = $subscription->paymentHistory()
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json([
+            'subscription' => $subscription->load(['user', 'plan']),
+            'payment_history' => $paymentHistory,
+        ]);
+    }
 }

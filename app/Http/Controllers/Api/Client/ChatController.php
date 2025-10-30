@@ -147,7 +147,14 @@ class ChatController extends Controller
             // Use AI Manager for Q&A with context
             $result = $this->aiProcessingModule->answerQuestion($currentMessage, $context ?: null);
             
-            return $result['answer'];
+            $answer = $result['answer'] ?? '';
+            
+            // If AI Manager returns empty response, provide a fallback
+            if (empty($answer)) {
+                $answer = "I apologize, but I'm having trouble generating a response right now. Please try again in a moment.";
+            }
+            
+            return $answer;
             
         } catch (\Exception $e) {
             Log::error('AI Manager API Error: ' . $e->getMessage());

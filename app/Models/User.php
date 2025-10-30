@@ -52,9 +52,14 @@ class User extends Authenticatable
     }
 
 
-        public function subscription()
+    public function subscription()
     {
         return $this->hasOne(Subscription::class);
+    }
+
+    public function subscriptions()
+    {
+        return $this->hasMany(Subscription::class);
     }
 
     public function histories()
@@ -62,6 +67,52 @@ class User extends Authenticatable
         return $this->hasMany(History::class);
     }
 
+    public function paymentHistory()
+    {
+        return $this->hasMany(PaymentHistory::class);
+    }
 
+    public function getActiveSubscription()
+    {
+        return $this->subscription()->where('active', true)->first();
+    }
 
+    public function hasActiveSubscription(): bool
+    {
+        return $this->getActiveSubscription() !== null;
+    }
+
+    public function getCurrentUsage(): int
+    {
+        $subscription = $this->getActiveSubscription();
+        return $subscription ? $subscription->current_usage : 0;
+    }
+
+    public function getUsageLimit(): ?int
+    {
+        $subscription = $this->getActiveSubscription();
+        return $subscription && $subscription->plan ? $subscription->plan->limit : null;
+    }
+
+    public function canMakeRequest(): bool
+    {
+        $subscription = $this->getActiveSubscription();
+        
+        if (!$subscription) {
+            return false; // No subscription
+        }
+
+        // Check if in grace period
+        if ($subscription->isInGracePeriod()) {
+            return true;
+        }
+
+        // Check usage limit
+        $limit = $subscription->plan->limit;
+        if (!$limit) {
+            return true; // Unlimited
+        }
+
+        return $subscription->current_usage < $limit;
+    }
 }

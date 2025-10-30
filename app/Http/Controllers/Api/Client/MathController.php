@@ -34,8 +34,8 @@ class MathController extends Controller
     public function solve(Request $request)
     {
         $request->validate([
-            'problem_text' => 'required_without:problem_image|string',
-            'problem_image' => 'required_without:problem_text|image|max:51200', // 50MB max
+            'problem_text' => 'required_without:file_id|string',
+            'file_id' => 'required_without:problem_text|string|exists:file_uploads,id',
             'subject_area' => 'nullable|string|in:algebra,geometry,calculus,statistics,trigonometry,arithmetic,maths',
             'difficulty_level' => 'nullable|string|in:beginner,intermediate,advanced'
         ]);
@@ -45,33 +45,30 @@ class MathController extends Controller
 
         try {
             $problemData = [
-                'problem_type' => $request->hasFile('problem_image') ? 'image' : 'text',
                 'subject_area' => $request->input('subject_area', 'general'),
                 'difficulty_level' => $request->input('difficulty_level', 'intermediate'),
                 'metadata' => []
             ];
 
-            // Handle image upload using universal file upload system
-            if ($request->hasFile('problem_image')) {
-                $file = $request->file('problem_image');
+            // Handle file-based math problems using Universal File Management
+            if ($request->has('file_id')) {
+                $fileId = $request->input('file_id');
                 
-                // Use universal file management module
-                $uploadResult = $this->universalFileModule->uploadFile($file, $user->id, 'math', [
-                    'problem_type' => 'image',
-                    'subject_area' => $request->input('subject_area', 'maths'),
-                    'difficulty_level' => $request->input('difficulty_level', 'intermediate')
-                ]);
-
-                if (!$uploadResult['success']) {
+                // Use Universal File Management Module to get file
+                $universalFileModule = app(\App\Services\Modules\UniversalFileManagementModule::class);
+                $fileResult = $universalFileModule->getFile($fileId);
+                
+                if (!$fileResult['success']) {
                     return response()->json([
-                        'error' => 'Failed to upload image: ' . $uploadResult['error']
-                    ], 400);
+                        'error' => 'File not found: ' . $fileResult['error']
+                    ], 404);
                 }
-
-                $problemData['file_upload_id'] = $uploadResult['file_upload']->id;
-                $problemData['problem_image'] = $uploadResult['file_upload']->file_path;
-                $uploadResult = $uploadResult; // Store for response
+                
+                $problemData['problem_type'] = 'image';
+                $problemData['file_upload_id'] = $fileId;
+                $problemData['problem_image'] = $fileResult['file']['file_path'];
             } else {
+                $problemData['problem_type'] = 'text';
                 $problemData['problem_text'] = $request->input('problem_text');
             }
 
@@ -127,7 +124,7 @@ class MathController extends Controller
                     'id' => $result['math_problem']->id,
                     'problem_text' => $result['math_problem']->problem_text,
                     'problem_image' => $result['math_problem']->image_url,
-                    'file_url' => isset($problemData['file_upload_id']) ? $uploadResult['file_url'] : null,
+                    'file_url' => isset($problemData['file_upload_id']) ? $fileResult['file']['file_url'] : null,
                     'subject_area' => $result['math_problem']->subject_area,
                     'difficulty_level' => $result['math_problem']->difficulty_level,
                     'created_at' => $result['math_problem']->created_at

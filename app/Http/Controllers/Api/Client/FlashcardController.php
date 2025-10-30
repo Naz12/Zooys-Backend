@@ -37,8 +37,8 @@ class FlashcardController extends Controller
     public function generate(Request $request)
     {
         $request->validate([
-            'input' => 'required_without:file|string',
-            'file' => 'required_without:input|file|max:51200', // 50MB max
+            'input' => 'required_without:file_id|string',
+            'file_id' => 'required_without:input|string|exists:file_uploads,id',
             'input_type' => 'string|in:text,url,youtube,file',
             'count' => 'integer|min:1|max:40',
             'difficulty' => 'string|in:beginner,intermediate,advanced',
@@ -55,23 +55,23 @@ class FlashcardController extends Controller
         $fileUpload = null;
 
         try {
-            // Handle file upload if provided
-            if ($request->hasFile('file')) {
-                $file = $request->file('file');
-                $uploadResult = $this->universalFileModule->uploadFile($file, $user->id, 'flashcards', [
-                    'difficulty' => $difficulty,
-                    'style' => $style
-                ]);
-
-                if (!$uploadResult['success']) {
+            // Handle file-based flashcards using Universal File Management
+            if ($request->has('file_id')) {
+                $fileId = $request->input('file_id');
+                
+                // Use Universal File Management Module to get file
+                $universalFileModule = app(\App\Services\Modules\UniversalFileManagementModule::class);
+                $fileResult = $universalFileModule->getFile($fileId);
+                
+                if (!$fileResult['success']) {
                     return response()->json([
-                        'error' => $uploadResult['error']
-                    ], 400);
+                        'error' => 'File not found: ' . $fileResult['error']
+                    ], 404);
                 }
-
-                $fileUpload = $uploadResult['file_upload'];
+                
+                $fileUpload = $fileResult['file'];
                 $inputType = 'file';
-                $input = $fileUpload->id; // Use file ID as input
+                $input = $fileId; // Use file ID as input
             }
 
             // Auto-detect input type if not specified

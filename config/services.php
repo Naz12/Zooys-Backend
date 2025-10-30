@@ -48,4 +48,10 @@ return [
         'timeout' => env('AI_MANAGER_TIMEOUT', 180), // Increased to 3 minutes
     ],
 
+    'stripe' => [
+        'public' => env('STRIPE_PUBLIC_KEY'),
+        'secret' => env('STRIPE_SECRET_KEY'),
+        'webhook_secret' => env('STRIPE_WEBHOOK_SECRET'),
+    ],
+
 ];

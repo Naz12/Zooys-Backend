@@ -126,4 +126,58 @@ class PlanController extends Controller
             ]
         ]);
     }
+
+    /**
+     * Bulk update plans
+     */
+    public function bulkUpdate(Request $request)
+    {
+        $request->validate([
+            'plan_ids' => 'required|array',
+            'plan_ids.*' => 'exists:plans,id',
+            'updates' => 'required|array',
+            'updates.name' => 'nullable|string|max:255',
+            'updates.price' => 'nullable|numeric|min:0',
+            'updates.currency' => 'nullable|string|max:10',
+            'updates.limit' => 'nullable|integer|min:0',
+            'updates.is_active' => 'nullable|boolean',
+        ]);
+
+        $planIds = $request->plan_ids;
+        $updates = $request->updates;
+        $updatedCount = 0;
+
+        foreach ($planIds as $planId) {
+            try {
+                $plan = Plan::findOrFail($planId);
+                $plan->update($updates);
+                $updatedCount++;
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error("Failed to update plan {$planId}: " . $e->getMessage());
+            }
+        }
+
+        return response()->json([
+            'message' => "Bulk update completed. {$updatedCount} plans updated.",
+            'updated_count' => $updatedCount,
+            'total_requested' => count($planIds),
+        ]);
+    }
+
+    /**
+     * Duplicate a plan
+     */
+    public function duplicate(Plan $plan)
+    {
+        $newPlan = $plan->replicate();
+        $newPlan->name = $plan->name . ' (Copy)';
+        $newPlan->is_active = false; // Start as inactive
+        $newPlan->save();
+
+        return response()->json([
+            'message' => 'Plan duplicated successfully',
+            'original_plan' => $plan,
+            'duplicated_plan' => $newPlan,
+        ], 201);
+    }
 }

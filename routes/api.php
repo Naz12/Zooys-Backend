@@ -338,6 +338,743 @@ Route::get('/result', function (Request $request) {
     return response()->json(['success' => true, 'data' => $job['result'] ?? null]);
 });
 
+// 🔹 Tool-Specific Status and Result Endpoints
+
+// Helper functions for authentication and job retrieval
+$authenticateUser = function (Request $request) {
+    $token = $request->bearerToken();
+    $parts = explode('|', $token ?? '');
+    if (count($parts) !== 2) return response()->json(['error' => 'Unauthenticated'], 401);
+    $record = Laravel\Sanctum\PersonalAccessToken::where('token', hash('sha256', $parts[1]))->first();
+    if (!$record || !$record->tokenable) return response()->json(['error' => 'Unauthenticated'], 401);
+    auth()->login($record->tokenable);
+    return null;
+};
+
+$getJobForTool = function ($jobId, $toolType, $inputType) {
+    $service = app(\App\Services\UniversalJobService::class);
+    $job = $service->getJob($jobId);
+    if (!$job) return ['error' => 'Job not found', 'code' => 404];
+    if ($job['tool_type'] !== $toolType) return ['error' => 'Job tool type mismatch', 'code' => 400];
+    return ['job' => $job];
+};
+
+// 📝 SUMMARIZE TOOL ENDPOINTS
+
+// Summarize Text Status
+Route::get('/status/summarize/text', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'summarize', 'text');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    return response()->json([
+        'job_id' => $job['id'],
+        'tool_type' => 'summarize',
+        'input_type' => 'text',
+        'status' => $job['status'] ?? 'unknown',
+        'progress' => $job['progress'] ?? 0,
+        'stage' => $job['stage'] ?? null,
+        'error' => $job['error'] ?? null,
+        'created_at' => $job['created_at'] ?? null,
+        'updated_at' => $job['updated_at'] ?? null
+    ]);
+});
+
+// Summarize Text Result
+Route::get('/result/summarize/text', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'summarize', 'text');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    if (($job['status'] ?? '') !== 'completed') {
+        return response()->json(['error' => 'Job not completed', 'status' => $job['status'] ?? 'unknown'], 409);
+    }
+    
+    return response()->json([
+        'success' => true,
+        'job_id' => $job['id'],
+        'tool_type' => 'summarize',
+        'input_type' => 'text',
+        'data' => $job['result'] ?? null
+    ]);
+});
+
+// Summarize YouTube Status
+Route::get('/status/summarize/youtube', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'summarize', 'youtube');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    return response()->json([
+        'job_id' => $job['id'],
+        'tool_type' => 'summarize',
+        'input_type' => 'youtube',
+        'status' => $job['status'] ?? 'unknown',
+        'progress' => $job['progress'] ?? 0,
+        'stage' => $job['stage'] ?? null,
+        'error' => $job['error'] ?? null,
+        'created_at' => $job['created_at'] ?? null,
+        'updated_at' => $job['updated_at'] ?? null
+    ]);
+});
+
+// Summarize YouTube Result
+Route::get('/result/summarize/youtube', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'summarize', 'youtube');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    if (($job['status'] ?? '') !== 'completed') {
+        return response()->json(['error' => 'Job not completed', 'status' => $job['status'] ?? 'unknown'], 409);
+    }
+    
+    return response()->json([
+        'success' => true,
+        'job_id' => $job['id'],
+        'tool_type' => 'summarize',
+        'input_type' => 'youtube',
+        'data' => $job['result'] ?? null
+    ]);
+});
+
+// Summarize File Status
+Route::get('/status/summarize/file', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'summarize', 'file');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    return response()->json([
+        'job_id' => $job['id'],
+        'tool_type' => 'summarize',
+        'input_type' => 'file',
+        'status' => $job['status'] ?? 'unknown',
+        'progress' => $job['progress'] ?? 0,
+        'stage' => $job['stage'] ?? null,
+        'error' => $job['error'] ?? null,
+        'created_at' => $job['created_at'] ?? null,
+        'updated_at' => $job['updated_at'] ?? null
+    ]);
+});
+
+// Summarize File Result
+Route::get('/result/summarize/file', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'summarize', 'file');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    if (($job['status'] ?? '') !== 'completed') {
+        return response()->json(['error' => 'Job not completed', 'status' => $job['status'] ?? 'unknown'], 409);
+    }
+    
+    return response()->json([
+        'success' => true,
+        'job_id' => $job['id'],
+        'tool_type' => 'summarize',
+        'input_type' => 'file',
+        'data' => $job['result'] ?? null
+    ]);
+});
+
+// Summarize Web Status
+Route::get('/status/summarize/web', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'summarize', 'web');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    return response()->json([
+        'job_id' => $job['id'],
+        'tool_type' => 'summarize',
+        'input_type' => 'web',
+        'status' => $job['status'] ?? 'unknown',
+        'progress' => $job['progress'] ?? 0,
+        'stage' => $job['stage'] ?? null,
+        'error' => $job['error'] ?? null,
+        'created_at' => $job['created_at'] ?? null,
+        'updated_at' => $job['updated_at'] ?? null
+    ]);
+});
+
+// Summarize Web Result
+Route::get('/result/summarize/web', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'summarize', 'web');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    if (($job['status'] ?? '') !== 'completed') {
+        return response()->json(['error' => 'Job not completed', 'status' => $job['status'] ?? 'unknown'], 409);
+    }
+    
+    return response()->json([
+        'success' => true,
+        'job_id' => $job['id'],
+        'tool_type' => 'summarize',
+        'input_type' => 'web',
+        'data' => $job['result'] ?? null
+    ]);
+});
+
+// 🧮 MATH TOOL ENDPOINTS
+
+// Math Text Status
+Route::get('/status/math/text', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'math', 'text');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    return response()->json([
+        'job_id' => $job['id'],
+        'tool_type' => 'math',
+        'input_type' => 'text',
+        'status' => $job['status'] ?? 'unknown',
+        'progress' => $job['progress'] ?? 0,
+        'stage' => $job['stage'] ?? null,
+        'error' => $job['error'] ?? null,
+        'created_at' => $job['created_at'] ?? null,
+        'updated_at' => $job['updated_at'] ?? null
+    ]);
+});
+
+// Math Text Result
+Route::get('/result/math/text', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'math', 'text');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    if (($job['status'] ?? '') !== 'completed') {
+        return response()->json(['error' => 'Job not completed', 'status' => $job['status'] ?? 'unknown'], 409);
+    }
+    
+    return response()->json([
+        'success' => true,
+        'job_id' => $job['id'],
+        'tool_type' => 'math',
+        'input_type' => 'text',
+        'data' => $job['result'] ?? null
+    ]);
+});
+
+// Math Image Status
+Route::get('/status/math/image', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'math', 'image');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    return response()->json([
+        'job_id' => $job['id'],
+        'tool_type' => 'math',
+        'input_type' => 'image',
+        'status' => $job['status'] ?? 'unknown',
+        'progress' => $job['progress'] ?? 0,
+        'stage' => $job['stage'] ?? null,
+        'error' => $job['error'] ?? null,
+        'created_at' => $job['created_at'] ?? null,
+        'updated_at' => $job['updated_at'] ?? null
+    ]);
+});
+
+// Math Image Result
+Route::get('/result/math/image', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'math', 'image');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    if (($job['status'] ?? '') !== 'completed') {
+        return response()->json(['error' => 'Job not completed', 'status' => $job['status'] ?? 'unknown'], 409);
+    }
+    
+    return response()->json([
+        'success' => true,
+        'job_id' => $job['id'],
+        'tool_type' => 'math',
+        'input_type' => 'image',
+        'data' => $job['result'] ?? null
+    ]);
+});
+
+// 🎴 FLASHCARDS TOOL ENDPOINTS
+
+// Flashcards Text Status
+Route::get('/status/flashcards/text', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'flashcards', 'text');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    return response()->json([
+        'job_id' => $job['id'],
+        'tool_type' => 'flashcards',
+        'input_type' => 'text',
+        'status' => $job['status'] ?? 'unknown',
+        'progress' => $job['progress'] ?? 0,
+        'stage' => $job['stage'] ?? null,
+        'error' => $job['error'] ?? null,
+        'created_at' => $job['created_at'] ?? null,
+        'updated_at' => $job['updated_at'] ?? null
+    ]);
+});
+
+// Flashcards Text Result
+Route::get('/result/flashcards/text', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'flashcards', 'text');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    if (($job['status'] ?? '') !== 'completed') {
+        return response()->json(['error' => 'Job not completed', 'status' => $job['status'] ?? 'unknown'], 409);
+    }
+    
+    return response()->json([
+        'success' => true,
+        'job_id' => $job['id'],
+        'tool_type' => 'flashcards',
+        'input_type' => 'text',
+        'data' => $job['result'] ?? null
+    ]);
+});
+
+// Flashcards File Status
+Route::get('/status/flashcards/file', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'flashcards', 'file');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    return response()->json([
+        'job_id' => $job['id'],
+        'tool_type' => 'flashcards',
+        'input_type' => 'file',
+        'status' => $job['status'] ?? 'unknown',
+        'progress' => $job['progress'] ?? 0,
+        'stage' => $job['stage'] ?? null,
+        'error' => $job['error'] ?? null,
+        'created_at' => $job['created_at'] ?? null,
+        'updated_at' => $job['updated_at'] ?? null
+    ]);
+});
+
+// Flashcards File Result
+Route::get('/result/flashcards/file', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'flashcards', 'file');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    if (($job['status'] ?? '') !== 'completed') {
+        return response()->json(['error' => 'Job not completed', 'status' => $job['status'] ?? 'unknown'], 409);
+    }
+    
+    return response()->json([
+        'success' => true,
+        'job_id' => $job['id'],
+        'tool_type' => 'flashcards',
+        'input_type' => 'file',
+        'data' => $job['result'] ?? null
+    ]);
+});
+
+// 📊 PRESENTATIONS TOOL ENDPOINTS
+
+// Presentations Text Status
+Route::get('/status/presentations/text', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'presentations', 'text');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    return response()->json([
+        'job_id' => $job['id'],
+        'tool_type' => 'presentations',
+        'input_type' => 'text',
+        'status' => $job['status'] ?? 'unknown',
+        'progress' => $job['progress'] ?? 0,
+        'stage' => $job['stage'] ?? null,
+        'error' => $job['error'] ?? null,
+        'created_at' => $job['created_at'] ?? null,
+        'updated_at' => $job['updated_at'] ?? null
+    ]);
+});
+
+// Presentations Text Result
+Route::get('/result/presentations/text', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'presentations', 'text');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    if (($job['status'] ?? '') !== 'completed') {
+        return response()->json(['error' => 'Job not completed', 'status' => $job['status'] ?? 'unknown'], 409);
+    }
+    
+    return response()->json([
+        'success' => true,
+        'job_id' => $job['id'],
+        'tool_type' => 'presentations',
+        'input_type' => 'text',
+        'data' => $job['result'] ?? null
+    ]);
+});
+
+// Presentations File Status
+Route::get('/status/presentations/file', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'presentations', 'file');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    return response()->json([
+        'job_id' => $job['id'],
+        'tool_type' => 'presentations',
+        'input_type' => 'file',
+        'status' => $job['status'] ?? 'unknown',
+        'progress' => $job['progress'] ?? 0,
+        'stage' => $job['stage'] ?? null,
+        'error' => $job['error'] ?? null,
+        'created_at' => $job['created_at'] ?? null,
+        'updated_at' => $job['updated_at'] ?? null
+    ]);
+});
+
+// Presentations File Result
+Route::get('/result/presentations/file', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'presentations', 'file');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    if (($job['status'] ?? '') !== 'completed') {
+        return response()->json(['error' => 'Job not completed', 'status' => $job['status'] ?? 'unknown'], 409);
+    }
+    
+    return response()->json([
+        'success' => true,
+        'job_id' => $job['id'],
+        'tool_type' => 'presentations',
+        'input_type' => 'file',
+        'data' => $job['result'] ?? null
+    ]);
+});
+
+// 💬 DOCUMENT CHAT TOOL ENDPOINTS
+
+// Document Chat File Status
+Route::get('/status/document_chat/file', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'document_chat', 'file');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    return response()->json([
+        'job_id' => $job['id'],
+        'tool_type' => 'document_chat',
+        'input_type' => 'file',
+        'status' => $job['status'] ?? 'unknown',
+        'progress' => $job['progress'] ?? 0,
+        'stage' => $job['stage'] ?? null,
+        'error' => $job['error'] ?? null,
+        'created_at' => $job['created_at'] ?? null,
+        'updated_at' => $job['updated_at'] ?? null
+    ]);
+});
+
+// Document Chat File Result
+Route::get('/result/document_chat/file', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'document_chat', 'file');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    if (($job['status'] ?? '') !== 'completed') {
+        return response()->json(['error' => 'Job not completed', 'status' => $job['status'] ?? 'unknown'], 409);
+    }
+    
+    return response()->json([
+        'success' => true,
+        'job_id' => $job['id'],
+        'tool_type' => 'document_chat',
+        'input_type' => 'file',
+        'data' => $job['result'] ?? null
+    ]);
+});
+
+// 📄 CONTENT EXTRACTION TOOL ENDPOINTS
+
+// Content Extraction File Status
+Route::get('/status/content_extraction/file', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'content_extraction', 'file');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    return response()->json([
+        'job_id' => $job['id'],
+        'tool_type' => 'content_extraction',
+        'input_type' => 'file',
+        'status' => $job['status'] ?? 'unknown',
+        'progress' => $job['progress'] ?? 0,
+        'stage' => $job['stage'] ?? null,
+        'error' => $job['error'] ?? null,
+        'created_at' => $job['created_at'] ?? null,
+        'updated_at' => $job['updated_at'] ?? null
+    ]);
+});
+
+// Content Extraction File Result
+Route::get('/result/content_extraction/file', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'content_extraction', 'file');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    if (($job['status'] ?? '') !== 'completed') {
+        return response()->json(['error' => 'Job not completed', 'status' => $job['status'] ?? 'unknown'], 409);
+    }
+    
+    return response()->json([
+        'success' => true,
+        'job_id' => $job['id'],
+        'tool_type' => 'content_extraction',
+        'input_type' => 'file',
+        'data' => $job['result'] ?? null
+    ]);
+});
+
+// 🔄 DOCUMENT CONVERSION TOOL ENDPOINTS
+
+// Document Conversion File Status
+Route::get('/status/document_conversion/file', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'document_conversion', 'file');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    return response()->json([
+        'job_id' => $job['id'],
+        'tool_type' => 'document_conversion',
+        'input_type' => 'file',
+        'status' => $job['status'] ?? 'unknown',
+        'progress' => $job['progress'] ?? 0,
+        'stage' => $job['stage'] ?? null,
+        'error' => $job['error'] ?? null,
+        'created_at' => $job['created_at'] ?? null,
+        'updated_at' => $job['updated_at'] ?? null
+    ]);
+});
+
+// Document Conversion File Result
+Route::get('/result/document_conversion/file', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'document_conversion', 'file');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    if (($job['status'] ?? '') !== 'completed') {
+        return response()->json(['error' => 'Job not completed', 'status' => $job['status'] ?? 'unknown'], 409);
+    }
+    
+    return response()->json([
+        'success' => true,
+        'job_id' => $job['id'],
+        'tool_type' => 'document_conversion',
+        'input_type' => 'file',
+        'data' => $job['result'] ?? null
+    ]);
+});
+
 // 🔹 Test route to manually authenticate and upload file (bypasses auth middleware)
 Route::post('/test-upload-manual', function (Request $request) {
     $token = $request->bearerToken();
@@ -464,7 +1201,7 @@ Route::post('/summarize/async/text', function (Request $request) {
     return $controller->summarizeAsync($textRequest);
 });
 
-// Audio/Video File Summarization
+// Audio/Video File Summarization (using file_id)
 Route::post('/summarize/async/audiovideo', function (Request $request) {
     $token = $request->bearerToken();
     $parts = explode('|', $token);
@@ -576,7 +1313,7 @@ Route::post('/summarize/link', function (Request $request) {
     return $controller->summarizeAsync($linkRequest);
 });
 
-// Image Summarization
+// Image Summarization (using file_id)
 Route::post('/summarize/async/image', function (Request $request) {
     $token = $request->bearerToken();
     $parts = explode('|', $token);
@@ -647,6 +1384,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     // Payments
     Route::post('/checkout', [StripeController::class, 'createCheckoutSession']);
+    Route::get('/checkout/verify/{sessionId}', [StripeController::class, 'verifyCheckoutSession']);
 
     // Subscriptions
     Route::get('/subscription', [SubscriptionController::class, 'current']);
@@ -719,25 +1457,45 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/file-processing/extraction-capabilities', [FileExtractionController::class, 'getExtractionCapabilities']);
     Route::get('/file-processing/health', [FileExtractionController::class, 'checkHealth']);
     
-    // File Upload Summarization
-    Route::post('/summarize/async/file', [\App\Http\Controllers\Api\Client\SummarizeController::class, 'summarizeFileAsync']);
-});
+    // File Upload Summarization (using file_id)
+    Route::post('/summarize/async/file', function (Request $request) {
+        $request->validate([
+            'file_id' => 'required|string|exists:file_uploads,id',
+            'options' => 'sometimes|array'
+        ]);
 
-// 🔹 Admin Processing Dashboard Routes
-Route::middleware(['auth:sanctum'])->prefix('admin')->group(function () {
-    Route::get('/processing/overview', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getOverview']);
-    Route::get('/processing/statistics', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getStatistics']);
-    Route::get('/processing/performance', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getPerformanceMetrics']);
-    Route::get('/processing/health', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getSystemHealth']);
-    Route::get('/processing/cache', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getCacheStatistics']);
-    Route::get('/processing/batch', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getBatchStatistics']);
-    Route::get('/processing/jobs', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getJobStatistics']);
-    Route::get('/processing/activity', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getRecentActivity']);
-    Route::get('/processing/trends', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getProcessingTrends']);
-    Route::get('/processing/file-types', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getFileTypeDistribution']);
-    Route::get('/processing/tools', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getToolUsageDistribution']);
-    Route::post('/processing/cache/clear', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'clearCache']);
-    Route::post('/processing/cache/warm', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'warmUpCache']);
+        // Use Universal File Management Module to get file
+        $universalFileModule = app(\App\Services\Modules\UniversalFileManagementModule::class);
+        
+        // Get file using universal file management
+        $fileResult = $universalFileModule->getFile($request->file_id);
+        
+        if (!$fileResult['success']) {
+            return response()->json([
+                'error' => 'File not found',
+                'details' => $fileResult['error'] ?? 'File does not exist'
+            ], 404);
+        }
+        
+        $fileId = $request->file_id;
+        
+        // Create request with file-specific format
+        $fileRequest = new Request([
+            'content_type' => 'file',
+            'source' => [
+                'type' => 'file',
+                'data' => (string)$fileId
+            ],
+            'options' => array_merge([
+                'language' => 'en',
+                'format' => 'detailed',
+                'focus' => 'summary'
+            ], $request->options ?? [])
+        ]);
+
+        $controller = app(\App\Http\Controllers\Api\Client\SummarizeController::class);
+        return $controller->summarizeAsync($fileRequest);
+    });
     
     // AI Chat
     Route::post('/chat', [ChatController::class, 'chat']);
@@ -758,15 +1516,32 @@ Route::middleware(['auth:sanctum'])->prefix('admin')->group(function () {
     Route::get('/chat/sessions/{sessionId}/messages', [ChatMessageController::class, 'index']);
     Route::get('/chat/sessions/{sessionId}/history', [ChatMessageController::class, 'history']);
     
+    // Document Chat
+    Route::post('/chat/document', [DocumentChatController::class, 'chat']);
+    Route::get('/chat/document/{documentId}/history', [DocumentChatController::class, 'history']);
+});
+
+// 🔹 Admin Processing Dashboard Routes
+Route::middleware(['auth:sanctum'])->prefix('admin')->group(function () {
+    Route::get('/processing/overview', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getOverview']);
+    Route::get('/processing/statistics', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getStatistics']);
+    Route::get('/processing/performance', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getPerformanceMetrics']);
+    Route::get('/processing/health', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getSystemHealth']);
+    Route::get('/processing/cache', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getCacheStatistics']);
+    Route::get('/processing/batch', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getBatchStatistics']);
+    Route::get('/processing/jobs', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getJobStatistics']);
+    Route::get('/processing/activity', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getRecentActivity']);
+    Route::get('/processing/trends', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getProcessingTrends']);
+    Route::get('/processing/file-types', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getFileTypeDistribution']);
+    Route::get('/processing/tools', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'getToolUsageDistribution']);
+    Route::post('/processing/cache/clear', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'clearCache']);
+    Route::post('/processing/cache/warm', [\App\Http\Controllers\Api\Admin\ProcessingDashboardController::class, 'warmUpCache']);
+    
     // Content Summarization
     Route::post('/summarize', [SummarizeController::class, 'summarize']);
     Route::post('/summarize/async', [SummarizeController::class, 'summarizeAsync']);
     // status/result endpoints are defined outside the auth group with manual bearer validation
     Route::post('/summarize/validate', [SummarizeController::class, 'validateFile']);
-    
-    // Document Chat
-    Route::post('/chat/document', [DocumentChatController::class, 'chat']);
-    Route::get('/chat/document/{documentId}/history', [DocumentChatController::class, 'history']);
     
     // AI Presentation Generator - CORS OPTIONS routes
     Route::options('/presentations/generate-outline', function () { 
@@ -881,6 +1656,13 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'admin.auth'])->group(functi
         Route::get('/revenue', [DashboardController::class, 'revenue'])->name('admin.dashboard.revenue');
         Route::get('/users', [DashboardController::class, 'users'])->name('admin.dashboard.users');
         Route::get('/subscriptions', [DashboardController::class, 'subscriptions'])->name('admin.dashboard.subscriptions');
+        
+        // Enhanced analytics routes
+        Route::get('/mrr', [DashboardController::class, 'mrr'])->name('admin.dashboard.mrr');
+        Route::get('/arr', [DashboardController::class, 'arr'])->name('admin.dashboard.arr');
+        Route::get('/subscription-growth', [DashboardController::class, 'subscriptionGrowth'])->name('admin.dashboard.subscription-growth');
+        Route::get('/revenue-by-plan', [DashboardController::class, 'revenueByPlan'])->name('admin.dashboard.revenue-by-plan');
+        Route::get('/subscription-analytics', [DashboardController::class, 'subscriptionAnalytics'])->name('admin.dashboard.subscription-analytics');
     });
 
     // ========================================
@@ -924,6 +1706,10 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'admin.auth'])->group(functi
         Route::get('/{plan}/subscriptions', [AdminPlanController::class, 'subscriptions'])->name('admin.plans.subscriptions');
         Route::get('/{plan}/analytics', [AdminPlanController::class, 'analytics'])->name('admin.plans.analytics');
         
+        // Bulk operations
+        Route::post('/bulk-update', [AdminPlanController::class, 'bulkUpdate'])->name('admin.plans.bulk-update');
+        Route::post('/{plan}/duplicate', [AdminPlanController::class, 'duplicate'])->name('admin.plans.duplicate');
+        
         // Basic CRUD routes (must come last)
         Route::get('/{plan}', [AdminPlanController::class, 'show'])->name('admin.plans.show');
         Route::put('/{plan}', [AdminPlanController::class, 'update'])->name('admin.plans.update');
@@ -947,6 +1733,14 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'admin.auth'])->group(functi
         Route::post('/{subscription}/resume', [AdminSubscriptionController::class, 'resume'])->name('admin.subscriptions.resume');
         Route::post('/{subscription}/upgrade', [AdminSubscriptionController::class, 'upgrade'])->name('admin.subscriptions.upgrade');
         Route::post('/{subscription}/downgrade', [AdminSubscriptionController::class, 'downgrade'])->name('admin.subscriptions.downgrade');
+        
+        // Bulk operations
+        Route::post('/bulk-activate', [AdminSubscriptionController::class, 'bulkActivate'])->name('admin.subscriptions.bulk-activate');
+        Route::post('/bulk-cancel', [AdminSubscriptionController::class, 'bulkCancel'])->name('admin.subscriptions.bulk-cancel');
+        
+        // Additional operations
+        Route::post('/{subscription}/apply-grace-period', [AdminSubscriptionController::class, 'applyGracePeriod'])->name('admin.subscriptions.apply-grace-period');
+        Route::get('/{subscription}/payment-history', [AdminSubscriptionController::class, 'paymentHistory'])->name('admin.subscriptions.payment-history');
         
         // Analytics and reporting
         Route::get('/analytics/overview', [AdminSubscriptionController::class, 'analytics'])->name('admin.subscriptions.analytics');

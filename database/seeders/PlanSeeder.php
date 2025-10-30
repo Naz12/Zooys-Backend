@@ -9,6 +9,16 @@ class PlanSeeder extends Seeder
 {
     public function run(): void
     {
+        // Disable foreign key checks temporarily
+        DB::statement('SET FOREIGN_KEY_CHECKS=0;');
+        
+        // Clear existing plans
+        DB::table('plans')->truncate();
+        
+        // Re-enable foreign key checks
+        DB::statement('SET FOREIGN_KEY_CHECKS=1;');
+        
+        // Insert new 3-tier plan structure (Testing plan removed)
         DB::table('plans')->insert([
             [
                 'name' => 'Free',
@@ -20,58 +30,22 @@ class PlanSeeder extends Seeder
                 'updated_at' => now()->subDays(30),
             ],
             [
-                'name' => 'Starter',
-                'price' => 4.99,
-                'currency' => 'USD',
-                'limit' => 100,
-                'is_active' => true,
-                'created_at' => now()->subDays(25),
-                'updated_at' => now()->subDays(25),
-            ],
-            [
                 'name' => 'Pro',
                 'price' => 9.99,
                 'currency' => 'USD',
                 'limit' => 500,
                 'is_active' => true,
-                'created_at' => now()->subDays(20),
-                'updated_at' => now()->subDays(20),
+                'created_at' => now()->subDays(25),
+                'updated_at' => now()->subDays(25),
             ],
             [
-                'name' => 'Business',
-                'price' => 19.99,
-                'currency' => 'USD',
-                'limit' => 2000,
-                'is_active' => true,
-                'created_at' => now()->subDays(15),
-                'updated_at' => now()->subDays(15),
-            ],
-            [
-                'name' => 'Premium',
+                'name' => 'Unlimited',
                 'price' => 29.99,
                 'currency' => 'USD',
-                'limit' => null, // unlimited
+                'limit' => 10000, // Soft limit for abuse prevention
                 'is_active' => true,
-                'created_at' => now()->subDays(10),
-                'updated_at' => now()->subDays(10),
-            ],
-            [
-                'name' => 'Enterprise',
-                'price' => 99.99,
-                'currency' => 'USD',
-                'limit' => null, // unlimited
-                'is_active' => true,
-                'created_at' => now()->subDays(5),
-                'updated_at' => now()->subDays(5),
-            ],
-            [
-                'name' => 'Legacy Plan',
-                'price' => 5.99,
-                'currency' => 'USD',
-                'limit' => 50,
-                'is_active' => false, // Inactive plan
-                'created_at' => now()->subDays(60),
-                'updated_at' => now()->subDays(30),
+                'created_at' => now()->subDays(20),
+                'updated_at' => now()->subDays(20),
             ],
         ]);
     }
