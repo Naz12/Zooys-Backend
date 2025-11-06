@@ -20,6 +20,8 @@ use App\Http\Controllers\Api\Client\SummarizeController;
 use App\Http\Controllers\Api\Client\DocumentChatController;
 use App\Http\Controllers\Api\Client\PresentationController;
 use App\Http\Controllers\Api\Client\FileExtractionController;
+use App\Http\Controllers\Api\Client\PdfEditController;
+use App\Http\Controllers\Api\Client\DocumentIntelligenceController;
 
 // Admin Controllers
 use App\Http\Controllers\Api\Admin\AdminAuthController;
@@ -44,6 +46,10 @@ Route::post('/presentations/{aiResultId}/export', [PresentationController::class
 Route::get('/presentations/{aiResultId}/data', [PresentationController::class, 'getPresentationData']);
 Route::post('/presentations/{aiResultId}/save', [PresentationController::class, 'savePresentation']);
 Route::get('/files/download/{filename}', [PresentationController::class, 'downloadPresentation']);
+
+// 🔹 PDF Edit public status/result (manual bearer validation not strictly required; keep open for polling)
+Route::get('/pdf/edit/{operation}/status', [PdfEditController::class, 'status']);
+Route::get('/pdf/edit/{operation}/result', [PdfEditController::class, 'result']);
 
 // 🔹 Public Presentation Management Routes
 Route::get('/presentations', [PresentationController::class, 'getPresentations']);
@@ -356,6 +362,15 @@ $getJobForTool = function ($jobId, $toolType, $inputType) {
     $job = $service->getJob($jobId);
     if (!$job) return ['error' => 'Job not found', 'code' => 404];
     if ($job['tool_type'] !== $toolType) return ['error' => 'Job tool type mismatch', 'code' => 400];
+    
+    // For audiovideo, check if content_type is audio or video
+    if ($inputType === 'audiovideo') {
+        $contentType = $job['input']['content_type'] ?? null;
+        if (!in_array($contentType, ['audio', 'video'])) {
+            return ['error' => 'Job is not an audio/video summarization', 'code' => 400];
+        }
+    }
+    
     return ['job' => $job];
 };
 
@@ -483,7 +498,19 @@ Route::get('/status/summarize/file', function (Request $request) use ($authentic
     }
     
     $job = $result['job'];
-    return response()->json([
+    
+    // Extract error details from result if available
+    $errorDetails = null;
+    $docId = null;
+    $conversationId = null;
+    
+    if (isset($job['result']) && is_array($job['result'])) {
+        $errorDetails = $job['result']['error_details'] ?? null;
+        $docId = $job['result']['doc_id'] ?? $job['result']['error_details']['doc_id'] ?? null;
+        $conversationId = $job['result']['conversation_id'] ?? $job['result']['error_details']['conversation_id'] ?? null;
+    }
+    
+    $response = [
         'job_id' => $job['id'],
         'tool_type' => 'summarize',
         'input_type' => 'file',
@@ -493,7 +520,20 @@ Route::get('/status/summarize/file', function (Request $request) use ($authentic
         'error' => $job['error'] ?? null,
         'created_at' => $job['created_at'] ?? null,
         'updated_at' => $job['updated_at'] ?? null
-    ]);
+    ];
+    
+    // Include doc_id and conversation_id if available (for failed jobs with Document Intelligence)
+    if ($docId) {
+        $response['doc_id'] = $docId;
+    }
+    if ($conversationId) {
+        $response['conversation_id'] = $conversationId;
+    }
+    if ($errorDetails) {
+        $response['error_details'] = $errorDetails;
+    }
+    
+    return response()->json($response);
 });
 
 // Summarize File Result
@@ -573,6 +613,79 @@ Route::get('/result/summarize/web', function (Request $request) use ($authentica
         'job_id' => $job['id'],
         'tool_type' => 'summarize',
         'input_type' => 'web',
+        'data' => $job['result'] ?? null
+    ]);
+});
+
+// Summarize Audio/Video Status
+Route::get('/status/summarize/audiovideo', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'summarize', 'audiovideo');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    
+    // Determine input_type from job's content_type
+    $inputType = 'audiovideo';
+    if (isset($job['input']['content_type'])) {
+        $contentType = $job['input']['content_type'];
+        if (in_array($contentType, ['audio', 'video'])) {
+            $inputType = $contentType;
+        }
+    }
+    
+    return response()->json([
+        'job_id' => $job['id'],
+        'tool_type' => 'summarize',
+        'input_type' => $inputType,
+        'status' => $job['status'] ?? 'unknown',
+        'progress' => $job['progress'] ?? 0,
+        'stage' => $job['stage'] ?? null,
+        'error' => $job['error'] ?? null,
+        'created_at' => $job['created_at'] ?? null,
+        'updated_at' => $job['updated_at'] ?? null
+    ]);
+});
+
+// Summarize Audio/Video Result
+Route::get('/result/summarize/audiovideo', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'summarize', 'audiovideo');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    if (($job['status'] ?? '') !== 'completed') {
+        return response()->json(['error' => 'Job not completed', 'status' => $job['status'] ?? 'unknown'], 409);
+    }
+    
+    // Determine input_type from job's content_type
+    $inputType = 'audiovideo';
+    if (isset($job['input']['content_type'])) {
+        $contentType = $job['input']['content_type'];
+        if (in_array($contentType, ['audio', 'video'])) {
+            $inputType = $contentType;
+        }
+    }
+    
+    return response()->json([
+        'success' => true,
+        'job_id' => $job['id'],
+        'tool_type' => 'summarize',
+        'input_type' => $inputType,
         'data' => $job['result'] ?? null
     ]);
 });
@@ -1098,20 +1211,81 @@ Route::post('/test-upload-manual', function (Request $request) {
 // 🔹 Working summarize endpoint with manual authentication
 // Generic /summarize/async endpoint removed - use specialized endpoints instead
 
+// 🔹 Test token validation endpoint
+Route::get('/test-token-validation', function (Request $request) {
+    $token = $request->bearerToken();
+    
+    if (empty($token)) {
+        return response()->json([
+            'error' => 'Token not provided',
+            'hint' => 'Include Authorization header: Bearer {token}'
+        ], 401);
+    }
+
+    $parts = explode('|', $token);
+    
+    $result = [
+        'token_provided' => !empty($token),
+        'token_length' => strlen($token),
+        'parts_count' => count($parts),
+        'token_format_valid' => count($parts) === 2,
+    ];
+
+    if (count($parts) === 2) {
+        $tokenRecord = Laravel\Sanctum\PersonalAccessToken::where('token', hash('sha256', $parts[1]))->first();
+        $tokenById = Laravel\Sanctum\PersonalAccessToken::find($parts[0]);
+        
+        $result['token_found'] = $tokenRecord ? true : false;
+        $result['token_id_exists'] = $tokenById ? true : false;
+        
+        if ($tokenRecord) {
+            $result['user_id'] = $tokenRecord->tokenable_id;
+            $result['user_type'] = get_class($tokenRecord->tokenable);
+            $result['token_valid'] = true;
+        } else {
+            $result['token_valid'] = false;
+            $result['hint'] = 'Token hash does not match. Token may be expired or invalid.';
+        }
+    } else {
+        $result['token_valid'] = false;
+        $result['hint'] = 'Token format should be: {token_id}|{token_hash}';
+    }
+
+    return response()->json($result);
+});
+
 // 🔹 Specialized Async Summarize Endpoints
 // YouTube Video Summarization
 Route::post('/summarize/async/youtube', function (Request $request) {
     $token = $request->bearerToken();
+    
+    if (empty($token)) {
+        return response()->json([
+            'error' => 'Token not provided',
+            'hint' => 'Include Authorization header: Bearer {token}'
+        ], 401);
+    }
+
     $parts = explode('|', $token);
 
     if (count($parts) !== 2) {
-        return response()->json(['error' => 'Invalid token format'], 401);
+        return response()->json([
+            'error' => 'Invalid token format',
+            'hint' => 'Token should be in format: {token_id}|{token_hash}',
+            'received_format' => count($parts) . ' parts'
+        ], 401);
     }
 
     $tokenRecord = Laravel\Sanctum\PersonalAccessToken::where('token', hash('sha256', $parts[1]))->first();
 
     if (!$tokenRecord) {
-        return response()->json(['error' => 'Token not found'], 401);
+        // Try to find by token ID to provide better error
+        $tokenById = Laravel\Sanctum\PersonalAccessToken::find($parts[0]);
+        return response()->json([
+            'error' => 'Token not found',
+            'hint' => 'Token may be expired, revoked, or invalid. Please login again to get a new token.',
+            'token_id_exists' => $tokenById ? true : false
+        ], 401);
     }
 
     $user = $tokenRecord->tokenable;
@@ -1136,6 +1310,18 @@ Route::post('/summarize/async/youtube', function (Request $request) {
     }
 
     // Create request with YouTube-specific format
+    // Map 'detailed' to 'bundle' (API only accepts: plain, json, srt, article, bundle)
+    $format = $request->options['format'] ?? 'bundle';
+    $validFormats = ['plain', 'json', 'srt', 'article', 'bundle'];
+    if (!in_array($format, $validFormats)) {
+        // Map common invalid formats to valid ones
+        if ($format === 'detailed') {
+            $format = 'bundle'; // 'detailed' maps to 'bundle' which includes article_text
+        } else {
+            $format = 'bundle'; // Default fallback
+        }
+    }
+    
     $youtubeRequest = new Request([
         'content_type' => 'link',
         'source' => [
@@ -1144,9 +1330,9 @@ Route::post('/summarize/async/youtube', function (Request $request) {
         ],
         'options' => array_merge([
             'language' => 'en',
-            'format' => 'bundle',
+            'format' => $format,
             'focus' => 'summary'
-        ], $request->options ?? [])
+        ], array_merge($request->options ?? [], ['format' => $format]))
     ]);
 
     $controller = app(\App\Http\Controllers\Api\Client\SummarizeController::class);
@@ -1313,70 +1499,6 @@ Route::post('/summarize/link', function (Request $request) {
     return $controller->summarizeAsync($linkRequest);
 });
 
-// Image Summarization (using file_id)
-Route::post('/summarize/async/image', function (Request $request) {
-    $token = $request->bearerToken();
-    $parts = explode('|', $token);
-
-    if (count($parts) !== 2) {
-        return response()->json(['error' => 'Invalid token format'], 401);
-    }
-
-    $tokenRecord = Laravel\Sanctum\PersonalAccessToken::where('token', hash('sha256', $parts[1]))->first();
-
-    if (!$tokenRecord) {
-        return response()->json(['error' => 'Token not found'], 401);
-    }
-
-    $user = $tokenRecord->tokenable;
-
-    if (!$user) {
-        return response()->json(['error' => 'User not found'], 401);
-    }
-
-    // Manually authenticate the user
-    auth()->login($user);
-
-    // Validate file_id
-    $request->validate([
-        'file_id' => 'required|string|exists:file_uploads,id',
-        'options' => 'sometimes|array'
-    ]);
-
-    // Use Universal File Management Module to get file
-    $universalFileModule = app(\App\Services\Modules\UniversalFileManagementModule::class);
-    
-    // Get file using universal file management
-    $fileResult = $universalFileModule->getFile($request->file_id);
-    
-    if (!$fileResult['success']) {
-        return response()->json([
-            'error' => 'File not found',
-            'details' => $fileResult['error'] ?? 'File does not exist'
-        ], 404);
-    }
-    
-    $fileId = $request->file_id;
-    
-    // Create request with image-specific format
-    $imageRequest = new Request([
-        'content_type' => 'image',
-        'source' => [
-            'type' => 'file',
-            'data' => (string)$fileId // Ensure file ID is string
-        ],
-        'options' => array_merge([
-            'language' => 'en',
-            'format' => 'detailed',
-            'focus' => 'summary'
-        ], $request->options ?? [])
-    ]);
-
-    $controller = app(\App\Http\Controllers\Api\Client\SummarizeController::class);
-    return $controller->summarizeAsync($imageRequest);
-});
-
-
 // 🔹 Authenticated
 Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -1436,6 +1558,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     
     // File Uploads
     Route::post('/files/upload', [FileUploadController::class, 'upload']);
+    Route::post('/files/test-upload', [FileUploadController::class, 'testUpload']); // Test endpoint
     Route::get('/files', [FileUploadController::class, 'index']);
     Route::get('/files/{id}', [FileUploadController::class, 'show']);
     Route::delete('/files/{id}', [FileUploadController::class, 'destroy']);
@@ -1453,6 +1576,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // File Processing and Conversion
     Route::post('/file-processing/convert', [FileExtractionController::class, 'convertDocument']);
     Route::post('/file-processing/extract', [FileExtractionController::class, 'extractContent']);
+    // PDF Edit operations (uses universal file IDs and job scheduler)
+    Route::post('/pdf/edit/{operation}', [PdfEditController::class, 'start']);
     Route::get('/file-processing/conversion-capabilities', [FileExtractionController::class, 'getCapabilities']);
     Route::get('/file-processing/extraction-capabilities', [FileExtractionController::class, 'getExtractionCapabilities']);
     Route::get('/file-processing/health', [FileExtractionController::class, 'checkHealth']);
@@ -1464,6 +1589,29 @@ Route::middleware(['auth:sanctum'])->group(function () {
             'options' => 'sometimes|array'
         ]);
 
+        // Get file record to determine content type
+        $file = \App\Models\FileUpload::find($request->file_id);
+        if (!$file) {
+            return response()->json([
+                'error' => 'File not found'
+            ], 404);
+        }
+
+        // Determine content_type from file type
+        // Map file_type to valid content_type (pdf, image, audio, video)
+        $fileType = strtolower($file->file_type ?? '');
+        $contentType = 'pdf'; // Default
+        
+        if (in_array($fileType, ['pdf', 'doc', 'docx', 'txt'])) {
+            $contentType = 'pdf'; // Documents use pdf content_type
+        } elseif (in_array($fileType, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'])) {
+            $contentType = 'image';
+        } elseif (in_array($fileType, ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'])) {
+            $contentType = 'audio';
+        } elseif (in_array($fileType, ['mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv', 'webm'])) {
+            $contentType = 'video';
+        }
+        
         // Use Universal File Management Module to get file
         $universalFileModule = app(\App\Services\Modules\UniversalFileManagementModule::class);
         
@@ -1480,15 +1628,26 @@ Route::middleware(['auth:sanctum'])->group(function () {
         $fileId = $request->file_id;
         
         // Create request with file-specific format
+        // Map 'detailed' format to 'bundle' for consistency (API only accepts: plain, json, srt, article, bundle)
+        $format = $request->options['format'] ?? 'bundle';
+        $validFormats = ['plain', 'json', 'srt', 'article', 'bundle'];
+        if (!in_array($format, $validFormats)) {
+            if ($format === 'detailed') {
+                $format = 'bundle';
+            } else {
+                $format = 'bundle';
+            }
+        }
+        
         $fileRequest = new Request([
-            'content_type' => 'file',
+            'content_type' => $contentType, // Use actual file type (pdf, image, audio, video)
             'source' => [
                 'type' => 'file',
                 'data' => (string)$fileId
             ],
             'options' => array_merge([
                 'language' => 'en',
-                'format' => 'detailed',
+                'format' => $format,
                 'focus' => 'summary'
             ], $request->options ?? [])
         ]);
@@ -1519,6 +1678,95 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Document Chat
     Route::post('/chat/document', [DocumentChatController::class, 'chat']);
     Route::get('/chat/document/{documentId}/history', [DocumentChatController::class, 'history']);
+    
+    // Document Intelligence
+    Route::post('/documents/ingest', [DocumentIntelligenceController::class, 'ingest']);
+    Route::post('/documents/search', [DocumentIntelligenceController::class, 'search']);
+    Route::post('/documents/answer', [DocumentIntelligenceController::class, 'answer']);
+    Route::post('/documents/chat', [DocumentIntelligenceController::class, 'chat']);
+    Route::get('/documents/jobs/{jobId}/status', [DocumentIntelligenceController::class, 'getStatus']);
+    Route::get('/documents/jobs/{jobId}/result', [DocumentIntelligenceController::class, 'getResult']);
+    Route::get('/documents/health', [DocumentIntelligenceController::class, 'health']);
+    
+    // AI Manager - Models
+    Route::get('/models', function (Request $request) {
+        $aiManagerService = app(\App\Services\AIManagerService::class);
+        $result = $aiManagerService->getAvailableModels();
+        
+        if ($result['success']) {
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'available_models' => $result['models'],
+                    'count' => $result['count']
+                ]
+            ]);
+        }
+        
+        return response()->json([
+            'status' => 'error',
+            'message' => $result['error'] ?? 'Failed to retrieve models'
+        ], 500);
+    });
+    
+    // Document Chat (simplified endpoint with conversation_id management)
+    Route::post('/document/chat', function (Request $request) {
+        $request->validate([
+            'doc_id' => 'required|string',
+            'query' => 'required|string|max:1000',
+            'conversation_id' => 'nullable|string|max:200',
+            'llm_model' => 'nullable|string|max:50',
+            'max_tokens' => 'nullable|integer|min:50|max:2000',
+            'top_k' => 'nullable|integer|min:1|max:10'
+        ]);
+
+        try {
+            $userId = auth()->id();
+            $docId = $request->input('doc_id');
+            $query = $request->input('query');
+            $conversationId = $request->input('conversation_id');
+
+            // Find or create conversation record
+            $conversation = \App\Models\DocumentConversation::findOrCreateForDoc(
+                $docId,
+                $userId,
+                $conversationId
+            );
+
+            // Use the conversation_id from the record
+            $conversationId = $conversation->conversation_id;
+
+            // Call Document Intelligence chat
+            $docIntelligenceService = app(\App\Services\DocumentIntelligenceService::class);
+            $chatResult = $docIntelligenceService->chat($query, [
+                'doc_ids' => [$docId],
+                'conversation_id' => $conversationId,
+                'llm_model' => $request->input('llm_model', 'llama3'),
+                'max_tokens' => $request->input('max_tokens', 512),
+                'top_k' => $request->input('top_k', 3),
+                'force_fallback' => true // Always true for Document Intelligence microservice
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'conversation_id' => $chatResult['conversation_id'] ?? $conversationId,
+                'answer' => $chatResult['answer'] ?? '',
+                'sources' => $chatResult['sources'] ?? [],
+                'doc_id' => $docId
+            ]);
+
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Document chat failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Chat failed: ' . $e->getMessage()
+            ], 500);
+        }
+    });
 });
 
 // 🔹 Admin Processing Dashboard Routes

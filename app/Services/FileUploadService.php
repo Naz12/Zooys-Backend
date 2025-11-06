@@ -111,13 +111,14 @@ class FileUploadService
 
     /**
      * Get file content for processing
+     * Uses PDF/Document microservice for extraction
      */
     public function getFileContent(FileUpload $fileUpload): array
     {
         try {
-            $filePath = $fileUpload->file_path;
+            $filePath = Storage::path($fileUpload->file_path);
             
-            if (!Storage::exists($filePath)) {
+            if (!Storage::exists($fileUpload->file_path)) {
                 return [
                     'success' => false,
                     'error' => 'File not found'
@@ -129,32 +130,37 @@ class FileUploadService
 
             switch ($fileUpload->file_type) {
                 case 'pdf':
-                    // Use existing PDF processing service
-                    $pdfService = app(\App\Services\PythonPDFProcessingService::class);
-                    $result = $pdfService->extractTextFromPDF($filePath);
-                    if ($result['success']) {
-                        $content = $result['text'];
-                        $metadata = $result['metadata'] ?? [];
-                    }
-                    break;
-
                 case 'doc':
-                    // Use existing Word processing service
-                    $wordService = app(\App\Services\WordProcessingService::class);
-                    $result = $wordService->extractTextFromWord($filePath);
-                    if ($result['success']) {
-                        $content = $result['text'];
-                        $metadata = [
-                            'pages' => $result['pages'] ?? [],
-                            'total_pages' => $result['total_pages'] ?? 0,
-                            'word_count' => $result['word_count'] ?? 0,
-                            'character_count' => $result['character_count'] ?? 0
-                        ];
+                    // Use PDF/Document microservice for extraction
+                    $converterService = app(\App\Services\DocumentConverterService::class);
+                    
+                    // Extract content using microservice
+                    $extractResult = $converterService->extractContent($filePath, [
+                        'content' => true,
+                        'metadata' => true,
+                        'images' => false
+                    ]);
+                    
+                    if ($extractResult['success'] && isset($extractResult['result'])) {
+                        $result = $extractResult['result'];
+                        $content = $result['content'] ?? '';
+                        $metadata = $result['metadata'] ?? [];
+                        
+                        // Add word/character count if not present
+                        if (!isset($metadata['word_count']) && !empty($content)) {
+                            $metadata['word_count'] = str_word_count($content);
+                        }
+                        if (!isset($metadata['character_count']) && !empty($content)) {
+                            $metadata['character_count'] = strlen($content);
+                        }
+                    } else {
+                        throw new \Exception($extractResult['error'] ?? 'Extraction failed');
                     }
                     break;
 
                 case 'txt':
-                    $content = Storage::get($filePath);
+                    // Text files can be read directly
+                    $content = Storage::get($fileUpload->file_path);
                     $metadata = [
                         'word_count' => str_word_count($content),
                         'character_count' => strlen($content)
@@ -180,6 +186,7 @@ class FileUploadService
         } catch (\Exception $e) {
             Log::error('File content extraction failed', [
                 'file_id' => $fileUpload->id,
+                'file_type' => $fileUpload->file_type,
                 'error' => $e->getMessage()
             ]);
 

@@ -1,0 +1,587 @@
+{
+  "info": {
+    "name": "Zooys Summarize Async Endpoints",
+    "description": "Complete API collection for async summarization endpoints - YouTube, Text, Files, Audio/Video, and Links",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "zooys-summarize-async-2025",
+    "version": "1.0.0"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{bearer_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "1. YouTube Video Summarization",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{bearer_token}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"url\": \"https://www.youtube.com/watch?v=dQw4w9WgXcQ\",\n  \"options\": {\n    \"language\": \"en\",\n    \"format\": \"detailed\",\n    \"model\": \"deepseek-chat\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/summarize/async/youtube",
+          "host": ["{{base_url}}"],
+          "path": ["api", "summarize", "async", "youtube"]
+        },
+        "description": "Summarize YouTube video content. Uses TranscriberModule to extract transcript, then AI Manager to generate summary.\n\n**Flow:** YouTube URL → TranscriberModule → AI Manager → Summary\n\n**Response:** Returns job_id for polling status and result."
+      },
+      "response": []
+    },
+    {
+      "name": "2. Text Summarization",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{bearer_token}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"text\": \"Artificial intelligence (AI) is transforming industries across the globe. From healthcare to finance, AI technologies are enabling more efficient processes, better decision-making, and innovative solutions. Machine learning algorithms can analyze vast amounts of data to identify patterns and make predictions. Natural language processing allows computers to understand and generate human language. Computer vision enables machines to interpret and analyze visual information. As AI continues to evolve, it promises to revolutionize how we work, live, and interact with technology.\",\n  \"options\": {\n    \"language\": \"en\",\n    \"format\": \"detailed\",\n    \"model\": \"deepseek-chat\",\n    \"focus\": \"summary\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/summarize/async/text",
+          "host": ["{{base_url}}"],
+          "path": ["api", "summarize", "async", "text"]
+        },
+        "description": "Summarize raw text content. Uses AI Manager directly to generate summary.\n\n**Flow:** Text → AI Manager → Summary\n\n**Response:** Returns job_id for polling status and result."
+      },
+      "response": []
+    },
+    {
+      "name": "3. File Summarization (PDF/Doc/Image)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{bearer_token}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"file_id\": \"1\",\n  \"options\": {\n    \"language\": \"en\",\n    \"format\": \"detailed\",\n    \"focus\": \"summary\",\n    \"ocr\": \"auto\",\n    \"lang\": \"eng\",\n    \"llm_model\": \"llama3\",\n    \"max_tokens\": 1024,\n    \"top_k\": 5\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/summarize/async/file",
+          "host": ["{{base_url}}"],
+          "path": ["api", "summarize", "async", "file"]
+        },
+        "description": "Summarize PDF, DOC, DOCX, or Image files. Uses Document Intelligence for ingestion and RAG-powered summarization.\n\n**Flow:** File ID → Check if ingested → Ingest (if needed) → Poll ingestion → Document Intelligence Answer → Summary\n\n**Response:** Returns job_id for polling status and result. Includes doc_id for future chat operations."
+      },
+      "response": []
+    },
+    {
+      "name": "4. Audio/Video File Summarization",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{bearer_token}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"file_id\": \"2\",\n  \"options\": {\n    \"language\": \"en\",\n    \"format\": \"detailed\",\n    \"focus\": \"summary\",\n    \"model\": \"deepseek-chat\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/summarize/async/audiovideo",
+          "host": ["{{base_url}}"],
+          "path": ["api", "summarize", "async", "audiovideo"]
+        },
+        "description": "Summarize audio or video files. Uses TranscriberModule to extract transcript, then AI Manager to generate summary.\n\n**Flow:** File ID → TranscriberModule → AI Manager → Summary\n\n**Response:** Returns job_id for polling status and result."
+      },
+      "response": []
+    },
+    {
+      "name": "5. Link/URL Summarization",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{bearer_token}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"url\": \"https://example.com/article\",\n  \"options\": {\n    \"language\": \"en\",\n    \"format\": \"detailed\",\n    \"focus\": \"summary\",\n    \"model\": \"deepseek-chat\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/summarize/link",
+          "host": ["{{base_url}}"],
+          "path": ["api", "summarize", "link"]
+        },
+        "description": "Summarize web page content from any URL. Uses WebScrapingService to extract content, then AI Manager to generate summary.\n\n**Flow:** URL → WebScrapingService → AI Manager → Summary\n\n**Note:** This endpoint is async but uses the same endpoint pattern.\n\n**Response:** Returns job_id for polling status and result."
+      },
+      "response": []
+    },
+    {
+      "name": "6. Status & Result Endpoints",
+      "item": [
+        {
+          "name": "6a. YouTube Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/status/summarize/youtube?job_id={{job_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "status", "summarize", "youtube"],
+              "query": [
+                {
+                  "key": "job_id",
+                  "value": "{{job_id}}",
+                  "description": "Job ID from YouTube summarization"
+                }
+              ]
+            },
+            "description": "Check status of YouTube summarization job.\n\n**Response includes:**\n- job_id, tool_type: 'summarize', input_type: 'youtube'\n- status: pending, processing, completed, failed\n- progress: 0-100\n- stage: Current processing stage"
+          },
+          "response": []
+        },
+        {
+          "name": "6b. YouTube Result",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/result/summarize/youtube?job_id={{job_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "result", "summarize", "youtube"],
+              "query": [
+                {
+                  "key": "job_id",
+                  "value": "{{job_id}}",
+                  "description": "Job ID from YouTube summarization"
+                }
+              ]
+            },
+            "description": "Get result of completed YouTube summarization job.\n\n**Response includes:**\n- success: Boolean\n- job_id, tool_type: 'summarize', input_type: 'youtube'\n- data: Summary data with key_points, metadata"
+          },
+          "response": []
+        },
+        {
+          "name": "6c. Text Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/status/summarize/text?job_id={{job_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "status", "summarize", "text"],
+              "query": [
+                {
+                  "key": "job_id",
+                  "value": "{{job_id}}",
+                  "description": "Job ID from text summarization"
+                }
+              ]
+            },
+            "description": "Check status of text summarization job.\n\n**Response includes:**\n- job_id, tool_type: 'summarize', input_type: 'text'\n- status, progress, stage"
+          },
+          "response": []
+        },
+        {
+          "name": "6d. Text Result",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/result/summarize/text?job_id={{job_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "result", "summarize", "text"],
+              "query": [
+                {
+                  "key": "job_id",
+                  "value": "{{job_id}}",
+                  "description": "Job ID from text summarization"
+                }
+              ]
+            },
+            "description": "Get result of completed text summarization job.\n\n**Response includes:**\n- success, job_id, tool_type: 'summarize', input_type: 'text'\n- data: Summary with key_points"
+          },
+          "response": []
+        },
+        {
+          "name": "6e. File Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/status/summarize/file?job_id={{job_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "status", "summarize", "file"],
+              "query": [
+                {
+                  "key": "job_id",
+                  "value": "{{job_id}}",
+                  "description": "Job ID from file summarization (PDF/Doc/Image/Audio/Video)"
+                }
+              ]
+            },
+            "description": "Check status of file summarization job (PDF/Doc/Image/Audio/Video).\n\n**Response includes:**\n- job_id, tool_type: 'summarize', input_type: 'file'\n- status, progress, stage"
+          },
+          "response": []
+        },
+        {
+          "name": "6f. File Result",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/result/summarize/file?job_id={{job_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "result", "summarize", "file"],
+              "query": [
+                {
+                  "key": "job_id",
+                  "value": "{{job_id}}",
+                  "description": "Job ID from file summarization (PDF/Doc/Image/Audio/Video)"
+                }
+              ]
+            },
+            "description": "Get result of completed file summarization job.\n\n**Response includes:**\n- success, job_id, tool_type: 'summarize', input_type: 'file'\n- data: Summary with sources (for Document Intelligence), doc_id"
+          },
+          "response": []
+        },
+        {
+          "name": "6g. Web/Link Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/status/summarize/web?job_id={{job_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "status", "summarize", "web"],
+              "query": [
+                {
+                  "key": "job_id",
+                  "value": "{{job_id}}",
+                  "description": "Job ID from web/link summarization"
+                }
+              ]
+            },
+            "description": "Check status of web/link summarization job.\n\n**Response includes:**\n- job_id, tool_type: 'summarize', input_type: 'web'\n- status, progress, stage"
+          },
+          "response": []
+        },
+        {
+          "name": "6h. Web/Link Result",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/result/summarize/web?job_id={{job_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "result", "summarize", "web"],
+              "query": [
+                {
+                  "key": "job_id",
+                  "value": "{{job_id}}",
+                  "description": "Job ID from web/link summarization"
+                }
+              ]
+            },
+            "description": "Get result of completed web/link summarization job.\n\n**Response includes:**\n- success, job_id, tool_type: 'summarize', input_type: 'web'\n- data: Summary with key_points"
+          },
+          "response": []
+        },
+        {
+          "name": "6i. Universal Status (Alternative)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/status?job_id={{job_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "status"],
+              "query": [
+                {
+                  "key": "job_id",
+                  "value": "{{job_id}}",
+                  "description": "Job ID from any summarize endpoint"
+                }
+              ]
+            },
+            "description": "Universal status endpoint (works for all job types).\n\n**Use specific endpoints when possible for better validation.**"
+          },
+          "response": []
+        },
+        {
+          "name": "6j. Universal Result (Alternative)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{bearer_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/result?job_id={{job_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "result"],
+              "query": [
+                {
+                  "key": "job_id",
+                  "value": "{{job_id}}",
+                  "description": "Job ID from any summarize endpoint"
+                }
+              ]
+            },
+            "description": "Universal result endpoint (works for all job types).\n\n**Use specific endpoints when possible for better validation.**"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "7. Get Available Models",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{bearer_token}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/models",
+          "host": ["{{base_url}}"],
+          "path": ["api", "models"]
+        },
+        "description": "Get list of available AI models for summarization.\n\n**Response includes:**\n- available_models: Array of model objects with key, vendor, display\n- count: Number of available models\n\n**Common models:**\n- deepseek-chat (default)\n- ollama:llama3\n- ollama:mistral\n- gpt-4o\n- gpt-3.5-turbo"
+      },
+      "response": []
+    },
+    {
+      "name": "8. Test Token Validation",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{bearer_token}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/test-token-validation",
+          "host": ["{{base_url}}"],
+          "path": ["api", "test-token-validation"]
+        },
+        "description": "Test if your bearer token is valid and properly formatted.\n\n**Use this endpoint if you get 'Token not found' errors.**\n\n**Response includes:**\n- token_provided: Whether token was sent\n- token_length: Length of token string\n- parts_count: Number of parts (should be 2)\n- token_format_valid: Whether format is correct\n- token_found: Whether token exists in database\n- token_valid: Overall validity\n- user_id: User ID if token is valid\n- hint: Helpful error messages if token is invalid"
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "bearer_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "job_id",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
+

@@ -1,0 +1,42 @@
+﻿{
+    "submit":  {
+                   "success":  true,
+                   "job_id":  "0a5d0c5b-795a-43a2-a6c1-c262df272702",
+                   "status":  "pending",
+                   "message":  "PDF job queued successfully"
+               },
+    "status":  {
+                   "job_id":  "0a5d0c5b-795a-43a2-a6c1-c262df272702",
+                   "status":  "completed",
+                   "progress":  100,
+                   "stage":  "completed",
+                   "error":  null,
+                   "created_at":  "2025-10-30T19:15:02.810688Z",
+                   "updated_at":  "2025-10-30T19:15:17.289761Z"
+               },
+    "result":  {
+                   "success":  true,
+                   "job_id":  "0a5d0c5b-795a-43a2-a6c1-c262df272702",
+                   "operation":  "merge",
+                   "data":  {
+                                "remote_job_id":  "1af81593-742c-418e-b560-26a1fac755c0",
+                                "operation":  "merge",
+                                "result":  null
+                            },
+                   "metadata":  {
+                                    "processing_started_at":  "2025-10-30T19:15:05.439232Z",
+                                    "processing_completed_at":  "2025-10-30T19:15:17.286215Z",
+                                    "total_processing_time":  11.839385,
+                                    "file_count":  2,
+                                    "tokens_used":  0,
+                                    "confidence_score":  0,
+                                    "processing_stages":  [
+                                                              "validating",
+                                                              "preparing_files",
+                                                              "starting_microservice_job",
+                                                              "monitoring",
+                                                              "fetching_result"
+                                                          ]
+                                }
+               }
+}

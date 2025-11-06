@@ -145,7 +145,7 @@ class UniversalJobService
     /**
      * Fail job with error
      */
-    public function failJob($jobId, $error, $metadata = [])
+    public function failJob($jobId, $error, $metadata = [], $result = null)
     {
         $job = $this->getJob($jobId);
         if (!$job) {
@@ -156,6 +156,12 @@ class UniversalJobService
         $job['stage'] = 'failed';
         $job['error'] = $error;
         $job['updated_at'] = now()->toISOString();
+        
+        // Store result data if provided (e.g., doc_id, conversation_id for failed Document Intelligence jobs)
+        if ($result !== null) {
+            $job['result'] = $result;
+        }
+        
         $job['metadata'] = array_merge($job['metadata'], $metadata, [
             'processing_completed_at' => now()->toISOString(),
             'total_processing_time' => $this->calculateProcessingTime($job)
@@ -209,14 +215,43 @@ class UniversalJobService
             if ($result['success']) {
                 $this->completeJob($jobId, $result['data'], $result['metadata'] ?? []);
             } else {
-                $this->failJob($jobId, $result['error'], $result['metadata'] ?? []);
+                // Store result data even on failure (for doc_id, conversation_id, etc.)
+                $errorResult = [
+                    'success' => false,
+                    'error' => $result['error'],
+                    'error_details' => $result['error_details'] ?? null,
+                    'doc_id' => $result['doc_id'] ?? null,
+                    'conversation_id' => $result['conversation_id'] ?? null
+                ];
+                $this->failJob($jobId, $result['error'], $result['metadata'] ?? [], $errorResult);
             }
 
             return $result;
 
         } catch (\Exception $e) {
-            $this->failJob($jobId, $e->getMessage());
-            throw $e;
+            $errorMessage = $e->getMessage();
+            $errorDetails = [
+                'exception_type' => get_class($e),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ];
+            
+            Log::error("Universal Job processing exception", [
+                'job_id' => $jobId,
+                'error' => $errorMessage,
+                'details' => $errorDetails
+            ]);
+            
+            $this->failJob($jobId, $errorMessage);
+            $this->addLog($jobId, "Job processing exception: {$errorMessage}", 'error', $errorDetails);
+            
+            // Don't re-throw to prevent command from failing - error is already logged
+            return [
+                'success' => false,
+                'error' => $errorMessage,
+                'error_details' => $errorDetails
+            ];
         }
     }
 
@@ -250,6 +285,12 @@ class UniversalJobService
             
             case 'content_extraction':
                 return $this->processContentExtractionJobWithStages($job['id'], $input, $options);
+            
+            case 'pdf_edit':
+                return $this->processPdfEditJobWithStages($job['id'], $input, $options);
+            
+            case 'document_intelligence':
+                return $this->processDocumentIntelligenceJobWithStages($job['id'], $input, $options);
             
             default:
                 throw new \Exception("Unsupported tool type: {$toolType}");
@@ -725,9 +766,14 @@ class UniversalJobService
                 'stage' => 'ai_processing',
                 'progress' => 50
             ]);
-            $this->addLog($jobId, "Sending text to AI Manager for summarization", 'info');
+            
+            $model = $options['model'] ?? config('services.ai_manager.default_model', 'deepseek-chat');
+            $this->addLog($jobId, "Sending text to AI Manager for summarization", 'info', [
+                'model' => $model,
+                'text_length' => strlen($text)
+            ]);
 
-            $result = $this->universalFileModule->getAIProcessingModule()->summarize($text, $options);
+            $result = $this->universalFileModule->getAIProcessingModule()->summarize($text, array_merge($options, ['model' => $model]));
             
             // Stage 4: Finalizing
             $this->updateJob($jobId, [
@@ -786,57 +832,299 @@ class UniversalJobService
     private function processYouTubeSummarizationWithStages($jobId, $url, $options, $userId = null)
     {
         try {
-            // Stage 3: Video Processing
+            Log::info("Processing YouTube summarization", [
+                'job_id' => $jobId,
+                'url' => $url,
+                'options' => $options
+            ]);
+            // Stage 2: Video Processing
             $this->updateJob($jobId, [
                 'stage' => 'processing_video',
-                'progress' => 30
+                'progress' => 20
             ]);
             $this->addLog($jobId, "Processing YouTube video", 'info', ['url' => $url]);
 
-            // Stage 4: Transcription
+            // Stage 3: Transcription
             $this->updateJob($jobId, [
                 'stage' => 'transcribing',
-                'progress' => 50
+                'progress' => 40
             ]);
             $this->addLog($jobId, "Transcribing video content", 'info');
 
-            // Use UnifiedProcessingService for YouTube processing
-            $unifiedService = app(\App\Services\Modules\UnifiedProcessingService::class);
-            $result = $unifiedService->processYouTubeVideo($url, $options, $userId);
+            // Use TranscriberModule to get transcript
+            // Use 'bundle' format as it reliably returns article_text from BrightData API
+            $transcriberModule = app(\App\Services\Modules\TranscriberModule::class);
             
-            // Stage 5: AI Processing
-            $this->updateJob($jobId, [
-                'stage' => 'ai_processing',
-                'progress' => 80
-            ]);
-            $this->addLog($jobId, "AI summarization completed", 'info', [
-                'video_id' => $result['metadata']['video_id'] ?? 'unknown',
-                'duration' => $result['metadata']['duration'] ?? 'unknown'
+            // Ensure format is valid (API only accepts: plain, json, srt, article, bundle)
+            $requestFormat = $options['format'] ?? 'bundle';
+            $validFormats = ['plain', 'json', 'srt', 'article', 'bundle'];
+            if (!in_array($requestFormat, $validFormats)) {
+                $this->addLog($jobId, "Invalid format '{$requestFormat}', defaulting to 'bundle'", 'warning');
+                $requestFormat = 'bundle';
+            }
+            
+            $transcriptionResult = $transcriberModule->transcribeVideo($url, [
+                'format' => $requestFormat, // Default to 'bundle' for better compatibility
+                'language' => $options['language'] ?? 'auto'
             ]);
 
-            // Stage 6: Finalizing
+            if (!$transcriptionResult['success']) {
+                $errorMessage = $transcriptionResult['error'] ?? 'Unknown error';
+                $errorDetails = $transcriptionResult['error_details'] ?? [
+                    'error_type' => 'transcription_error',
+                    'error_source' => 'TranscriberModule',
+                    'context' => ['video_url' => $url]
+                ];
+                
+                // Merge error_details if available
+                if (isset($transcriptionResult['error_details'])) {
+                    $errorDetails = array_merge($errorDetails, $transcriptionResult['error_details']);
+                }
+                
+                $fullErrorMessage = "Transcription failed: " . $errorMessage;
+                $this->failJob($jobId, $fullErrorMessage);
+                $this->addLog($jobId, $fullErrorMessage, 'error', $errorDetails);
+                
+                return [
+                    'success' => false,
+                    'error' => 'Failed to transcribe YouTube video: ' . $errorMessage,
+                    'error_details' => $errorDetails,
+                    'metadata' => [
+                        'file_count' => 0,
+                        'tokens_used' => 0,
+                        'confidence_score' => 0,
+                        'source_type' => 'youtube'
+                    ]
+                ];
+            }
+
+            $transcript = $transcriptionResult['transcript'] ?? '';
+            if (empty(trim($transcript))) {
+                $errorMessage = "No transcript content available from video. The video may not have captions/transcripts available, or the transcriber service was unable to extract them.";
+                $this->failJob($jobId, $errorMessage);
+                $this->addLog($jobId, $errorMessage, 'error', [
+                    'video_url' => $url,
+                    'video_id' => $transcriptionResult['video_id'] ?? null,
+                    'transcription_result_keys' => array_keys($transcriptionResult)
+                ]);
+                return [
+                    'success' => false,
+                    'error' => $errorMessage,
+                    'error_details' => [
+                        'error_type' => 'empty_transcript',
+                        'error_source' => 'TranscriberModule',
+                        'possible_causes' => [
+                            'Video does not have captions/transcripts enabled',
+                            'Video captions are not available in the requested language',
+                            'Transcriber service returned empty content',
+                            'Video may be private or restricted'
+                        ],
+                        'context' => [
+                            'video_url' => $url,
+                            'video_id' => $transcriptionResult['video_id'] ?? null
+                        ]
+                    ],
+                    'metadata' => [
+                        'file_count' => 0,
+                        'tokens_used' => 0,
+                        'confidence_score' => 0,
+                        'source_type' => 'youtube'
+                    ]
+                ];
+            }
+
+            // Stage 4: AI Summarization
+            $this->updateJob($jobId, [
+                'stage' => 'ai_processing',
+                'progress' => 60
+            ]);
+            $this->addLog($jobId, "Summarizing transcript with AI Manager", 'info', [
+                'transcript_length' => strlen($transcript),
+                'model' => $options['model'] ?? 'deepseek-chat'
+            ]);
+
+            // Truncate transcript if too long (AI Manager may have token limits)
+            // Estimate: ~4 characters per token, so 12,000 tokens ≈ 48,000 characters
+            $maxTokens = 12000;
+            $maxCharacters = $maxTokens * 4; // ~48,000 characters
+            $originalLength = strlen($transcript);
+            
+            if ($originalLength > $maxCharacters) {
+                $this->addLog($jobId, "Transcript is too long, truncating before AI processing", 'info', [
+                    'original_length' => $originalLength,
+                    'truncated_length' => $maxCharacters,
+                    'max_tokens' => $maxTokens
+                ]);
+                
+                // Try to truncate at sentence boundary
+                $truncated = substr($transcript, 0, $maxCharacters);
+                $lastSentence = strrpos($truncated, '.');
+                if ($lastSentence !== false && $lastSentence > $maxCharacters * 0.8) {
+                    $transcript = substr($truncated, 0, $lastSentence + 1);
+                } else {
+                    $transcript = $truncated;
+                }
+                
+                $transcript .= "\n\n[Transcript truncated - showing first " . number_format($maxTokens) . " tokens due to length]";
+            }
+            
+            // Use AI Manager to summarize transcript
+            $model = $options['model'] ?? config('services.ai_manager.default_model', 'deepseek-chat');
+            $this->addLog($jobId, "Sending transcript to AI Manager for summarization", 'info', [
+                'transcript_length' => strlen($transcript),
+                'model' => $model
+            ]);
+            
+            $summaryResult = $this->universalFileModule->getAIProcessingModule()->summarize($transcript, [
+                'model' => $model
+                // Note: Removed 'language' and 'format' as AI Manager API only accepts text, task, model
+            ]);
+
+            Log::info("AI Manager summarization result", [
+                'job_id' => $jobId,
+                'has_insights' => isset($summaryResult['insights']),
+                'has_summary' => isset($summaryResult['summary']),
+                'result_keys' => array_keys($summaryResult),
+                'error' => $summaryResult['error'] ?? null
+            ]);
+
+            // Check for errors in the result
+            if (isset($summaryResult['error'])) {
+                $errorMessage = "AI summarization failed: " . $summaryResult['error'];
+                $this->failJob($jobId, $errorMessage);
+                $this->addLog($jobId, $errorMessage, 'error', [
+                    'ai_manager_error' => $summaryResult['error'],
+                    'error_details' => $summaryResult['error_details'] ?? null
+                ]);
+                return [
+                    'success' => false,
+                    'error' => $errorMessage,
+                    'error_details' => $summaryResult['error_details'] ?? null,
+                    'metadata' => [
+                        'file_count' => 0,
+                        'tokens_used' => 0,
+                        'confidence_score' => 0,
+                        'source_type' => 'youtube'
+                    ]
+                ];
+            }
+
+            if (!isset($summaryResult['insights']) && !isset($summaryResult['summary'])) {
+                $errorMessage = "AI summarization failed: No summary in response";
+                $this->failJob($jobId, $errorMessage);
+                $this->addLog($jobId, $errorMessage, 'error', [
+                    'summary_result' => $summaryResult
+                ]);
+                return [
+                    'success' => false,
+                    'error' => $errorMessage,
+                    'metadata' => [
+                        'file_count' => 0,
+                        'tokens_used' => 0,
+                        'confidence_score' => 0,
+                        'source_type' => 'youtube'
+                    ]
+                ];
+            }
+
+            $summary = $summaryResult['insights'] ?? $summaryResult['summary'] ?? '';
+
+            // Stage 5: Finalizing
             $this->updateJob($jobId, [
                 'stage' => 'finalizing',
-                'progress' => 95
+                'progress' => 90
             ]);
-            $this->addLog($jobId, "YouTube processing completed", 'info');
+            $this->addLog($jobId, "YouTube processing completed", 'info', [
+                'video_id' => $transcriptionResult['video_id'] ?? 'unknown',
+                'summary_length' => strlen($summary)
+            ]);
+            
+            // Prepare bundle data for frontend
+            // Note: For YouTube, BrightData may only return article_text, not json_items
+            $bundleData = [];
+            
+            // Always include article_text if available (it's part of bundle format)
+            // The transcript variable already contains the article_text, but we want the original
+            if (isset($transcriptionResult['article_text'])) {
+                $bundleData['article_text'] = $transcriptionResult['article_text'];
+            } elseif (!empty($transcript) && isset($transcriptionResult['format']) && 
+                      $transcriptionResult['format'] === 'bundle') {
+                // If format is bundle but article_text wasn't passed through, use transcript
+                // (transcript contains article_text for bundle format)
+                $bundleData['article_text'] = $transcript;
+            }
+            
+            // Include json_items if available (timed segments)
+            if (isset($transcriptionResult['json_items'])) {
+                $bundleData['json_items'] = $transcriptionResult['json_items'];
+            }
+            
+            // Include transcript_json if available (alternative JSON format)
+            if (isset($transcriptionResult['transcript_json'])) {
+                $bundleData['transcript_json'] = $transcriptionResult['transcript_json'];
+            }
+            
+            // Log what we're including in the result
+            $this->addLog($jobId, "Preparing YouTube result with transcript and bundle data", 'info', [
+                'has_transcript' => !empty($transcript),
+                'transcript_length' => strlen($transcript),
+                'has_bundle_data' => !empty($bundleData),
+                'bundle_keys' => array_keys($bundleData),
+                'transcription_result_keys' => array_keys($transcriptionResult)
+            ]);
             
             return [
                 'success' => true,
-                'data' => $result,
+                'data' => [
+                    'summary' => $summary,
+                    'key_points' => $summaryResult['key_points'] ?? [],
+                    'confidence_score' => $summaryResult['confidence_score'] ?? 0.8,
+                    'model_used' => $summaryResult['model_used'] ?? $model,
+                    // Include bundle/transcript data for frontend display
+                    'transcript' => $transcript, // Full transcript text
+                    'bundle' => !empty($bundleData) ? $bundleData : null, // Bundle format data (json_items, transcript_json, article_text)
+                    'metadata' => [
+                        'video_id' => $transcriptionResult['video_id'] ?? null,
+                        'language' => $transcriptionResult['language'] ?? null,
+                        'format' => $transcriptionResult['format'] ?? null,
+                        'transcript_length' => strlen($transcript),
+                        'model_used' => $summaryResult['model_used'] ?? $model
+                    ]
+                ],
                 'metadata' => [
                     'file_count' => 0,
-                    'tokens_used' => $result['metadata']['tokens_used'] ?? 0,
-                    'confidence_score' => $result['metadata']['confidence'] ?? 0.8,
+                    'tokens_used' => $summaryResult['tokens_used'] ?? strlen($transcript) / 4,
+                    'confidence_score' => $summaryResult['confidence_score'] ?? 0.8,
                     'source_type' => 'youtube',
+                    'model_used' => $summaryResult['model_used'] ?? $model,
                     'processing_stages' => ['analyzing_content', 'analyzing_url', 'processing_video', 'transcribing', 'ai_processing', 'finalizing']
                 ]
             ];
         } catch (\Exception $e) {
-            $this->failJob($jobId, "YouTube processing failed: " . $e->getMessage());
+            $errorMessage = "YouTube processing failed: " . $e->getMessage();
+            $errorDetails = [
+                'error_type' => 'processing_error',
+                'error_source' => 'processYouTubeSummarizationWithStages',
+                'exception_type' => get_class($e),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'context' => ['video_url' => $url]
+            ];
+            
+            Log::error("YouTube summarization exception", [
+                'job_id' => $jobId,
+                'error' => $errorMessage,
+                'details' => $errorDetails,
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            $this->failJob($jobId, $errorMessage);
+            $this->addLog($jobId, $errorMessage, 'error', $errorDetails);
+            
             return [
                 'success' => false,
-                'error' => 'YouTube processing failed: ' . $e->getMessage(),
+                'error' => $errorMessage,
+                'error_details' => $errorDetails,
                 'metadata' => [
                     'file_count' => 0,
                     'tokens_used' => 0,
@@ -880,12 +1168,15 @@ class UniversalJobService
                 'stage' => 'ai_processing',
                 'progress' => 70
             ]);
-            $this->addLog($jobId, "Processing scraped content with AI", 'info', [
+            
+            $model = $options['model'] ?? config('services.ai_manager.default_model', 'deepseek-chat');
+            $this->addLog($jobId, "Processing scraped content with AI Manager", 'info', [
                 'content_length' => strlen($content),
-                'word_count' => str_word_count($content)
+                'word_count' => str_word_count($content),
+                'model' => $model
             ]);
 
-            $result = $this->universalFileModule->getAIProcessingModule()->summarize($content, $options);
+            $result = $this->universalFileModule->getAIProcessingModule()->summarize($content, array_merge($options, ['model' => $model]));
             
             // Stage 5: Finalizing
             $this->updateJob($jobId, [
@@ -913,61 +1204,777 @@ class UniversalJobService
 
     /**
      * Process file summarization with stages
+     * Handles two flows:
+     * - Audio/Video: TranscriberModule → AI Manager
+     * - PDF/Doc/Image: Document Intelligence (ingest → answer)
      */
     private function processFileSummarizationWithStages($jobId, $fileId, $options)
     {
         try {
+            // Get file record
+            $file = \App\Models\FileUpload::find($fileId);
+            if (!$file) {
+                $this->failJob($jobId, "File not found: {$fileId}");
+                return ['success' => false, 'error' => "File not found: {$fileId}"];
+            }
+
+            $fileType = strtolower($file->file_type ?? '');
+            $isAudioVideo = in_array($fileType, ['audio', 'video']);
+
             // Stage 2: File Processing
             $this->updateJob($jobId, [
                 'stage' => 'processing_file',
-                'progress' => 30
+                'progress' => 20
             ]);
-            $this->addLog($jobId, "Processing uploaded file", 'info', ['file_id' => $fileId]);
+            $this->addLog($jobId, "Processing uploaded file", 'info', [
+                'file_id' => $fileId,
+                'file_type' => $fileType,
+                'processing_method' => $isAudioVideo ? 'transcription+ai_manager' : 'document_intelligence'
+            ]);
 
-            // Stage 3: Content Extraction
+            if ($isAudioVideo) {
+                // Audio/Video flow: TranscriberModule → AI Manager
+                return $this->processAudioVideoSummarizationWithStages($jobId, $file, $options);
+            } else {
+                // PDF/Doc/Image flow: Document Intelligence
+                return $this->processDocumentFileSummarizationWithStages($jobId, $file, $options);
+            }
+        } catch (\Exception $e) {
+            $this->failJob($jobId, "File processing failed: " . $e->getMessage());
+            return [
+                'success' => false,
+                'error' => $e->getMessage(),
+                'error_details' => [
+                    'error_type' => 'processing_error',
+                    'error_source' => 'processFileSummarizationWithStages',
+                    'context' => ['file_id' => $fileId]
+                ]
+            ];
+        }
+    }
+
+    /**
+     * Process audio/video file summarization: TranscriberModule → AI Manager
+     */
+    private function processAudioVideoSummarizationWithStages($jobId, $file, $options)
+    {
+        try {
+            // Stage 3: Transcription
             $this->updateJob($jobId, [
-                'stage' => 'extracting_content',
-                'progress' => 50
+                'stage' => 'transcribing',
+                'progress' => 40
             ]);
-            $this->addLog($jobId, "Extracting content from file", 'info');
+            $this->addLog($jobId, "Transcribing audio/video content", 'info', [
+                'file_type' => $file->file_type,
+                'file_name' => $file->original_name
+            ]);
 
-            $result = $this->universalFileModule->processFile($fileId, 'summarize', $options);
+            // Use TranscriberModule to transcribe
+            $transcriberModule = app(\App\Services\Modules\TranscriberModule::class);
             
-            if (!$result['success']) {
-                $this->failJob($jobId, "File processing failed: " . $result['error']);
-                return ['success' => false, 'error' => $result['error']];
+            // Use production-ready file path resolution
+            $filePath = $this->resolveFilePath($file, $jobId);
+            
+            if (!$filePath || !file_exists($filePath)) {
+                $this->failJob($jobId, "File not found on disk. File path: {$file->file_path}");
+                return [
+                    'success' => false,
+                    'error' => "File not found on disk. Please ensure the file exists and is accessible.",
+                    'error_details' => [
+                        'error_type' => 'file_not_found',
+                        'error_source' => 'processAudioVideoSummarizationWithStages',
+                        'file_path_column' => $file->file_path,
+                        'file_id' => $file->id,
+                        'stored_name' => $file->stored_name ?? null,
+                        'original_name' => $file->original_name ?? null,
+                        'hint' => 'Check if the file exists in storage/app/public or storage/app directories'
+                    ]
+                ];
             }
 
-            // Stage 4: AI Processing
+            // Use TranscriberModule's new transcribeFile method for direct file uploads
+            $transcriptionResult = $transcriberModule->transcribeFile($filePath, [
+                'format' => $options['format'] ?? 'bundle',
+                'lang' => $options['language'] ?? 'auto',
+                'include_meta' => $options['include_meta'] ?? true
+            ]);
+
+            if (!$transcriptionResult['success']) {
+                $this->failJob($jobId, "Transcription failed: " . ($transcriptionResult['error'] ?? 'Unknown error'));
+                return [
+                    'success' => false,
+                    'error' => 'Failed to transcribe audio/video: ' . ($transcriptionResult['error'] ?? 'Unknown error'),
+                    'error_details' => [
+                        'error_type' => 'transcription_error',
+                        'error_source' => 'TranscriberModule',
+                        'context' => ['file_id' => $file->id, 'file_name' => $file->original_name]
+                    ]
+                ];
+            }
+
+            $transcript = $transcriptionResult['transcript'] ?? $transcriptionResult['subtitle_text'] ?? '';
+            if (empty($transcript)) {
+                // Check if we have a job_key for manual retry
+                $jobKey = $transcriptionResult['error_details']['job_key'] ?? null;
+                $videoId = $transcriptionResult['video_id'] ?? null;
+                $format = $transcriptionResult['format'] ?? null;
+                
+                $errorMessage = 'No transcript content available';
+                $errorDetails = [
+                    'error_type' => 'transcription_error',
+                    'error_source' => 'processAudioVideoSummarizationWithStages',
+                    'video_id' => $videoId,
+                    'format' => $format,
+                    'has_article_text' => isset($transcriptionResult['article_text']),
+                    'has_subtitle_text' => isset($transcriptionResult['subtitle_text']),
+                    'has_json_items' => isset($transcriptionResult['json_items']),
+                    'result_keys' => array_keys($transcriptionResult)
+                ];
+                
+                if ($jobKey) {
+                    $errorMessage .= '. The transcription job may still be processing.';
+                    $errorDetails['job_key'] = $jobKey;
+                    $errorDetails['status_url'] = config('services.youtube_transcriber.url') . '/status?job_key=' . $jobKey;
+                    $errorDetails['hint'] = 'You can check the job status manually using the transcriber service status endpoint';
+                } else {
+                    $errorDetails['hint'] = 'The transcriber service returned a successful response but with no transcript content. This may indicate an issue with the audio file or the transcription service.';
+                }
+                
+                $this->failJob($jobId, $errorMessage);
+                return [
+                    'success' => false,
+                    'error' => $errorMessage,
+                    'error_details' => $errorDetails
+                ];
+            }
+
+            // Stage 4: AI Summarization
             $this->updateJob($jobId, [
                 'stage' => 'ai_processing',
-                'progress' => 80
+                'progress' => 60
             ]);
-            $this->addLog($jobId, "AI summarization completed", 'info', [
-                'file_type' => $result['metadata']['file_type'] ?? 'unknown',
-                'extracted_length' => strlen($result['result']['content'] ?? '')
+            
+            $model = $options['model'] ?? config('services.ai_manager.default_model', 'deepseek-chat');
+            $this->addLog($jobId, "Summarizing transcript with AI Manager", 'info', [
+                'transcript_length' => strlen($transcript),
+                'model' => $model
             ]);
+
+            $summaryResult = $this->universalFileModule->getAIProcessingModule()->summarize($transcript, [
+                'model' => $model,
+                'language' => $options['language'] ?? 'en',
+                'format' => $options['format'] ?? 'detailed'
+            ]);
+
+            if (!isset($summaryResult['insights']) && !isset($summaryResult['summary'])) {
+                $this->failJob($jobId, "AI summarization failed: No summary in response");
+                return [
+                    'success' => false,
+                    'error' => 'AI summarization failed: No summary in response'
+                ];
+            }
+
+            $summary = $summaryResult['insights'] ?? $summaryResult['summary'] ?? '';
 
             // Stage 5: Finalizing
             $this->updateJob($jobId, [
                 'stage' => 'finalizing',
-                'progress' => 95
+                'progress' => 90
             ]);
-            $this->addLog($jobId, "File processing completed", 'info');
+            
+            // Prepare bundle data for frontend
+            $bundleData = [];
+            
+            // Always include article_text if available (it's part of bundle format)
+            if (isset($transcriptionResult['article_text'])) {
+                $bundleData['article_text'] = $transcriptionResult['article_text'];
+            } elseif (!empty($transcript) && isset($transcriptionResult['format']) && 
+                      $transcriptionResult['format'] === 'bundle') {
+                // If format is bundle but article_text wasn't passed through, use transcript
+                // (transcript contains article_text for bundle format)
+                $bundleData['article_text'] = $transcript;
+            }
+            
+            // Include json_items if available (timed segments)
+            if (isset($transcriptionResult['json_items'])) {
+                $bundleData['json_items'] = $transcriptionResult['json_items'];
+            }
+            
+            // Include transcript_json if available (alternative JSON format)
+            if (isset($transcriptionResult['transcript_json'])) {
+                $bundleData['transcript_json'] = $transcriptionResult['transcript_json'];
+            }
+            
+            $this->addLog($jobId, "Audio/video processing completed", 'info', [
+                'summary_length' => strlen($summary),
+                'has_transcript' => !empty($transcript),
+                'has_bundle_data' => !empty($bundleData),
+                'bundle_keys' => array_keys($bundleData)
+            ]);
 
             return [
                 'success' => true,
-                'data' => $result['result'],
+                'data' => [
+                    'summary' => $summary,
+                    'key_points' => $summaryResult['key_points'] ?? [],
+                    'confidence_score' => $summaryResult['confidence_score'] ?? 0.8,
+                    'model_used' => $summaryResult['model_used'] ?? $model,
+                    // Include bundle/transcript data for frontend display
+                    'transcript' => $transcript, // Full transcript text
+                    'bundle' => !empty($bundleData) ? $bundleData : null, // Bundle format data (json_items, transcript_json, article_text)
+                    'metadata' => [
+                        'file_type' => $file->file_type,
+                        'video_id' => $transcriptionResult['video_id'] ?? null,
+                        'language' => $transcriptionResult['language'] ?? null,
+                        'format' => $transcriptionResult['format'] ?? null,
+                        'transcript_length' => strlen($transcript),
+                        'model_used' => $summaryResult['model_used'] ?? $model
+                    ]
+                ],
                 'metadata' => [
                     'file_count' => 1,
-                    'tokens_used' => $result['metadata']['tokens_used'] ?? 0,
-                    'confidence_score' => $result['metadata']['confidence'] ?? 0.8,
-                    'processing_stages' => ['analyzing_content', 'processing_file', 'extracting_content', 'ai_processing', 'finalizing']
+                    'tokens_used' => $summaryResult['tokens_used'] ?? strlen($transcript) / 4,
+                    'confidence_score' => $summaryResult['confidence_score'] ?? 0.8,
+                    'source_type' => $file->file_type,
+                    'model_used' => $summaryResult['model_used'] ?? $model,
+                    'processing_stages' => ['analyzing_content', 'processing_file', 'transcribing', 'ai_processing', 'finalizing']
                 ]
             ];
         } catch (\Exception $e) {
-            $this->failJob($jobId, "File processing failed: " . $e->getMessage());
-            return ['success' => false, 'error' => $e->getMessage()];
+            $this->failJob($jobId, "Audio/video processing failed: " . $e->getMessage());
+            return [
+                'success' => false,
+                'error' => 'Audio/video processing failed: ' . $e->getMessage(),
+                'error_details' => [
+                    'error_type' => 'processing_error',
+                    'error_source' => 'processAudioVideoSummarizationWithStages',
+                    'context' => ['file_id' => $file->id]
+                ]
+            ];
+        }
+    }
+
+    /**
+     * Resolve file path from FileUpload model - production-ready solution
+     * Handles Windows/Unix paths, different storage disks, and various path formats
+     */
+    private function resolveFilePath($file, $jobId = null)
+    {
+        $filePath = $file->file_path;
+        
+        // If file_path is already an absolute path, check it directly
+        if ($this->is_absolute_path($filePath) && file_exists($filePath)) {
+            return $filePath;
+        }
+        
+        // Normalize the file_path (remove leading slashes, handle backslashes on Windows)
+        $normalizedPath = ltrim(str_replace('\\', '/', $filePath), '/');
+        
+        // Try different storage disks and locations
+        $storage = \Illuminate\Support\Facades\Storage::class;
+        $disks = ['public', 'local'];
+        
+        foreach ($disks as $disk) {
+            try {
+                // Use Storage facade to get path for the disk
+                $diskPath = \Illuminate\Support\Facades\Storage::disk($disk)->path($normalizedPath);
+                
+                // Normalize path separators for current OS
+                $diskPath = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $diskPath);
+                
+                if (file_exists($diskPath)) {
+                    if ($jobId) {
+                        $this->addLog($jobId, "File found using disk '{$disk}'", 'info', [
+                            'disk' => $disk,
+                            'resolved_path' => $diskPath,
+                            'original_path' => $filePath
+                        ]);
+                    }
+                    return $diskPath;
+                }
+            } catch (\Exception $e) {
+                // Disk might not be configured, continue to next
+                continue;
+            }
+        }
+        
+        // Fallback: Try common storage path patterns
+        $basePaths = [
+            storage_path('app/public'),  // Most common: public disk
+            storage_path('app'),         // Local storage
+            public_path('storage'),      // Public storage symlink
+        ];
+        
+        foreach ($basePaths as $basePath) {
+            $fullPath = $basePath . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $normalizedPath);
+            
+            if (file_exists($fullPath)) {
+                if ($jobId) {
+                    $this->addLog($jobId, "File found using base path", 'info', [
+                        'base_path' => $basePath,
+                        'resolved_path' => $fullPath,
+                        'original_path' => $filePath
+                    ]);
+                }
+                return $fullPath;
+            }
+        }
+        
+        // Log all attempted paths for debugging
+        $attemptedPaths = [];
+        foreach ($disks as $disk) {
+            try {
+                $attemptedPaths[] = \Illuminate\Support\Facades\Storage::disk($disk)->path($normalizedPath);
+            } catch (\Exception $e) {
+                $attemptedPaths[] = "Disk '{$disk}' not available";
+            }
+        }
+        foreach ($basePaths as $basePath) {
+            $attemptedPaths[] = $basePath . DIRECTORY_SEPARATOR . $normalizedPath;
+        }
+        
+        if ($jobId) {
+            $this->addLog($jobId, "File path resolution failed", 'error', [
+                'file_path_column' => $filePath,
+                'normalized_path' => $normalizedPath,
+                'attempted_paths' => $attemptedPaths,
+                'stored_name' => $file->stored_name ?? null,
+                'original_name' => $file->original_name ?? null
+            ]);
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Check if a path is absolute
+     */
+    private function is_absolute_path($path)
+    {
+        // Windows absolute path (C:\, D:\, etc.)
+        if (preg_match('/^[A-Z]:[\\\\\/]/i', $path)) {
+            return true;
+        }
+        // Unix absolute path (/)
+        if (strpos($path, '/') === 0) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Process PDF/Doc/Image file summarization: Document Intelligence
+     */
+    private function processDocumentFileSummarizationWithStages($jobId, $file, $options)
+    {
+        try {
+            $docIntelligenceService = app(\App\Services\DocumentIntelligenceService::class);
+            
+            // Use production-ready file path resolution
+            $filePath = $this->resolveFilePath($file, $jobId);
+            
+            if (!$filePath || !file_exists($filePath)) {
+                $this->failJob($jobId, "File not found on disk. File path: {$file->file_path}");
+                return [
+                    'success' => false,
+                    'error' => "File not found on disk. Please ensure the file exists and is accessible.",
+                    'error_details' => [
+                        'error_type' => 'file_not_found',
+                        'error_source' => 'processDocumentFileSummarizationWithStages',
+                        'file_path_column' => $file->file_path,
+                        'file_id' => $file->id,
+                        'stored_name' => $file->stored_name ?? null,
+                        'original_name' => $file->original_name ?? null,
+                        'hint' => 'Check if the file exists in storage/app/public or storage/app directories'
+                    ]
+                ];
+            }
+
+            // Stage 3: Check if already ingested
+            $this->updateJob($jobId, [
+                'stage' => 'checking_ingestion',
+                'progress' => 30
+            ]);
+            $this->addLog($jobId, "Checking if file is already ingested", 'info');
+
+            $docId = $file->doc_id;
+            $needsIngestion = empty($docId);
+
+            if ($needsIngestion) {
+                // Stage 4: Ingesting
+                $this->updateJob($jobId, [
+                    'stage' => 'ingesting',
+                    'progress' => 40
+                ]);
+                $this->addLog($jobId, "Ingesting document to Document Intelligence", 'info', [
+                    'file_name' => $file->original_name,
+                    'file_type' => $file->file_type
+                ]);
+
+                try {
+                    $ingestResult = $docIntelligenceService->ingestDocument($filePath, [
+                        'ocr' => $options['ocr'] ?? 'auto',
+                        'lang' => $options['lang'] ?? 'eng',
+                        'metadata' => [
+                            'file_id' => $file->id,
+                            'user_id' => $file->user_id,
+                            'original_name' => $file->original_name
+                        ]
+                    ]);
+
+                    $docId = $ingestResult['doc_id'] ?? null;
+                    $ingestJobId = $ingestResult['job_id'] ?? null;
+
+                    if (empty($docId)) {
+                        $this->failJob($jobId, "Document ingestion failed: No doc_id returned");
+                        return [
+                            'success' => false,
+                            'error' => 'Document ingestion failed: No doc_id returned',
+                            'error_details' => [
+                                'error_type' => 'ingestion_error',
+                                'error_source' => 'DocumentIntelligenceService'
+                            ]
+                        ];
+                    }
+
+                    // Store doc_id in file record
+                    $file->doc_id = $docId;
+                    $file->save();
+
+                    // Stage 5: Polling ingestion
+                    if (!empty($ingestJobId)) {
+                        $this->updateJob($jobId, [
+                            'stage' => 'polling_ingestion',
+                            'progress' => 50
+                        ]);
+                        $this->addLog($jobId, "Polling ingestion job until complete", 'info', [
+                            'job_id' => $ingestJobId,
+                            'max_attempts' => 300, // 300 attempts * 2 seconds = 10 minutes max
+                            'poll_interval' => 2
+                        ]);
+
+                        // Poll with longer timeout for large files (300 attempts * 2 seconds = 10 minutes)
+                        $pollResult = $docIntelligenceService->pollJobCompletion($ingestJobId, 300, 2);
+                        
+                        // Log the polling result
+                        $pollStatus = $pollResult['status'] ?? 'unknown';
+                        $this->addLog($jobId, "Polling completed", 'info', [
+                            'job_id' => $ingestJobId,
+                            'status' => $pollStatus,
+                            'error' => $pollResult['error'] ?? null
+                        ]);
+
+                        // Handle different polling outcomes
+                        if ($pollStatus === 'failed') {
+                            // Job explicitly failed - don't proceed
+                            $errorMessage = "Ingestion job failed: " . ($pollResult['error'] ?? 'Unknown error');
+                            $this->failJob($jobId, $errorMessage);
+                            return [
+                                'success' => false,
+                                'error' => 'Document ingestion job failed.',
+                                'error_details' => [
+                                    'error_type' => 'ingestion_polling_error',
+                                    'error_source' => 'DocumentIntelligenceService',
+                                    'job_id' => $ingestJobId,
+                                    'status' => $pollStatus,
+                                    'error' => $pollResult['error'] ?? null
+                                ],
+                                'doc_id' => $docId
+                            ];
+                        } elseif ($pollStatus === 'timeout') {
+                            // Timeout - but we have doc_id, so proceed anyway (document may still be processing)
+                            $this->addLog($jobId, "Polling timed out, but proceeding with doc_id", 'warning', [
+                                'job_id' => $ingestJobId,
+                                'doc_id' => $docId,
+                                'note' => 'Document may still be processing in background, but we can attempt summarization'
+                            ]);
+                            // Continue to summarization - don't fail
+                        } elseif (in_array($pollStatus, ['completed', 'succeeded'])) {
+                            $this->addLog($jobId, "Document ingestion completed successfully", 'info', [
+                                'job_id' => $ingestJobId,
+                                'doc_id' => $docId
+                            ]);
+                        } else {
+                            // Unknown or other status - proceed anyway if we have doc_id
+                            $this->addLog($jobId, "Polling returned status: {$pollStatus}, proceeding with doc_id", 'info', [
+                                'job_id' => $ingestJobId,
+                                'status' => $pollStatus,
+                                'doc_id' => $docId
+                            ]);
+                        }
+                    } else {
+                        // No job_id means ingestion was synchronous (completed immediately)
+                        $this->addLog($jobId, "Document ingestion completed synchronously (no polling needed)", 'info', [
+                            'doc_id' => $docId
+                        ]);
+                    }
+                } catch (\Exception $e) {
+                    $this->failJob($jobId, "Document ingestion failed: " . $e->getMessage());
+                    return [
+                        'success' => false,
+                        'error' => 'Document ingestion failed: ' . $e->getMessage(),
+                        'error_details' => [
+                            'error_type' => 'ingestion_error',
+                            'error_source' => 'DocumentIntelligenceService',
+                            'context' => ['file_id' => $file->id, 'file_name' => $file->original_name]
+                        ]
+                    ];
+                }
+            } else {
+                $this->addLog($jobId, "File already ingested, using existing doc_id", 'info', ['doc_id' => $docId]);
+            }
+
+            // Stage 6: Summarizing
+            $this->updateJob($jobId, [
+                'stage' => 'summarizing',
+                'progress' => 70
+            ]);
+            $this->addLog($jobId, "Generating summary using Document Intelligence", 'info', [
+                'doc_id' => $docId
+            ]);
+
+            try {
+                // Cap parameters to prevent service errors
+                $maxTokens = min($options['max_tokens'] ?? 512, 512);
+                $topK = min($options['top_k'] ?? 3, 3);
+                $llmModel = $options['llm_model'] ?? 'llama3';
+                $temperature = $options['temperature'] ?? 0.7;
+                $forceFallback = true; // Always true for Document Intelligence microservice
+                
+                $this->addLog($jobId, "Calling Document Intelligence answer method", 'info', [
+                    'doc_id' => $docId,
+                    'llm_model' => $llmModel,
+                    'max_tokens' => $maxTokens,
+                    'top_k' => $topK,
+                    'temperature' => $temperature,
+                    'force_fallback' => $forceFallback
+                ]);
+                
+                $summaryResult = $docIntelligenceService->answer(
+                    "Please provide a comprehensive summary of this document. Include key points, main themes, and important details.",
+                    [
+                        'doc_ids' => [$docId],
+                        'llm_model' => $llmModel,
+                        'max_tokens' => $maxTokens,
+                        'top_k' => $topK,
+                        'temperature' => $temperature,
+                        'force_fallback' => $forceFallback
+                    ]
+                );
+                
+                $this->addLog($jobId, "Document Intelligence answer method returned", 'info', [
+                    'result_keys' => array_keys($summaryResult),
+                    'has_answer' => isset($summaryResult['answer']),
+                    'has_error' => isset($summaryResult['error']),
+                    'has_sources' => isset($summaryResult['sources'])
+                ]);
+
+                // Get or create conversation_id for document chat (before error handling)
+                $conversationId = null;
+                if ($file->user_id && $docId) {
+                    try {
+                        $conversation = \App\Models\DocumentConversation::findOrCreateForDoc(
+                            $docId,
+                            $file->user_id
+                        );
+                        $conversationId = $conversation->conversation_id;
+                    } catch (\Exception $e) {
+                        // Log but don't fail - conversation_id is optional
+                        $this->addLog($jobId, "Failed to create conversation_id: " . $e->getMessage(), 'warning');
+                    }
+                }
+
+                // Check for errors in the result
+                if (isset($summaryResult['error'])) {
+                    $errorMessage = $summaryResult['error'];
+                    
+                    // Check if it's a service unavailable error
+                    if (stripos($errorMessage, 'unavailable') !== false || stripos($errorMessage, '500') !== false || stripos($errorMessage, 'LLM service') !== false) {
+                        $baseUrl = config('app.url', 'http://localhost:8000');
+                        $chatEndpoint = rtrim($baseUrl, '/') . '/api/document/chat';
+                        
+                        $errorResult = [
+                            'success' => false,
+                            'error' => 'Document Intelligence LLM service is currently unavailable. Please try again later.',
+                            'error_details' => [
+                                'error_type' => 'llm_service_unavailable',
+                                'error_source' => 'DocumentIntelligenceService',
+                                'error_message' => $errorMessage,
+                                'hint' => 'The LLM service may be temporarily down. Your document has been ingested successfully. You can: 1) Retry this job later, or 2) Use the chat endpoint to get a summary now.',
+                                'doc_id' => $docId,
+                                'conversation_id' => $conversationId,
+                                'chat_endpoint' => $chatEndpoint,
+                                'retry_job_id' => $jobId
+                            ],
+                            'doc_id' => $docId,
+                            'conversation_id' => $conversationId
+                        ];
+                        $this->failJob($jobId, "Document Intelligence LLM service is currently unavailable", [], $errorResult);
+                        return $errorResult;
+                    }
+                    
+                    // Other errors
+                    $errorResult = [
+                        'success' => false,
+                        'error' => 'Summarization failed: ' . $errorMessage,
+                        'error_details' => [
+                            'error_type' => 'summarization_error',
+                            'error_source' => 'DocumentIntelligenceService',
+                            'error' => $errorMessage,
+                            'doc_id' => $docId,
+                            'conversation_id' => $conversationId
+                        ],
+                        'doc_id' => $docId,
+                        'conversation_id' => $conversationId
+                    ];
+                    $this->failJob($jobId, "Summarization failed: " . $errorMessage, [], $errorResult);
+                    return $errorResult;
+                }
+
+                $summary = $summaryResult['answer'] ?? '';
+                if (empty($summary)) {
+                    $errorResult = [
+                        'success' => false,
+                        'error' => 'Summarization failed: No answer in response',
+                        'error_details' => [
+                            'error_type' => 'summarization_error',
+                            'error_source' => 'DocumentIntelligenceService',
+                            'response_keys' => array_keys($summaryResult),
+                            'doc_id' => $docId,
+                            'conversation_id' => $conversationId
+                        ],
+                        'doc_id' => $docId, // Still return doc_id for manual chat
+                        'conversation_id' => $conversationId
+                    ];
+                    $this->failJob($jobId, "Summarization failed: No answer in response", [], $errorResult);
+                    return $errorResult;
+                }
+
+                // Stage 7: Finalizing
+                $this->updateJob($jobId, [
+                    'stage' => 'finalizing',
+                    'progress' => 90
+                ]);
+                
+                $this->addLog($jobId, "Conversation ID created/retrieved", 'info', [
+                    'conversation_id' => $conversationId,
+                    'doc_id' => $docId
+                ]);
+                
+                $this->addLog($jobId, "Document processing completed", 'info', [
+                    'summary_length' => strlen($summary),
+                    'doc_id' => $docId,
+                    'conversation_id' => $conversationId
+                ]);
+
+                return [
+                    'success' => true,
+                    'data' => [
+                        'summary' => $summary,
+                        'sources' => $summaryResult['sources'] ?? [],
+                        'metadata' => [
+                            'doc_id' => $docId,
+                            'conversation_id' => $conversationId,
+                            'file_type' => $file->file_type,
+                            'sources_count' => count($summaryResult['sources'] ?? [])
+                        ]
+                    ],
+                    'metadata' => [
+                        'file_count' => 1,
+                        'confidence_score' => 0.9, // Document Intelligence typically has high confidence
+                        'source_type' => $file->file_type,
+                        'doc_id' => $docId,
+                        'conversation_id' => $conversationId,
+                        'processing_stages' => ['analyzing_content', 'processing_file', 'checking_ingestion', 'ingesting', 'polling_ingestion', 'summarizing', 'finalizing']
+                    ]
+                ];
+            } catch (\RuntimeException $e) {
+                // Handle exceptions from DocumentIntelligenceService (thrown by answer method)
+                $errorMessage = $e->getMessage();
+                
+                // Get or create conversation_id for error responses (if not already created)
+                $conversationId = null;
+                if ($file->user_id && isset($docId) && $docId) {
+                    try {
+                        $conversation = \App\Models\DocumentConversation::findOrCreateForDoc(
+                            $docId,
+                            $file->user_id
+                        );
+                        $conversationId = $conversation->conversation_id;
+                    } catch (\Exception $ex) {
+                        // Log but don't fail - conversation_id is optional
+                        $this->addLog($jobId, "Failed to create conversation_id in exception handler: " . $ex->getMessage(), 'warning');
+                    }
+                }
+                
+                // Check if it's a service unavailable error
+                if (stripos($errorMessage, 'unavailable') !== false || stripos($errorMessage, '500') !== false || stripos($errorMessage, 'LLM service') !== false) {
+                    $baseUrl = config('app.url', 'http://localhost:8000');
+                    $chatEndpoint = rtrim($baseUrl, '/') . '/api/document/chat';
+                    
+                    $errorResult = [
+                        'success' => false,
+                        'error' => 'Document Intelligence LLM service is currently unavailable. Please try again later.',
+                        'error_details' => [
+                            'error_type' => 'llm_service_unavailable',
+                            'error_source' => 'DocumentIntelligenceService',
+                            'error_message' => $errorMessage,
+                            'hint' => 'The LLM service may be temporarily down. Your document has been ingested successfully (doc_id: ' . ($docId ?? 'unknown') . '). You can: 1) Retry this job later, or 2) Use the chat endpoint to get a summary now.',
+                            'doc_id' => $docId ?? null,
+                            'conversation_id' => $conversationId,
+                            'chat_endpoint' => $chatEndpoint,
+                            'retry_job_id' => $jobId
+                        ],
+                        'doc_id' => $docId ?? null,
+                        'conversation_id' => $conversationId
+                    ];
+                    $this->failJob($jobId, "Document Intelligence LLM service is currently unavailable", [], $errorResult);
+                    return $errorResult;
+                }
+                
+                // Other exceptions
+                $errorResult = [
+                    'success' => false,
+                    'error' => 'Summarization failed: ' . $errorMessage,
+                    'error_details' => [
+                        'error_type' => 'summarization_error',
+                        'error_source' => 'DocumentIntelligenceService',
+                        'exception_type' => get_class($e),
+                        'error' => $errorMessage,
+                        'doc_id' => $docId ?? null,
+                        'conversation_id' => $conversationId
+                    ],
+                    'doc_id' => $docId ?? null,
+                    'conversation_id' => $conversationId
+                ];
+                $this->failJob($jobId, "Summarization failed: " . $errorMessage, [], $errorResult);
+                return $errorResult;
+            } catch (\Exception $e) {
+                // Catch any other exceptions
+                $this->failJob($jobId, "Summarization exception: " . $e->getMessage());
+                return [
+                    'success' => false,
+                    'error' => 'Summarization failed: ' . $e->getMessage(),
+                    'error_details' => [
+                        'error_type' => 'summarization_exception',
+                        'error_source' => 'DocumentIntelligenceService',
+                        'exception_type' => get_class($e),
+                        'error' => $e->getMessage()
+                    ],
+                    'doc_id' => $docId
+                ];
+            }
+        } catch (\Exception $e) {
+            $this->failJob($jobId, "Document file processing failed: " . $e->getMessage());
+            return [
+                'success' => false,
+                'error' => 'Document file processing failed: ' . $e->getMessage(),
+                'error_details' => [
+                    'error_type' => 'processing_error',
+                    'error_source' => 'processDocumentFileSummarizationWithStages',
+                    'context' => ['file_id' => $file->id]
+                ]
+            ];
         }
     }
 
@@ -1374,7 +2381,7 @@ class UniversalJobService
                 sleep(5); // Wait 5 seconds between checks
                 $attempt++;
                 
-                $status = $documentConverterService->checkJobStatus($conversionResult['job_id']);
+                $status = $documentConverterService->checkConversionStatus($conversionResult['job_id']);
                 
                 if (isset($status['status']) && $status['status'] === 'completed') {
                     $finalStatus = $status; // Store the final status
@@ -1405,15 +2412,16 @@ class UniversalJobService
                 return ['success' => false, 'error' => 'Failed to get conversion result'];
             }
 
-            // Store converted file - handle both file_paths and output_files
-            $filePath = $result['file_paths'][0] ?? $result['output_files'][0] ?? null;
-            if (!$filePath) {
-                $this->failJob($jobId, "No output file found in conversion result");
-                return ['success' => false, 'error' => 'No output file found'];
+            // Prefer remote download URL from microservice; do not read microservice filesystem paths locally
+            $downloadUrl = $result['download_urls'][0] ?? null;
+            if (!$downloadUrl) {
+                // Fallback: if only file_paths/output_files exist, we cannot access microservice FS here
+                $this->failJob($jobId, 'No downloadable URL returned by microservice');
+                return ['success' => false, 'error' => 'No downloadable URL returned by microservice'];
             }
             
-            $convertedFile = $documentConverterService->storeFile(
-                $filePath,
+            $convertedFile = $documentConverterService->downloadAndStore(
+                $downloadUrl,
                 $input['original_filename'] . '.' . $input['target_format']
             );
 
@@ -1517,7 +2525,7 @@ class UniversalJobService
                 sleep(5); // Wait 5 seconds between checks
                 $attempt++;
                 
-                $status = $documentConverterService->checkJobStatus($extractionResult['job_id']);
+                $status = $documentConverterService->checkExtractionStatus($extractionResult['job_id']);
                 
                 if (isset($status['status']) && $status['status'] === 'completed') {
                     $finalStatus = $status; // Store the final status
@@ -1576,6 +2584,402 @@ class UniversalJobService
         } catch (\Exception $e) {
             $this->failJob($jobId, "Content extraction failed: " . $e->getMessage());
             return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Process PDF edit job with stages
+     */
+    private function processPdfEditJobWithStages($jobId, $input, $options)
+    {
+        try {
+            $operation = $input['operation'] ?? null;
+            $fileIds = $input['file_ids'] ?? [];
+            $params = $input['params'] ?? [];
+
+            if (!$operation) {
+                $this->failJob($jobId, 'Operation is required');
+                return ['success' => false, 'error' => 'Operation is required'];
+            }
+
+            $this->updateJob($jobId, [
+                'stage' => 'validating',
+                'progress' => 10
+            ]);
+            $this->addLog($jobId, 'Validating PDF operation input', 'info', [
+                'operation' => $operation,
+                'file_ids' => $fileIds
+            ]);
+
+            if (in_array($operation, ['merge','batch'])) {
+                if (count($fileIds) < 2) {
+                    $this->failJob($jobId, 'At least two files are required');
+                    return ['success' => false, 'error' => 'At least two files are required'];
+                }
+            } else {
+                if (count($fileIds) < 1) {
+                    $this->failJob($jobId, 'file_id is required');
+                    return ['success' => false, 'error' => 'file_id is required'];
+                }
+            }
+
+            $this->updateJob($jobId, [
+                'stage' => 'preparing_files',
+                'progress' => 30
+            ]);
+            $this->addLog($jobId, 'Resolving file paths', 'info');
+
+            $files = [];
+            foreach ($fileIds as $fid) {
+                $file = \App\Models\FileUpload::find($fid);
+                if (!$file) {
+                    $this->failJob($jobId, 'File not found: ' . $fid);
+                    return ['success' => false, 'error' => 'File not found: ' . $fid];
+                }
+                $files[] = \Illuminate\Support\Facades\Storage::path($file->file_path);
+            }
+
+            $this->updateJob($jobId, [
+                'stage' => 'starting_microservice_job',
+                'progress' => 50
+            ]);
+            $this->addLog($jobId, 'Submitting operation to PDF microservice', 'info', [
+                'operation' => $operation
+            ]);
+
+            $pdfService = app(\App\Services\PdfOperationsService::class);
+            $start = $pdfService->startOperation($operation, $files, $params);
+
+            if (!isset($start['job_id'])) {
+                $this->failJob($jobId, 'Failed to start microservice job');
+                return ['success' => false, 'error' => 'Failed to start microservice job'];
+            }
+
+            $remoteJobId = $start['job_id'];
+
+            $this->updateJob($jobId, [
+                'stage' => 'monitoring',
+                'progress' => 70
+            ]);
+            $this->addLog($jobId, 'Monitoring PDF operation', 'info', [
+                'remote_job_id' => $remoteJobId
+            ]);
+
+            // Keep total wait under PHP 600s CLI limit (10m) on some setups
+            // 100 attempts * 5s = ~500s maximum
+            $maxAttempts = 100;
+            $attempt = 0;
+            while ($attempt < $maxAttempts) {
+                sleep(5);
+                $attempt++;
+                $status = $pdfService->getStatus($operation, $remoteJobId);
+                if (($status['status'] ?? '') === 'completed') {
+                    break;
+                }
+                if (($status['status'] ?? '') === 'failed') {
+                    $this->failJob($jobId, 'PDF operation failed: ' . ($status['error'] ?? 'Unknown error'));
+                    return ['success' => false, 'error' => 'PDF operation failed'];
+                }
+            }
+
+            if ($attempt >= $maxAttempts) {
+                $this->failJob($jobId, 'PDF operation timeout');
+                return ['success' => false, 'error' => 'PDF operation timeout'];
+            }
+
+            $this->updateJob($jobId, [
+                'stage' => 'fetching_result',
+                'progress' => 90
+            ]);
+            $result = $pdfService->getResult($operation, $remoteJobId);
+
+            $this->completeJob($jobId, [
+                'remote_job_id' => $remoteJobId,
+                'operation' => $operation,
+                'result' => $result
+            ], [
+                'file_count' => count($files)
+            ]);
+
+            return [
+                'success' => true,
+                'data' => [
+                    'remote_job_id' => $remoteJobId,
+                    'operation' => $operation,
+                    'result' => $result
+                ],
+                'metadata' => [
+                    'file_count' => count($files),
+                    'processing_stages' => ['validating','preparing_files','starting_microservice_job','monitoring','fetching_result']
+                ]
+            ];
+        } catch (\Exception $e) {
+            $this->failJob($jobId, 'PDF operation error: ' . $e->getMessage());
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Process Document Intelligence job with stages
+     */
+    private function processDocumentIntelligenceJobWithStages($jobId, $input, $options)
+    {
+        try {
+            $action = $input['action'] ?? null; // 'ingest', 'search', 'answer', 'chat'
+            $fileId = $input['file_id'] ?? null;
+            $query = $input['query'] ?? null;
+            $docIds = $input['doc_ids'] ?? [];
+            $params = $input['params'] ?? [];
+
+            if (!$action) {
+                $this->failJob($jobId, 'Action is required (ingest, search, answer, chat)');
+                return ['success' => false, 'error' => 'Action is required'];
+            }
+
+            $this->updateJob($jobId, [
+                'stage' => 'validating',
+                'progress' => 10
+            ]);
+            $this->addLog($jobId, 'Validating document intelligence input', 'info', [
+                'action' => $action,
+                'file_id' => $fileId,
+                'doc_ids' => $docIds
+            ]);
+
+            // Get document intelligence service
+            $docService = app(\App\Services\DocumentIntelligenceService::class);
+
+            // Handle different actions
+            if ($action === 'ingest') {
+                // Ingest document
+                if (!$fileId) {
+                    $this->failJob($jobId, 'file_id is required for ingestion');
+                    return ['success' => false, 'error' => 'file_id is required'];
+                }
+
+                $this->updateJob($jobId, [
+                    'stage' => 'preparing_file',
+                    'progress' => 20
+                ]);
+                $this->addLog($jobId, 'Preparing file for ingestion', 'info');
+
+                // Start ingestion
+                $this->updateJob($jobId, [
+                    'stage' => 'starting_ingestion',
+                    'progress' => 30
+                ]);
+                $this->addLog($jobId, 'Starting document ingestion', 'info');
+
+                $ingestionOptions = [
+                    'ocr' => $params['ocr'] ?? 'auto',
+                    'lang' => $params['lang'] ?? 'eng',
+                    'metadata' => $params['metadata'] ?? []
+                ];
+
+                $ingestionResult = $docService->ingestFromFileId($fileId, $ingestionOptions);
+                $remoteJobId = $ingestionResult['job_id'] ?? null;
+                $docId = $ingestionResult['doc_id'] ?? null;
+
+                if (!$remoteJobId) {
+                    $this->failJob($jobId, 'Failed to start ingestion: no job_id returned');
+                    return ['success' => false, 'error' => 'Failed to start ingestion'];
+                }
+
+                $this->updateJob($jobId, [
+                    'stage' => 'monitoring',
+                    'progress' => 50,
+                    'metadata' => array_merge($this->getJob($jobId)['metadata'], [
+                        'remote_job_id' => $remoteJobId,
+                        'doc_id' => $docId
+                    ])
+                ]);
+                $this->addLog($jobId, 'Monitoring ingestion job', 'info', [
+                    'remote_job_id' => $remoteJobId,
+                    'doc_id' => $docId
+                ]);
+
+                // Poll until completion
+                $finalStatus = $docService->pollJobCompletion($remoteJobId, 60, 2);
+
+                if ($finalStatus['status'] !== 'completed') {
+                    $this->failJob($jobId, 'Ingestion failed: ' . ($finalStatus['error'] ?? 'Unknown error'));
+                    return ['success' => false, 'error' => 'Ingestion failed'];
+                }
+
+                $this->updateJob($jobId, [
+                    'stage' => 'completed',
+                    'progress' => 100,
+                    'status' => 'completed',
+                    'result' => [
+                        'doc_id' => $docId,
+                        'job_id' => $remoteJobId,
+                        'status' => 'completed'
+                    ]
+                ]);
+                $this->addLog($jobId, 'Document ingestion completed', 'success');
+
+                return [
+                    'success' => true,
+                    'data' => [
+                        'doc_id' => $docId,
+                        'remote_job_id' => $remoteJobId,
+                        'action' => 'ingest'
+                    ]
+                ];
+
+            } elseif ($action === 'search') {
+                // Semantic search
+                if (!$query) {
+                    $this->failJob($jobId, 'query is required for search');
+                    return ['success' => false, 'error' => 'query is required'];
+                }
+
+                $this->updateJob($jobId, [
+                    'stage' => 'searching',
+                    'progress' => 50
+                ]);
+                $this->addLog($jobId, 'Performing semantic search', 'info');
+
+                $searchOptions = [
+                    'doc_ids' => $docIds,
+                    'top_k' => $params['top_k'] ?? 5,
+                    'filters' => $params['filters'] ?? []
+                ];
+
+                $searchResult = $docService->search($query, $searchOptions);
+
+                $this->updateJob($jobId, [
+                    'stage' => 'completed',
+                    'progress' => 100,
+                    'status' => 'completed',
+                    'result' => $searchResult
+                ]);
+                $this->addLog($jobId, 'Search completed', 'success', [
+                    'result_count' => count($searchResult['results'] ?? [])
+                ]);
+
+                return [
+                    'success' => true,
+                    'data' => [
+                        'action' => 'search',
+                        'result' => $searchResult
+                    ]
+                ];
+
+            } elseif ($action === 'answer') {
+                // RAG-powered Q&A
+                if (!$query) {
+                    $this->failJob($jobId, 'query is required for answer');
+                    return ['success' => false, 'error' => 'query is required'];
+                }
+
+                if (empty($docIds)) {
+                    $this->failJob($jobId, 'doc_ids are required for answer');
+                    return ['success' => false, 'error' => 'doc_ids are required'];
+                }
+
+                $this->updateJob($jobId, [
+                    'stage' => 'generating_answer',
+                    'progress' => 50
+                ]);
+                $this->addLog($jobId, 'Generating RAG answer', 'info');
+
+                $answerOptions = [
+                    'doc_ids' => $docIds,
+                    'llm_model' => $params['llm_model'] ?? 'llama3',
+                    'max_tokens' => $params['max_tokens'] ?? 512,
+                    'top_k' => $params['top_k'] ?? 3,
+                    'temperature' => $params['temperature'] ?? null,
+                    'filters' => $params['filters'] ?? []
+                ];
+
+                $answerResult = $docService->answer($query, $answerOptions);
+
+                $this->updateJob($jobId, [
+                    'stage' => 'completed',
+                    'progress' => 100,
+                    'status' => 'completed',
+                    'result' => $answerResult
+                ]);
+                $this->addLog($jobId, 'Answer generated', 'success');
+
+                return [
+                    'success' => true,
+                    'data' => [
+                        'action' => 'answer',
+                        'result' => $answerResult
+                    ]
+                ];
+
+            } elseif ($action === 'chat') {
+                // Conversational chat
+                if (!$query) {
+                    $this->failJob($jobId, 'query is required for chat');
+                    return ['success' => false, 'error' => 'query is required'];
+                }
+
+                if (empty($docIds)) {
+                    $this->failJob($jobId, 'doc_ids are required for chat');
+                    return ['success' => false, 'error' => 'doc_ids are required'];
+                }
+
+                $this->updateJob($jobId, [
+                    'stage' => 'chatting',
+                    'progress' => 50
+                ]);
+                $this->addLog($jobId, 'Processing chat message', 'info');
+
+                $chatOptions = [
+                    'doc_ids' => $docIds,
+                    'conversation_id' => $params['conversation_id'] ?? null,
+                    'llm_model' => $params['llm_model'] ?? 'llama3',
+                    'max_tokens' => $params['max_tokens'] ?? 512,
+                    'top_k' => $params['top_k'] ?? 3,
+                    'filters' => $params['filters'] ?? []
+                ];
+
+                $chatResult = $docService->chat($query, $chatOptions);
+
+                $this->updateJob($jobId, [
+                    'stage' => 'completed',
+                    'progress' => 100,
+                    'status' => 'completed',
+                    'result' => $chatResult
+                ]);
+                $this->addLog($jobId, 'Chat response generated', 'success');
+
+                return [
+                    'success' => true,
+                    'data' => [
+                        'action' => 'chat',
+                        'result' => $chatResult
+                    ]
+                ];
+
+            } else {
+                $this->failJob($jobId, "Unsupported action: {$action}");
+                return ['success' => false, 'error' => "Unsupported action: {$action}"];
+            }
+
+        } catch (\Exception $e) {
+            $errorMessage = 'Document intelligence error: ' . $e->getMessage();
+            $this->failJob($jobId, $errorMessage);
+            Log::error("Universal Job {$jobId}: Document intelligence exception", [
+                'error' => $e->getMessage(),
+                'exception_type' => get_class($e),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return [
+                'success' => false,
+                'error' => $errorMessage,
+                'error_details' => [
+                    'exception_type' => get_class($e),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine()
+                ]
+            ];
         }
     }
 

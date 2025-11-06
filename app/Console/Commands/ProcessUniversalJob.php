@@ -73,16 +73,42 @@ class ProcessUniversalJob extends Command
             return 0;
 
         } catch (\Exception $e) {
-            $this->error("Error processing job: " . $e->getMessage());
+            $errorMessage = "Error processing job: " . $e->getMessage();
+            $this->error($errorMessage);
+            
             Log::error("Universal job processing error", [
                 'job_id' => $jobId,
                 'error' => $e->getMessage(),
+                'exception_type' => get_class($e),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
                 'trace' => $e->getTraceAsString()
             ]);
+            
+            // Ensure job is marked as failed even if processJob didn't catch it
+            try {
+                $universalJobService = app(UniversalJobService::class);
+                $job = $universalJobService->getJob($jobId);
+                if ($job && ($job['status'] ?? '') !== 'failed') {
+                    $universalJobService->failJob($jobId, $e->getMessage());
+                }
+            } catch (\Exception $failException) {
+                Log::error("Failed to mark job as failed", [
+                    'job_id' => $jobId,
+                    'error' => $failException->getMessage()
+                ]);
+            }
+            
             return 1;
         }
     }
 }
+
+
+
+
+
+
 
 
 

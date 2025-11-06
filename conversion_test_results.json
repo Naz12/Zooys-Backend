@@ -1,0 +1,137 @@
+﻿{
+    "summary":  {
+                    "successful":  0,
+                    "skipped":  0,
+                    "total_tests":  14,
+                    "failed":  14
+                },
+    "timestamp":  "2025-11-04 11:31:34",
+    "results":  [
+                    {
+                        "output":  "pdf",
+                        "message":  "Unable to connect to the remote server",
+                        "processing_time":  0,
+                        "input_desc":  "PDF file",
+                        "job_id":  "N/A",
+                        "input":  "pdf",
+                        "status":  "ERROR"
+                    },
+                    {
+                        "output":  "png",
+                        "message":  "Unable to connect to the remote server",
+                        "processing_time":  0,
+                        "input_desc":  "PDF file",
+                        "job_id":  "N/A",
+                        "input":  "pdf",
+                        "status":  "ERROR"
+                    },
+                    {
+                        "output":  "jpg",
+                        "message":  "Unable to connect to the remote server",
+                        "processing_time":  0,
+                        "input_desc":  "PDF file",
+                        "job_id":  "N/A",
+                        "input":  "pdf",
+                        "status":  "ERROR"
+                    },
+                    {
+                        "output":  "jpeg",
+                        "message":  "Unable to connect to the remote server",
+                        "processing_time":  0,
+                        "input_desc":  "PDF file",
+                        "job_id":  "N/A",
+                        "input":  "pdf",
+                        "status":  "ERROR"
+                    },
+                    {
+                        "output":  "docx",
+                        "message":  "Unable to connect to the remote server",
+                        "processing_time":  0,
+                        "input_desc":  "PDF file",
+                        "job_id":  "N/A",
+                        "input":  "pdf",
+                        "status":  "ERROR"
+                    },
+                    {
+                        "output":  "txt",
+                        "message":  "Unable to connect to the remote server",
+                        "processing_time":  0,
+                        "input_desc":  "PDF file",
+                        "job_id":  "N/A",
+                        "input":  "pdf",
+                        "status":  "ERROR"
+                    },
+                    {
+                        "output":  "html",
+                        "message":  "Unable to connect to the remote server",
+                        "processing_time":  0,
+                        "input_desc":  "PDF file",
+                        "job_id":  "N/A",
+                        "input":  "pdf",
+                        "status":  "ERROR"
+                    },
+                    {
+                        "output":  "pdf",
+                        "message":  "Unable to connect to the remote server",
+                        "processing_time":  0,
+                        "input_desc":  "JPEG image",
+                        "job_id":  "N/A",
+                        "input":  "image_jpg",
+                        "status":  "ERROR"
+                    },
+                    {
+                        "output":  "png",
+                        "message":  "Unable to connect to the remote server",
+                        "processing_time":  0,
+                        "input_desc":  "JPEG image",
+                        "job_id":  "N/A",
+                        "input":  "image_jpg",
+                        "status":  "ERROR"
+                    },
+                    {
+                        "output":  "jpg",
+                        "message":  "Unable to connect to the remote server",
+                        "processing_time":  0,
+                        "input_desc":  "JPEG image",
+                        "job_id":  "N/A",
+                        "input":  "image_jpg",
+                        "status":  "ERROR"
+                    },
+                    {
+                        "output":  "jpeg",
+                        "message":  "Unable to connect to the remote server",
+                        "processing_time":  0,
+                        "input_desc":  "JPEG image",
+                        "job_id":  "N/A",
+                        "input":  "image_jpg",
+                        "status":  "ERROR"
+                    },
+                    {
+                        "output":  "docx",
+                        "message":  "Unable to connect to the remote server",
+                        "processing_time":  0,
+                        "input_desc":  "JPEG image",
+                        "job_id":  "N/A",
+                        "input":  "image_jpg",
+                        "status":  "ERROR"
+                    },
+                    {
+                        "output":  "txt",
+                        "message":  "Unable to connect to the remote server",
+                        "processing_time":  0,
+                        "input_desc":  "JPEG image",
+                        "job_id":  "N/A",
+                        "input":  "image_jpg",
+                        "status":  "ERROR"
+                    },
+                    {
+                        "output":  "html",
+                        "message":  "Unable to connect to the remote server",
+                        "processing_time":  0,
+                        "input_desc":  "JPEG image",
+                        "job_id":  "N/A",
+                        "input":  "image_jpg",
+                        "status":  "ERROR"
+                    }
+                ]
+}

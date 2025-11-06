@@ -24,59 +24,73 @@ class WebScrapingService
     }
 
     /**
-     * Extract web content using Smartproxy endpoint
+     * Extract web content using BrightData endpoint
      */
     public function extractWithSmartproxy($url)
     {
         try {
-            Log::info("Web Scraping Smartproxy API Request", [
+            Log::info("Web Scraping BrightData API Request", [
                 'url' => $url
             ]);
 
+            $payload = [
+                'input' => [
+                    ['url' => $url]
+                ]
+            ];
+
             $queryParams = [
-                'url' => $url,
-                'format' => 'article'
+                'dataset_id' => 'gd_lk56epmy2i5g7lzu0k',
+                'format' => 'bundle',
+                'headings' => 1,
+                'max_paragraph_sentences' => 7,
+                'include_meta' => 1
             ];
 
             $response = Http::timeout(120)
                 ->withHeaders([
                     'Accept' => 'application/json',
+                    'Content-Type' => 'application/json',
                     'X-Client-Key' => config('services.youtube_transcriber.client_key', 'dev-local'),
                 ])
-                ->get(config('services.youtube_transcriber.url', 'https://transcriber.akmicroservice.com') . '/scraper/smartproxy/subtitles', $queryParams);
+                ->post(config('services.youtube_transcriber.url', 'https://transcriber.akmicroservice.com') . '/brightdata/scrape?' . http_build_query($queryParams), $payload);
 
             if ($response->successful()) {
                 $data = $response->json();
                 
-                Log::info("Web Scraping Smartproxy API Response successful", [
+                // Handle BrightData response format
+                $content = $data['article_text'] ?? $data['subtitle_text'] ?? '';
+                
+                Log::info("Web Scraping BrightData API Response successful", [
                     'url' => $url,
-                    'content_length' => strlen($data['subtitle_text'] ?? ''),
-                    'proxy_source' => $response->header('X-Proxy-Source')
+                    'content_length' => strlen($content),
+                    'has_meta' => isset($data['meta'])
                 ]);
 
                 return [
                     'success' => true,
-                    'content' => $data['subtitle_text'] ?? '',
-                    'title' => $this->extractTitleFromUrl($url),
+                    'content' => $content,
+                    'title' => $data['meta']['title'] ?? $this->extractTitleFromUrl($url),
                     'url' => $url,
-                    'source' => 'smartproxy'
+                    'meta' => $data['meta'] ?? null,
+                    'source' => 'brightdata'
                 ];
             } else {
-                Log::error("Web Scraping Smartproxy API Response failed", [
+                Log::error("Web Scraping BrightData API Response failed", [
                     'status' => $response->status(),
                     'response' => $response->body()
                 ]);
                 
                 return [
                     'success' => false,
-                    'error' => 'Smartproxy web scraping failed: ' . $response->body()
+                    'error' => 'BrightData web scraping failed: ' . $response->body()
                 ];
             }
         } catch (\Exception $e) {
-            Log::error("Web Scraping Smartproxy API Exception: " . $e->getMessage());
+            Log::error("Web Scraping BrightData API Exception: " . $e->getMessage());
             return [
                 'success' => false,
-                'error' => 'Smartproxy web scraping failed: ' . $e->getMessage()
+                'error' => 'BrightData web scraping failed: ' . $e->getMessage()
             ];
         }
     }

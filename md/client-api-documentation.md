@@ -222,25 +222,9 @@ Content-Type: application/json
 }
 ```
 
-#### File Summarization
+#### File Summarization (PDF/Doc/Image)
 ```http
 POST /api/summarize/async/file
-Authorization: Bearer 1|abc123def456...
-Content-Type: application/json
-
-{
-  "file_id": "uuid-string",
-  "options": {
-    "language": "en",
-    "format": "detailed",
-    "focus": "summary"
-  }
-}
-```
-
-#### Image Summarization
-```http
-POST /api/summarize/async/image
 Authorization: Bearer 1|abc123def456...
 Content-Type: application/json
 

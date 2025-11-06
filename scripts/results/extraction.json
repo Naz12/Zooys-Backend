@@ -1,0 +1,43 @@
+﻿{
+    "submit":  {
+                   "success":  true,
+                   "message":  "Content extraction job started",
+                   "job_id":  "da6b8dad-8105-426a-b7f8-b284950f76e0",
+                   "status":  "pending",
+                   "poll_url":  "http://localhost:8000/api/status?job_id=da6b8dad-8105-426a-b7f8-b284950f76e0",
+                   "result_url":  "http://localhost:8000/api/result?job_id=da6b8dad-8105-426a-b7f8-b284950f76e0"
+               },
+    "result":  {
+                   "success":  true,
+                   "data":  {
+                                "extraction_result":  {
+                                                          "job_id":  "43966675-3d73-4cd4-91c7-9cdec29f2fca",
+                                                          "status":  "completed",
+                                                          "progress":  100,
+                                                          "stage":  "completed",
+                                                          "created_at":  1761851793.7904582,
+                                                          "started_at":  1761840997.899241,
+                                                          "completed_at":  1761840998.836516,
+                                                          "error":  null,
+                                                          "output_files":  [
+
+                                                                           ],
+                                                          "download_urls":  null,
+                                                          "job_type":  "extraction"
+                                                      },
+                                "original_file":  {
+                                                      "id":  204,
+                                                      "filename":  null,
+                                                      "size":  229304
+                                                  },
+                                "extracted_content":  "",
+                                "metadata":  [
+
+                                             ],
+                                "word_count":  0,
+                                "page_count":  0,
+                                "language_detected":  "eng",
+                                "extraction_method":  "unknown"
+                            }
+               }
+}

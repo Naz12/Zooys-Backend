@@ -1,0 +1,42 @@
+﻿{
+    "submit":  {
+                   "success":  true,
+                   "job_id":  "d6075e67-d7c7-4854-a998-1a79fbbcab54",
+                   "status":  "pending",
+                   "message":  "PDF job queued successfully"
+               },
+    "status":  {
+                   "job_id":  "d6075e67-d7c7-4854-a998-1a79fbbcab54",
+                   "status":  "completed",
+                   "progress":  100,
+                   "stage":  "completed",
+                   "error":  null,
+                   "created_at":  "2025-10-30T19:09:31.779173Z",
+                   "updated_at":  "2025-10-30T19:09:45.005100Z"
+               },
+    "result":  {
+                   "success":  true,
+                   "job_id":  "d6075e67-d7c7-4854-a998-1a79fbbcab54",
+                   "operation":  "page_numbers",
+                   "data":  {
+                                "remote_job_id":  "958ca591-a36b-42f3-bf8d-d98962dbadeb",
+                                "operation":  "page_numbers",
+                                "result":  null
+                            },
+                   "metadata":  {
+                                    "processing_started_at":  "2025-10-30T19:09:33.150883Z",
+                                    "processing_completed_at":  "2025-10-30T19:09:45.002045Z",
+                                    "total_processing_time":  11.844175,
+                                    "file_count":  1,
+                                    "tokens_used":  0,
+                                    "confidence_score":  0,
+                                    "processing_stages":  [
+                                                              "validating",
+                                                              "preparing_files",
+                                                              "starting_microservice_job",
+                                                              "monitoring",
+                                                              "fetching_result"
+                                                          ]
+                                }
+               }
+}

@@ -4,13 +4,13 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use App\Services\Modules\TranscriptionModule;
+use App\Services\Modules\TranscriberModule;
 
 class YouTubeService
 {
     private $transcriptionModule;
 
-    public function __construct(TranscriptionModule $transcriptionModule)
+    public function __construct(TranscriberModule $transcriptionModule)
     {
         $this->transcriptionModule = $transcriptionModule;
     }

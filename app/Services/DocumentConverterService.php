@@ -132,14 +132,22 @@ class DocumentConverterService
     {
         try {
             // Start extraction job
+            $requestPayload = [
+                'content' => true,
+                'metadata' => true,
+                'images' => false
+            ];
+            // Allow overrides via options
+            if (isset($options['request']) && is_array($options['request'])) {
+                $requestPayload = array_merge($requestPayload, $options['request']);
+            }
+
             $response = Http::timeout(120)
                 ->withHeaders(['X-API-Key' => $this->apiKey])
                 ->attach('file', file_get_contents($filePath), basename($filePath))
                 ->post($this->baseUrl . '/v1/extract', [
-                    'extraction_type' => $extractionType,
-                    'language' => $language,
-                    'include_formatting' => $options['include_formatting'] ?? false,
-                    'max_pages' => $options['max_pages'] ?? 10
+                    // microservice expects a JSON string in 'request'
+                    'request' => json_encode($requestPayload)
                 ]);
             
             if (!$response->successful()) {
@@ -161,7 +169,7 @@ class DocumentConverterService
                 
                 $statusResponse = Http::timeout(30)
                     ->withHeaders(['X-API-Key' => $this->apiKey])
-                    ->get($this->baseUrl . '/v1/status', ['job_id' => $jobId]);
+                    ->get($this->baseUrl . '/v1/extraction/status', ['job_id' => $jobId]);
                 
                 if (!$statusResponse->successful()) {
                     throw new \Exception('Failed to check extraction status: ' . $statusResponse->body());
@@ -173,7 +181,7 @@ class DocumentConverterService
                     // Get the result
                     $resultResponse = Http::timeout(30)
                         ->withHeaders(['X-API-Key' => $this->apiKey])
-                        ->get($this->baseUrl . '/v1/result', ['job_id' => $jobId]);
+                        ->get($this->baseUrl . '/v1/extraction/result', ['job_id' => $jobId]);
                     
                     if (!$resultResponse->successful()) {
                         throw new \Exception('Failed to get extraction result: ' . $resultResponse->body());
@@ -209,9 +217,10 @@ class DocumentConverterService
     public function checkJobStatus($jobId)
     {
         try {
+            // Default to conversion status for backward compatibility
             $response = Http::timeout(10)
                 ->withHeaders(['X-API-Key' => $this->apiKey])
-                ->get($this->baseUrl . '/v1/status', [
+                ->get($this->baseUrl . '/v1/conversion/status', [
                     'job_id' => $jobId
                 ]);
             
@@ -239,9 +248,10 @@ class DocumentConverterService
     public function getJobResult($jobId)
     {
         try {
+            // Default to conversion result for backward compatibility
             $response = Http::timeout(10)
                 ->withHeaders(['X-API-Key' => $this->apiKey])
-                ->get($this->baseUrl . '/v1/result', [
+                ->get($this->baseUrl . '/v1/conversion/result', [
                     'job_id' => $jobId
                 ]);
             
@@ -257,6 +267,54 @@ class DocumentConverterService
             Log::error('Get job result failed: ' . $e->getMessage());
             throw $e;
         }
+    }
+
+    /**
+     * Check conversion status (explicit)
+     */
+    public function checkConversionStatus($jobId)
+    {
+        return Http::timeout(10)
+            ->withHeaders(['X-API-Key' => $this->apiKey])
+            ->get($this->baseUrl . '/v1/conversion/status', ['job_id' => $jobId])
+            ->throw()
+            ->json();
+    }
+
+    /**
+     * Get conversion result (explicit)
+     */
+    public function getConversionResult($jobId)
+    {
+        return Http::timeout(10)
+            ->withHeaders(['X-API-Key' => $this->apiKey])
+            ->get($this->baseUrl . '/v1/conversion/result', ['job_id' => $jobId])
+            ->throw()
+            ->json();
+    }
+
+    /**
+     * Check extraction status (explicit)
+     */
+    public function checkExtractionStatus($jobId)
+    {
+        return Http::timeout(10)
+            ->withHeaders(['X-API-Key' => $this->apiKey])
+            ->get($this->baseUrl . '/v1/extraction/status', ['job_id' => $jobId])
+            ->throw()
+            ->json();
+    }
+
+    /**
+     * Get extraction result (explicit)
+     */
+    public function getExtractionResult($jobId)
+    {
+        return Http::timeout(10)
+            ->withHeaders(['X-API-Key' => $this->apiKey])
+            ->get($this->baseUrl . '/v1/extraction/result', ['job_id' => $jobId])
+            ->throw()
+            ->json();
     }
 
     /**
@@ -300,6 +358,32 @@ class DocumentConverterService
 
         } catch (\Exception $e) {
             Log::error('File storage failed: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    /**
+     * Download a remote file (e.g., microservice download_url) and store in Laravel storage
+     */
+    public function downloadAndStore(string $url, ?string $filename = null): array
+    {
+        try {
+            $response = Http::timeout(180)->get($url);
+            if (!$response->successful()) {
+                throw new \Exception('Failed to download file: ' . $url . ' - ' . $response->status());
+            }
+
+            $filename = $filename ?: basename(parse_url($url, PHP_URL_PATH) ?: 'file.pdf');
+            $storagePath = 'converted-files/' . $filename;
+            Storage::disk('public')->put($storagePath, $response->body());
+
+            return [
+                'path' => $storagePath,
+                'url' => Storage::disk('public')->url($storagePath),
+                'filename' => $filename
+            ];
+        } catch (\Exception $e) {
+            Log::error('Remote file download/store failed: ' . $e->getMessage());
             throw $e;
         }
     }

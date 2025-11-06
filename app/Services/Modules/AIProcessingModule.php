@@ -9,14 +9,10 @@ use Illuminate\Support\Facades\Log;
 class AIProcessingModule
 {
     private $aiManagerService;
-    private $openaiApiKey;
-    private $openaiUrl;
 
     public function __construct(AIManagerService $aiManagerService)
     {
         $this->aiManagerService = $aiManagerService;
-        $this->openaiApiKey = config('services.openai.api_key');
-        $this->openaiUrl = config('services.openai.url');
     }
 
     /**
@@ -42,6 +38,11 @@ class AIProcessingModule
      */
     public function summarize($content, $options = [])
     {
+        // Use default model if not specified
+        if (!isset($options['model'])) {
+            $options['model'] = config('services.ai_manager.default_model', 'deepseek-chat');
+        }
+        
         $result = $this->process($content, 'summarize', $options);
         
         // Handle different response structures from AI Manager
@@ -183,8 +184,13 @@ class AIProcessingModule
     }
 
     /**
-     * Analyze image using OpenAI Vision (temporary until AI Manager supports vision)
-     * TODO: Will use AI Manager when vision support is added
+     * Analyze image - NOT IMPLEMENTED
+     * 
+     * Image analysis should be added to AI Manager microservice.
+     * Until then, this feature is not available.
+     * 
+     * @deprecated Use AI Manager microservice when vision support is added
+     * @throws \Exception Always throws exception
      */
     public function analyzeImage($imagePath, $prompt, $options = [])
     {
@@ -196,97 +202,7 @@ class AIProcessingModule
         $baseDelay = 2; // seconds
         $timeout = 60; // seconds
 
-        for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
-            try {
-                Log::info("OpenAI Vision API Attempt {$attempt}/{$maxRetries}", [
-                    'image_path' => $imagePath,
-                    'model' => $model
-                ]);
-
-                // Check if image file exists
-                if (!file_exists($imagePath)) {
-                    throw new \Exception('Image file not found: ' . $imagePath);
-                }
-
-                // Get image data
-                $imageData = base64_encode(file_get_contents($imagePath));
-                $mimeType = mime_content_type($imagePath);
-                
-                // Determine image format
-                $imageFormat = 'jpeg';
-                if (strpos($mimeType, 'png') !== false) {
-                    $imageFormat = 'png';
-                } elseif (strpos($mimeType, 'gif') !== false) {
-                    $imageFormat = 'gif';
-                } elseif (strpos($mimeType, 'webp') !== false) {
-                    $imageFormat = 'webp';
-                }
-
-                $response = Http::timeout($timeout)
-                    ->withHeaders([
-                        'Authorization' => 'Bearer ' . $this->openaiApiKey,
-                        'Content-Type' => 'application/json',
-                    ])->post($this->openaiUrl, [
-                        'model' => $model,
-                        'messages' => [
-                            [
-                                'role' => 'user',
-                                'content' => [
-                                    [
-                                        'type' => 'text',
-                                        'text' => $prompt
-                                    ],
-                                    [
-                                        'type' => 'image_url',
-                                        'image_url' => [
-                                            'url' => 'data:image/' . $imageFormat . ';base64,' . $imageData
-                                        ]
-                                    ]
-                                ]
-                            ]
-                        ],
-                        'max_tokens' => $maxTokens,
-                        'temperature' => $temperature,
-                    ]);
-
-                if ($response->successful()) {
-                    $data = $response->json();
-                    
-                    if (isset($data['choices'][0]['message']['content'])) {
-                        Log::info("OpenAI Vision API Success on attempt {$attempt}", [
-                            'response_length' => strlen($data['choices'][0]['message']['content'])
-                        ]);
-                        return trim($data['choices'][0]['message']['content']);
-                    }
-                } else {
-                    Log::warning("OpenAI Vision API failed on attempt {$attempt}", [
-                        'status' => $response->status(),
-                        'body' => $response->body()
-                    ]);
-                }
-
-            } catch (\Illuminate\Http\Client\ConnectionException $e) {
-                Log::warning("OpenAI Vision API Connection Error on attempt {$attempt}", [
-                    'error' => $e->getMessage(),
-                    'attempt' => $attempt
-                ]);
-            } catch (\Exception $e) {
-                Log::error("OpenAI Vision API Error on attempt {$attempt}", [
-                    'error' => $e->getMessage(),
-                    'attempt' => $attempt
-                ]);
-            }
-
-            // If not the last attempt, wait before retrying
-            if ($attempt < $maxRetries) {
-                $delay = $baseDelay * pow(2, $attempt - 1); // Exponential backoff
-                Log::info("Waiting {$delay} seconds before retry...");
-                sleep($delay);
-            }
-        }
-
-        Log::error('OpenAI Vision API failed after all retries');
-        throw new \Exception('Unable to analyze image after multiple attempts. Please try again later.');
+        throw new \Exception('Image analysis is not currently available. Waiting for AI Manager microservice to add vision support. Use Document Intelligence microservice for document-based image analysis instead.');
     }
 
     /**
@@ -337,5 +253,74 @@ class AIProcessingModule
         }
         
         return $embeddings;
+    }
+
+    /**
+     * Get available AI models
+     * 
+     * @return array List of available models with keys, vendors, and display names
+     */
+    public function getAvailableModels()
+    {
+        return $this->aiManagerService->getAvailableModels();
+    }
+
+    /**
+     * Topic-based chat with document context
+     * 
+     * @param string $topic The main topic or summary to ground the conversation
+     * @param string $message Current user message/question
+     * @param array $messages Optional: Previous conversation messages [{role, content}]
+     * @param array $options Optional: model, max_tokens, etc.
+     * @return array Chat response with reply, supporting_points, follow_up_questions, suggested_resources
+     */
+    public function topicChat(string $topic, string $message, array $messages = [], array $options = [])
+    {
+        $result = $this->aiManagerService->topicChat($topic, $message, $messages, $options);
+        
+        if (!$result['success']) {
+            throw new \Exception("Topic chat failed: " . ($result['error'] ?? 'Unknown error'));
+        }
+        
+        return $result;
+    }
+
+    /**
+     * Generate PowerPoint/Presentation content
+     * 
+     * @param string $topic Presentation topic
+     * @param array $options Optional: slides_count, tone, target_audience, model, etc.
+     * @return array Presentation outline and content
+     */
+    public function generatePresentation(string $topic, array $options = [])
+    {
+        $result = $this->process($topic, 'ppt-generate', $options);
+        
+        return [
+            'outline' => $result['data']['outline'] ?? [],
+            'slides' => $result['data']['slides'] ?? [],
+            'insights' => $result['insights'] ?? '',
+            'model_used' => $result['model_used'] ?? 'unknown',
+            'model_display' => $result['model_display'] ?? 'AI Model'
+        ];
+    }
+
+    /**
+     * Generate flashcards from content
+     * 
+     * @param string $content Content to create flashcards from
+     * @param array $options Optional: card_count, difficulty, model, etc.
+     * @return array Generated flashcards
+     */
+    public function generateFlashcards(string $content, array $options = [])
+    {
+        $result = $this->process($content, 'flashcard', $options);
+        
+        return [
+            'flashcards' => $result['data']['flashcards'] ?? [],
+            'insights' => $result['insights'] ?? '',
+            'model_used' => $result['model_used'] ?? 'unknown',
+            'model_display' => $result['model_display'] ?? 'AI Model'
+        ];
     }
 }

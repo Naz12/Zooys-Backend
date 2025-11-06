@@ -19,182 +19,42 @@ class AISummarizationService
     }
 
     /**
-     * Summarize content using chunked processing
+     * Summarize content directly using AI Manager (chunking handled by Document Intelligence or AI Manager)
      */
     public function summarizeContent($content, $contentType = 'text', $options = [])
     {
-        $chunkingService = app(ContentChunkingService::class);
-        $chunks = $chunkingService->chunkContent($content, $contentType, $options);
-        
-        if (empty($chunks)) {
+        if (empty($content)) {
             return $this->createErrorResponse('No content to summarize');
         }
         
-        Log::info("Processing {$contentType} content with " . count($chunks) . " chunks");
+        Log::info("Processing {$contentType} content for summarization", [
+            'content_length' => strlen($content),
+            'word_count' => str_word_count($content)
+        ]);
         
-        // Process chunks
-        $chunkSummaries = $this->processChunks($chunks, $contentType, $options);
-        
-        if (empty($chunkSummaries)) {
-            return $this->createErrorResponse('Failed to process content chunks');
-        }
-        
-        // Combine chunk summaries
-        $finalSummary = $this->combineSummaries($chunkSummaries, $contentType, $options);
-        
-        return $this->createSuccessResponse($finalSummary, $chunks, $chunkSummaries);
-    }
-
-    /**
-     * Process individual chunks
-     */
-    private function processChunks($chunks, $contentType, $options)
-    {
-        $chunkSummaries = [];
-        $totalChunks = count($chunks);
-        
-        foreach ($chunks as $index => $chunk) {
-            Log::info("Processing chunk " . ($index + 1) . "/{$totalChunks}");
-            
-            $chunkSummary = $this->summarizeChunk($chunk, $contentType, $options, $index, $totalChunks);
-            
-            if ($chunkSummary['success']) {
-                $chunkSummaries[] = [
-                    'chunk_index' => $index,
-                    'summary' => $chunkSummary['summary'],
-                    'key_points' => $chunkSummary['key_points'] ?? [],
-                    'metadata' => $chunkSummary['metadata'] ?? [],
-                ];
-            } else {
-                Log::warning("Failed to summarize chunk {$index}: " . $chunkSummary['error']);
-            }
-        }
-        
-        return $chunkSummaries;
-    }
-
-    /**
-     * Summarize a single chunk
-     */
-    private function summarizeChunk($chunk, $contentType, $options, $chunkIndex, $totalChunks)
-    {
         try {
-            $result = $this->aiProcessingModule->summarize($chunk['content'], $options);
+            // Use AI Manager directly - it handles large content internally
+            $result = $this->aiProcessingModule->summarize($content, $options);
             
             return [
                 'success' => true,
-                'summary' => $result['summary'],
-                'key_points' => $result['key_points'],
+                'summary' => $result['insights'] ?? $result['summary'] ?? '',
+                'key_points' => $result['key_points'] ?? [],
                 'metadata' => [
-                    'chunk_size' => $chunk['character_count'],
-                    'word_count' => $chunk['word_count'],
-                    'processing_time' => microtime(true),
-                    'model_used' => $result['model_used'],
-                    'confidence_score' => $result['confidence_score']
+                    'total_characters' => strlen($content),
+                    'total_words' => str_word_count($content),
+                    'processing_method' => 'direct_ai_manager',
+                    'model_used' => $result['model_used'] ?? 'unknown',
+                    'tokens_used' => $result['tokens_used'] ?? 0,
+                    'confidence_score' => $result['confidence_score'] ?? 0.8,
                 ]
             ];
         } catch (\Exception $e) {
-            Log::error("Chunk summarization failed: " . $e->getMessage());
-            return [
-                'success' => false,
-                'error' => $e->getMessage()
-            ];
+            Log::error("Summarization failed: " . $e->getMessage());
+            return $this->createErrorResponse('Summarization failed: ' . $e->getMessage());
         }
     }
 
-    /**
-     * Build prompt for chunk summarization
-     */
-    private function buildChunkPrompt($chunk, $contentType, $options, $chunkIndex, $totalChunks)
-    {
-        $mode = $options['mode'] ?? 'detailed';
-        $language = $options['language'] ?? 'en';
-        
-        $basePrompt = "Analyze this {$contentType} content chunk ({$chunkIndex}/{$totalChunks}) and provide a summary:\n\n";
-        $basePrompt .= "Content:\n{$chunk['content']}\n\n";
-        
-        if ($mode === 'brief') {
-            $basePrompt .= "Provide:\n1. Main topic (1 sentence)\n2. Key takeaway (1 sentence)";
-        } else {
-            $basePrompt .= "Provide:\n1. Main topic and themes\n2. Key points (3-5 bullet points)\n3. Important details\n4. Context for overall content";
-        }
-        
-        if ($language !== 'en') {
-            $basePrompt .= "\n\nPlease respond in {$language} language.";
-        }
-        
-        return $basePrompt;
-    }
-
-    /**
-     * Combine chunk summaries into final summary
-     */
-    private function combineSummaries($chunkSummaries, $contentType, $options)
-    {
-        // Create combined content from chunk summaries
-        $combinedContent = $this->buildCombinedContent($chunkSummaries);
-        
-        try {
-            $result = $this->aiProcessingModule->summarize($combinedContent, $options);
-            return $result['summary'];
-        } catch (\Exception $e) {
-            Log::error("Final summary combination failed: " . $e->getMessage());
-            return "Summary generation failed: " . $e->getMessage();
-        }
-    }
-
-    /**
-     * Build combined content from chunk summaries
-     */
-    private function buildCombinedContent($chunkSummaries)
-    {
-        $combined = "";
-        
-        foreach ($chunkSummaries as $index => $summary) {
-            $combined .= "Section " . ($index + 1) . ":\n";
-            $combined .= $summary['summary'] . "\n\n";
-        }
-        
-        return $combined;
-    }
-
-    /**
-     * Extract key points from summary
-     */
-    private function extractKeyPoints($summary)
-    {
-        // Simple key point extraction - can be enhanced
-        $lines = explode("\n", $summary);
-        $keyPoints = [];
-        
-        foreach ($lines as $line) {
-            $line = trim($line);
-            if (preg_match('/^[-•]\s*(.+)/', $line, $matches)) {
-                $keyPoints[] = $matches[1];
-            }
-        }
-        
-        return $keyPoints;
-    }
-
-    /**
-     * Create success response
-     */
-    private function createSuccessResponse($summary, $chunks, $chunkSummaries)
-    {
-        return [
-            'success' => true,
-            'summary' => $summary,
-            'metadata' => [
-                'total_chunks' => count($chunks),
-                'processed_chunks' => count($chunkSummaries),
-                'total_characters' => array_sum(array_column($chunks, 'character_count')),
-                'total_words' => array_sum(array_column($chunks, 'word_count')),
-                'processing_method' => 'chunked',
-                'chunk_summaries' => $chunkSummaries,
-            ]
-        ];
-    }
 
     /**
      * Create error response
@@ -219,13 +79,13 @@ class AISummarizationService
         }
         
         return [
-            'total_chunks' => $result['metadata']['total_chunks'],
-            'processed_chunks' => $result['metadata']['processed_chunks'],
-            'total_characters' => $result['metadata']['total_characters'],
-            'total_words' => $result['metadata']['total_words'],
-            'processing_method' => $result['metadata']['processing_method'],
-            'summary_length' => strlen($result['summary']),
-            'summary_words' => str_word_count($result['summary']),
+            'total_characters' => $result['metadata']['total_characters'] ?? 0,
+            'total_words' => $result['metadata']['total_words'] ?? 0,
+            'processing_method' => $result['metadata']['processing_method'] ?? 'direct_ai_manager',
+            'summary_length' => strlen($result['summary'] ?? ''),
+            'summary_words' => str_word_count($result['summary'] ?? ''),
+            'model_used' => $result['metadata']['model_used'] ?? 'unknown',
+            'tokens_used' => $result['metadata']['tokens_used'] ?? 0,
         ];
     }
 }

@@ -1,0 +1,314 @@
+{
+  "info": {
+    "name": "AI Manager Microservice",
+    "description": "Complete API collection for AI Manager - Text processing, summarization, code review, translation, and more",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      {
+        "key": "value",
+        "value": "{{api_key}}",
+        "type": "string"
+      },
+      {
+        "key": "key",
+        "value": "X-API-KEY",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "1. Get Available Models",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/api/models",
+          "host": ["{{base_url}}"],
+          "path": ["api", "models"]
+        },
+        "description": "Retrieve list of all available AI models with their keys, vendors, and display names."
+      },
+      "response": []
+    },
+    {
+      "name": "2. Summarize Text",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"text\": \"The new software update includes improved performance, enhanced security features, and a redesigned user interface. Users can now customize dashboards and access real-time analytics. The update also fixes bugs reported in the previous version and supports multiple languages.\",\n  \"task\": \"summarize\",\n  \"model\": \"ollama:llama3\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/process-text",
+          "host": ["{{base_url}}"],
+          "path": ["api", "process-text"]
+        },
+        "description": "Create concise summary with key points from long text."
+      },
+      "response": []
+    },
+    {
+      "name": "3. Code Review",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"text\": \"<?php\\nclass UserController extends Controller {\\n  public function store($request) {\\n    $user = new User;\\n    $user->name = $request->name;\\n    $user->email = $request->email;\\n    $user->password = $request->password;\\n    $user->save();\\n    return response()->json($user);\\n  }\\n}\",\n  \"task\": \"code-review\",\n  \"model\": \"gpt-4o\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/process-text",
+          "host": ["{{base_url}}"],
+          "path": ["api", "process-text"]
+        },
+        "description": "Analyze code for security issues, bugs, and improvement suggestions."
+      },
+      "response": []
+    },
+    {
+      "name": "4. Question Answering",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"text\": \"Context: Laravel is a PHP framework for web development. It uses MVC architecture and includes features like Eloquent ORM, Blade templating, and Artisan CLI.\\nQuestion: What is Eloquent ORM in Laravel?\",\n  \"task\": \"qa\",\n  \"model\": \"ollama:llama3\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/process-text",
+          "host": ["{{base_url}}"],
+          "path": ["api", "process-text"]
+        },
+        "description": "Answer questions based on provided context."
+      },
+      "response": []
+    },
+    {
+      "name": "5. Translation",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"text\": \"Bonjour, comment allez-vous?\",\n  \"task\": \"translate\",\n  \"model\": \"gpt-4o\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/process-text",
+          "host": ["{{base_url}}"],
+          "path": ["api", "process-text"]
+        },
+        "description": "Translate text between languages."
+      },
+      "response": []
+    },
+    {
+      "name": "6. Sentiment Analysis",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"text\": \"I absolutely love the new dashboard! It's intuitive and fast.\",\n  \"task\": \"sentiment\",\n  \"model\": \"ollama:llama3\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/process-text",
+          "host": ["{{base_url}}"],
+          "path": ["api", "process-text"]
+        },
+        "description": "Analyze emotional tone and sentiment of text."
+      },
+      "response": []
+    },
+    {
+      "name": "7. Generate Ideas",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"text\": \"Ideas for a mobile app to improve team collaboration\",\n  \"task\": \"generate\",\n  \"model\": \"ollama:mistral\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/process-text",
+          "host": ["{{base_url}}"],
+          "path": ["api", "process-text"]
+        },
+        "description": "Generate creative ideas and content."
+      },
+      "response": []
+    },
+    {
+      "name": "8. Generate PowerPoint",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"text\": \"AI in Education: Transforming Learning\",\n  \"task\": \"ppt-generate\",\n  \"slides_count\": 10,\n  \"tone\": \"professional\",\n  \"model\": \"gpt-4o\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/process-text",
+          "host": ["{{base_url}}"],
+          "path": ["api", "process-text"]
+        },
+        "description": "Generate presentation outline and slide content."
+      },
+      "response": []
+    },
+    {
+      "name": "9. Generate Flashcards",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"text\": \"Photosynthesis is the process by which plants convert light energy into chemical energy. It occurs in chloroplasts and requires sunlight, water, and carbon dioxide. The end products are glucose and oxygen.\",\n  \"task\": \"flashcard\",\n  \"card_count\": 5,\n  \"model\": \"ollama:llama3\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/process-text",
+          "host": ["{{base_url}}"],
+          "path": ["api", "process-text"]
+        },
+        "description": "Create flashcards from educational content."
+      },
+      "response": []
+    },
+    {
+      "name": "10. Topic Chat",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"topic\": \"Summarizing the 2024 sustainability report for internal Q&A\",\n  \"message\": \"What were the biggest emission reductions?\",\n  \"model\": \"ollama:llama3\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/topic-chat",
+          "host": ["{{base_url}}"],
+          "path": ["api", "topic-chat"]
+        },
+        "description": "Multi-turn conversation with topic context. Returns supporting_points, follow_up_questions, and suggested_resources."
+      },
+      "response": []
+    },
+    {
+      "name": "11. Topic Chat (Continue Conversation)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"topic\": \"Summarizing the 2024 sustainability report for internal Q&A\",\n  \"message\": \"What were the cost savings?\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"What were the biggest emission reductions?\"\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"The largest reductions came from electrifying the delivery fleet...\"\n    }\n  ],\n  \"model\": \"ollama:llama3\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/api/topic-chat",
+          "host": ["{{base_url}}"],
+          "path": ["api", "topic-chat"]
+        },
+        "description": "Continue previous conversation by including messages array."
+      },
+      "response": []
+    }
+  ]
+}
+

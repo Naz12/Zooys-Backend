@@ -5,7 +5,6 @@ namespace App\Console\Commands;
 use Illuminate\Console\Command;
 use App\Services\Modules\ModuleRegistry;
 use App\Services\Modules\UnifiedProcessingService;
-use App\Services\Modules\ContentChunkingService;
 use App\Services\Modules\AISummarizationService;
 use App\Services\Modules\ContentExtractionService;
 use Illuminate\Support\Facades\Log;
@@ -36,23 +35,10 @@ class TestModularArchitecture extends Command
             $this->newLine();
         }
 
-        // Test 2: Content Chunking
-        $this->info('2️⃣ Testing Content Chunking...');
-        try {
-            $chunkingService = app(ContentChunkingService::class);
-            
-            $testContent = "This is a test content. " . str_repeat("It has multiple sentences. ", 50);
-            $chunks = $chunkingService->chunkContent($testContent, 'text');
-            
-            $this->info('✅ Content chunking working');
-            $this->info("   Original length: " . strlen($testContent) . " characters");
-            $this->info("   Chunks created: " . count($chunks));
-            $this->info("   Average chunk size: " . round(array_sum(array_column($chunks, 'character_count')) / count($chunks)) . " characters");
+        // Test 2: Content Chunking (Removed - handled by Document Intelligence)
+        $this->info('2️⃣ Content Chunking...');
+        $this->info('   ⏭️  Skipped - Chunking is now handled by Document Intelligence microservice');
             $this->newLine();
-        } catch (\Exception $e) {
-            $this->error("❌ Content chunking failed: " . $e->getMessage());
-            $this->newLine();
-        }
 
         // Test 3: YouTube Content Extraction
         $this->info('3️⃣ Testing YouTube Content Extraction...');
@@ -91,7 +77,6 @@ class TestModularArchitecture extends Command
                 $this->info('✅ Unified processing working');
                 $this->info("   Summary length: " . strlen($result['summary']) . " characters");
                 $this->info("   Processing method: " . $result['metadata']['processing_method']);
-                $this->info("   Chunks processed: " . $result['metadata']['chunks_processed']);
                 $this->info("   Total characters: " . $result['metadata']['total_characters']);
                 $this->info("   Total words: " . $result['metadata']['total_words']);
             } else {
@@ -106,7 +91,7 @@ class TestModularArchitecture extends Command
         // Test 5: Module Dependencies
         $this->info('5️⃣ Testing Module Dependencies...');
         try {
-            $modules = ['content_chunking', 'ai_summarization', 'content_extraction'];
+            $modules = ['ai_summarization', 'content_extraction'];
             
             foreach ($modules as $module) {
                 $dependencies = ModuleRegistry::getModuleDependencies($module);
@@ -126,11 +111,10 @@ class TestModularArchitecture extends Command
         // Test 6: Configuration
         $this->info('6️⃣ Testing Configuration...');
         try {
-            $chunkingConfig = ModuleRegistry::getModuleConfig('content_chunking');
             $summarizationConfig = ModuleRegistry::getModuleConfig('ai_summarization');
             
             $this->info('✅ Configuration loaded');
-            $this->info("   Chunking config: " . json_encode($chunkingConfig));
+            $this->info("   Chunking: Handled by Document Intelligence microservice");
             $this->info("   Summarization config: " . json_encode($summarizationConfig));
             $this->newLine();
         } catch (\Exception $e) {
@@ -144,8 +128,8 @@ class TestModularArchitecture extends Command
             $startTime = microtime(true);
             
             $testContent = str_repeat("This is a test sentence for performance testing. ", 1000);
-            $chunkingService = app(ContentChunkingService::class);
-            $chunks = $chunkingService->chunkContent($testContent, 'text');
+            // Content chunking removed - handled by Document Intelligence
+            // Test AI summarization directly instead
             
             $endTime = microtime(true);
             $processingTime = ($endTime - $startTime) * 1000;
@@ -153,8 +137,7 @@ class TestModularArchitecture extends Command
             $this->info('✅ Performance test completed');
             $this->info("   Processing time: " . round($processingTime, 2) . " ms");
             $this->info("   Content length: " . strlen($testContent) . " characters");
-            $this->info("   Chunks created: " . count($chunks));
-            $this->info("   Speed: " . round(strlen($testContent) / $processingTime, 2) . " chars/ms");
+            $this->info("   Note: Chunking handled by Document Intelligence microservice");
             $this->newLine();
         } catch (\Exception $e) {
             $this->error("❌ Performance test failed: " . $e->getMessage());

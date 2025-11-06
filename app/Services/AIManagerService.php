@@ -10,12 +10,14 @@ class AIManagerService
     private $apiUrl;
     private $apiKey;
     private $timeout;
+    private $defaultModel;
 
     public function __construct()
     {
-        $this->apiUrl = config('services.ai_manager.url');
+        $this->apiUrl = rtrim(config('services.ai_manager.url'), '/');
         $this->apiKey = config('services.ai_manager.api_key');
-        $this->timeout = config('services.ai_manager.timeout', 30);
+        $this->timeout = config('services.ai_manager.timeout', 180);
+        $this->defaultModel = config('services.ai_manager.default_model', 'ollama:llama3');
     }
 
     /**
@@ -32,7 +34,7 @@ class AIManagerService
      */
     public function getSupportedTasks()
     {
-        return ['summarize', 'generate', 'qa', 'translate', 'sentiment', 'code-review'];
+        return ['summarize', 'generate', 'qa', 'translate', 'sentiment', 'code-review', 'ppt-generate', 'flashcard'];
     }
 
     /**
@@ -50,18 +52,35 @@ public function processText($text, $task, $options = [])
         
         for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
             try {
-                Log::info("AI Manager API Request", [
-                    'task' => $task,
-                    'text_length' => strlen($text),
-                    'options' => $options,
-                    'attempt' => $attempt
-                ]);
-
                 $requestData = [
                     'text' => $text,
-                    'task' => $task,
-                    'options' => $options
+                    'task' => $task
                 ];
+
+                // Add model if specified in options, otherwise use default
+                if (isset($options['model'])) {
+                    $requestData['model'] = $options['model'];
+                    unset($options['model']); // Remove from options to avoid duplication
+                }
+
+                // Note: Based on working API examples, the AI Manager API only accepts:
+                // - text (required)
+                // - task (required) 
+                // - model (optional)
+                // Other options like 'language', 'format' may not be supported and could cause issues
+                // Only send the core parameters that the API expects
+                
+                // DO NOT add other options - the API may reject them or they may cause errors
+                // The API handles task-specific behavior internally based on the 'task' parameter
+
+                Log::info("AI Manager API Request", [
+                    'url' => $this->apiUrl . '/api/process-text',
+                    'task' => $task,
+                    'text_length' => strlen($text),
+                    'request_data' => $requestData,
+                    'api_key' => substr($this->apiKey, 0, 10) . '...', // Log partial key for debugging
+                    'attempt' => $attempt
+                ]);
 
                 $response = Http::timeout($this->timeout) // Use config timeout
                     ->connectTimeout(15) // Increased connection timeout
@@ -72,39 +91,126 @@ public function processText($text, $task, $options = [])
                     ])->post($this->apiUrl . '/api/process-text', $requestData);
 
                 if ($response->successful()) {
-                    $data = $response->json();
+                    $responseData = $response->json();
+                    
+                    // Handle new response format (status: success/error)
+                    $isSuccess = ($responseData['status'] ?? 'success') === 'success';
+                    
+                    if (!$isSuccess) {
+                        // Error response with available models
+                        Log::warning("AI Manager returned error status", [
+                            'task' => $task,
+                            'message' => $responseData['message'] ?? 'Unknown error',
+                            'available_models' => $responseData['available_models'] ?? []
+                        ]);
+
+                        return [
+                            'success' => false,
+                            'error' => $responseData['message'] ?? 'Request failed',
+                            'available_models' => $responseData['available_models'] ?? []
+                        ];
+                    }
+
+                    $data = $responseData['data'] ?? $responseData;
                     
                     Log::info("AI Manager API Success", [
                         'task' => $task,
                         'response_length' => strlen($data['insights'] ?? ''),
-                        'model_used' => $data['model_used'] ?? 'unknown',
+                        'model_used' => $responseData['model_used'] ?? 'unknown',
+                        'model_display' => $responseData['model_display'] ?? 'unknown',
                         'attempt' => $attempt
                     ]);
 
                     return [
                         'success' => true,
                         'insights' => $data['insights'] ?? '',
-                        'data' => $data['data'] ?? [],
+                        'data' => $data,
                         'confidence_score' => $data['confidence_score'] ?? 0.8,
-                        'model_used' => $data['model_used'] ?? 'gpt-3.5-turbo',
+                        'model_used' => $responseData['model_used'] ?? $this->defaultModel,
+                        'model_display' => $responseData['model_display'] ?? 'AI Model',
                         'tokens_used' => $data['tokens_used'] ?? 0,
                         'processing_time' => $data['processing_time'] ?? 0
                     ];
                 } else {
-                    Log::warning("AI Manager API failed", [
+                    // Parse error response if available
+                    $errorBody = $response->body();
+                    $errorData = null;
+                    try {
+                        $errorData = $response->json();
+                    } catch (\Exception $e) {
+                        // If JSON parsing fails, use raw body
+                    }
+                    
+                    // Detect cache directory errors in response
+                    $errorBodyStr = is_string($errorBody) ? $errorBody : json_encode($errorBody);
+                    $isCacheError = strpos($errorBodyStr, 'Failed to open stream') !== false || 
+                                   strpos($errorBodyStr, 'storage/framework/cache') !== false ||
+                                   strpos($errorBodyStr, 'No such file or directory') !== false;
+                    
+                    Log::error("AI Manager API failed", [
                         'status' => $response->status(),
-                        'body' => $response->body(),
+                        'status_text' => $response->status() === 500 ? 'Internal Server Error' : 'Unknown',
+                        'response_body' => $errorBody,
+                        'error_data' => $errorData,
                         'task' => $task,
-                        'attempt' => $attempt
+                        'attempt' => $attempt,
+                        'text_length' => strlen($text),
+                        'request_url' => $this->apiUrl . '/api/process-text',
+                        'request_data' => [
+                            'task' => $task,
+                            'text_length' => strlen($text),
+                            'model' => $requestData['model'] ?? 'default',
+                            'has_options' => !empty($options)
+                        ],
+                        'is_cache_error' => $isCacheError,
+                        'error_type' => $isCacheError ? 'cache_directory_missing' : 'unknown'
                     ]);
 
                     // If this is the last attempt, mark service as unavailable and return error
                     if ($attempt === $maxRetries) {
                         $this->markServiceUnavailable();
+                        
+                        // Provide more specific error message for 500 errors
+                        $errorMessage = 'AI Manager API failed after ' . $maxRetries . ' attempts: ' . $response->status();
+                        if ($response->status() === 500) {
+                            $errorMessage = 'AI Manager service encountered an internal server error. ';
+                            
+                            // Check for specific error patterns
+                            $errorBodyStr = is_string($errorBody) ? $errorBody : json_encode($errorBody);
+                            $errorMessageStr = $errorData['message'] ?? $errorData['error'] ?? $errorBodyStr ?? '';
+                            
+                            // Detect cache directory issues
+                            if (strpos($errorMessageStr, 'Failed to open stream') !== false || 
+                                strpos($errorMessageStr, 'No such file or directory') !== false ||
+                                strpos($errorMessageStr, 'storage/framework/cache') !== false) {
+                                $errorMessage = 'AI Manager service has a configuration issue (cache directory missing). ';
+                                $errorMessage .= 'This is a server-side problem with the AI Manager microservice. ';
+                                $errorMessage .= 'Please contact the system administrator or try again later.';
+                            } elseif ($errorData && isset($errorData['message'])) {
+                                $errorMessage .= $errorData['message'];
+                            } elseif ($errorData && isset($errorData['error'])) {
+                                $errorMessage .= $errorData['error'];
+                            } else {
+                                $errorMessage .= 'The service may be temporarily unavailable. Please try again later.';
+                            }
+                            
+                            // Check if text might be too long
+                            $textLength = strlen($text);
+                            if ($textLength > 100000) {
+                                $errorMessage .= ' The content may be too long for processing.';
+                            }
+                        }
+                        
                         return [
                             'success' => false,
-                            'error' => 'AI Manager API failed after ' . $maxRetries . ' attempts: ' . $response->status(),
-                            'details' => $response->body()
+                            'error' => $errorMessage,
+                            'error_details' => [
+                                'error_type' => 'ai_manager_api_error',
+                                'status_code' => $response->status(),
+                                'api_response' => $errorData ?? $errorBody,
+                                'text_length' => strlen($text),
+                                'task' => $task
+                            ]
                         ];
                     }
                     
@@ -279,6 +385,171 @@ public function processText($text, $task, $options = [])
             'success' => true,
             'message' => 'Circuit breaker reset successfully'
         ];
+    }
+
+    /**
+     * Get available models from AI Manager
+     * 
+     * @return array List of available models with keys, vendors, and display names
+     */
+    public function getAvailableModels()
+    {
+        try {
+            $response = Http::timeout(30)
+                ->withHeaders([
+                    'Accept' => 'application/json',
+                    'X-API-KEY' => $this->apiKey,
+                ])->get($this->apiUrl . '/api/models');
+
+            if ($response->successful()) {
+                $data = $response->json();
+                
+                Log::info("AI Manager models retrieved", [
+                    'count' => $data['data']['count'] ?? 0
+                ]);
+
+                return [
+                    'success' => true,
+                    'count' => $data['data']['count'] ?? 0,
+                    'models' => $data['data']['available_models'] ?? []
+                ];
+            }
+
+            return [
+                'success' => false,
+                'error' => 'Failed to retrieve models: ' . $response->status()
+            ];
+        } catch (\Exception $e) {
+            Log::error("Failed to get available models", [
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Topic-based chat with document context
+     * 
+     * @param string $topic The main topic or summary to ground the conversation
+     * @param string $message Current user message/question
+     * @param array $messages Optional: Previous conversation messages [{role, content}]
+     * @param array $options Optional: model, max_tokens, etc.
+     * @return array Chat response with reply, supporting_points, follow_up_questions, suggested_resources
+     */
+    public function topicChat(string $topic, string $message, array $messages = [], array $options = [])
+    {
+        try {
+            Log::info("AI Manager Topic Chat Request", [
+                'topic_length' => strlen($topic),
+                'message_length' => strlen($message),
+                'previous_messages' => count($messages),
+                'options' => $options
+            ]);
+
+            $requestData = [
+                'topic' => $topic,
+                'message' => $message
+            ];
+
+            // Add previous messages if provided
+            if (!empty($messages)) {
+                $requestData['messages'] = $messages;
+            }
+
+            // Add model if specified
+            if (isset($options['model'])) {
+                $requestData['model'] = $options['model'];
+            }
+
+            // Add any other options
+            foreach ($options as $key => $value) {
+                if (!in_array($key, ['model'])) {
+                    $requestData[$key] = $value;
+                }
+            }
+
+            $response = Http::timeout($this->timeout)
+                ->withHeaders([
+                    'Accept' => 'application/json',
+                    'Content-Type' => 'application/json',
+                    'X-API-KEY' => $this->apiKey,
+                ])->post($this->apiUrl . '/api/topic-chat', $requestData);
+
+            if ($response->successful()) {
+                $responseData = $response->json();
+                
+                // Handle error status
+                if (($responseData['status'] ?? 'success') !== 'success') {
+                    return [
+                        'success' => false,
+                        'error' => $responseData['message'] ?? 'Topic chat failed',
+                        'available_models' => $responseData['available_models'] ?? []
+                    ];
+                }
+
+                $data = $responseData['data'] ?? [];
+                
+                Log::info("AI Manager Topic Chat Success", [
+                    'reply_length' => strlen($data['reply'] ?? ''),
+                    'supporting_points' => count($data['supporting_points'] ?? []),
+                    'model_used' => $responseData['model_used'] ?? 'unknown'
+                ]);
+
+                return [
+                    'success' => true,
+                    'reply' => $data['reply'] ?? '',
+                    'supporting_points' => $data['supporting_points'] ?? [],
+                    'follow_up_questions' => $data['follow_up_questions'] ?? [],
+                    'suggested_resources' => $data['suggested_resources'] ?? [],
+                    'model_used' => $responseData['model_used'] ?? $this->defaultModel,
+                    'model_display' => $responseData['model_display'] ?? 'AI Model'
+                ];
+            }
+
+            return [
+                'success' => false,
+                'error' => 'Topic chat request failed: ' . $response->status(),
+                'details' => $response->body()
+            ];
+        } catch (\Exception $e) {
+            Log::error("AI Manager Topic Chat Error", [
+                'error' => $e->getMessage()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Topic chat error: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Generate PowerPoint/Presentation content
+     * 
+     * @param string $topic Presentation topic
+     * @param array $options Optional: slides_count, tone, target_audience, etc.
+     * @return array Presentation outline and content
+     */
+    public function generatePresentation(string $topic, array $options = [])
+    {
+        $options['topic'] = $topic;
+        return $this->processText($topic, 'ppt-generate', $options);
+    }
+
+    /**
+     * Generate flashcards from content
+     * 
+     * @param string $content Content to create flashcards from
+     * @param array $options Optional: card_count, difficulty, etc.
+     * @return array Generated flashcards
+     */
+    public function generateFlashcards(string $content, array $options = [])
+    {
+        return $this->processText($content, 'flashcard', $options);
     }
 
 }

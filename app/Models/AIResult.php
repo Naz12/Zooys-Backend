@@ -12,7 +12,7 @@ class AIResult extends Model
     use HasFactory;
 
     protected $fillable = [
-        'user_id', 'file_upload_id', 'tool_type', 'title', 'description',
+        'user_id', 'file_upload_id', 'doc_id', 'tool_type', 'title', 'description',
         'input_data', 'result_data', 'metadata', 'status'
     ];
 

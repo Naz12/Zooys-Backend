@@ -5,13 +5,12 @@ namespace App\Services\Modules;
 use App\Services\FileUploadService;
 use App\Services\WebScrapingService;
 use App\Services\YouTubeService;
-use App\Services\PythonPDFProcessingService;
 use App\Services\AIMathService;
 use App\Services\FlashcardGenerationService;
 use App\Services\AIPresentationService;
 use App\Services\Modules\AIProcessingModule;
 use App\Services\Modules\ContentExtractionService;
-use App\Services\Modules\TranscriptionModule;
+use App\Services\Modules\TranscriberModule;
 use Illuminate\Support\Facades\Log;
 
 class UniversalFileManagementModule
@@ -23,33 +22,30 @@ class UniversalFileManagementModule
     private $fileUploadService;
     private $webScrapingService;
     private $youtubeService;
-    private $pdfProcessingService;
     private $aiProcessingModule;
     private $contentExtractionService;
-    private $transcriptionModule;
+    private $transcriberModule;
 
     public function __construct(
         FileUploadService $fileUploadService,
         WebScrapingService $webScrapingService,
         YouTubeService $youtubeService,
-        PythonPDFProcessingService $pdfProcessingService,
         AIMathService $aiMathService,
         FlashcardGenerationService $flashcardService,
         AIPresentationService $presentationService,
         AIProcessingModule $aiProcessingModule,
         ContentExtractionService $contentExtractionService,
-        TranscriptionModule $transcriptionModule
+        TranscriberModule $transcriberModule
     ) {
         $this->fileUploadService = $fileUploadService;
         $this->webScrapingService = $webScrapingService;
         $this->youtubeService = $youtubeService;
-        $this->pdfProcessingService = $pdfProcessingService;
         $this->aiMathService = $aiMathService;
         $this->flashcardService = $flashcardService;
         $this->presentationService = $presentationService;
         $this->aiProcessingModule = $aiProcessingModule;
         $this->contentExtractionService = $contentExtractionService;
-        $this->transcriptionModule = $transcriptionModule;
+        $this->transcriberModule = $transcriberModule;
     }
 
     /**

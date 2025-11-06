@@ -18,10 +18,70 @@ class FileUploadController extends Controller
     }
 
     /**
-     * Upload a file
+     * Upload one or multiple files
      */
     public function upload(Request $request): JsonResponse
     {
+        // Log incoming request for debugging
+        \Log::info('File upload request received', [
+            'has_file' => $request->hasFile('file'),
+            'has_files' => $request->hasFile('files'),
+            'files_is_array' => $request->hasFile('files') && is_array($request->file('files')),
+            'all_files' => $request->allFiles()
+        ]);
+
+        // Check if multiple files or single file
+        $hasMultipleFiles = $request->hasFile('files') && is_array($request->file('files'));
+        
+        if ($hasMultipleFiles) {
+            // Validate multiple files
+            $validator = Validator::make($request->all(), [
+                'files' => 'required|array',
+                'files.*' => 'required|file|max:51200', // 50MB max per file
+                'metadata' => 'sometimes|array'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'error' => 'Validation failed',
+                    'messages' => $validator->errors()
+                ], 422);
+            }
+
+            $user = $request->user();
+            $files = $request->file('files');
+            $metadata = $request->input('metadata', []);
+            
+            $uploadedFiles = [];
+            $errors = [];
+
+            foreach ($files as $index => $file) {
+                $result = $this->fileUploadService->uploadFile($file, $user->id, $metadata);
+                
+                if ($result['success']) {
+                    $uploadedFiles[] = [
+                        'file_upload' => $result['file_upload'],
+                        'file_url' => $result['file_url']
+                    ];
+                } else {
+                    $errors[] = [
+                        'index' => $index,
+                        'filename' => $file->getClientOriginalName(),
+                        'error' => $result['error']
+                    ];
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => count($uploadedFiles) . ' file(s) uploaded successfully',
+                'uploaded_count' => count($uploadedFiles),
+                'error_count' => count($errors),
+                'file_uploads' => $uploadedFiles,
+                'errors' => $errors
+            ], 201);
+        } else {
+            // Single file upload (backward compatibility)
         $validator = Validator::make($request->all(), [
             'file' => 'required|file|max:51200', // 50MB max
             'metadata' => 'sometimes|array'
@@ -52,6 +112,7 @@ class FileUploadController extends Controller
         return response()->json([
             'error' => $result['error']
         ], 400);
+        }
     }
 
     /**
@@ -148,5 +209,45 @@ class FileUploadController extends Controller
         return response()->json([
             'error' => $result['error']
         ], 400);
+    }
+
+    /**
+     * Test endpoint to check what files are received
+     */
+    public function testUpload(Request $request): JsonResponse
+    {
+        $allFiles = [];
+        foreach ($request->allFiles() as $key => $files) {
+            if (is_array($files)) {
+                foreach ($files as $file) {
+                    $allFiles[] = [
+                        'key' => $key,
+                        'name' => $file->getClientOriginalName(),
+                        'size' => $file->getSize(),
+                        'mime' => $file->getMimeType()
+                    ];
+                }
+            } else {
+                $allFiles[] = [
+                    'key' => $key,
+                    'name' => $files->getClientOriginalName(),
+                    'size' => $files->getSize(),
+                    'mime' => $files->getMimeType()
+                ];
+            }
+        }
+        
+        return response()->json([
+            'message' => 'File upload test endpoint',
+            'has_file' => $request->hasFile('file'),
+            'has_files' => $request->hasFile('files'),
+            'file_count' => $request->hasFile('files') && is_array($request->file('files')) 
+                ? count($request->file('files')) 
+                : ($request->hasFile('file') ? 1 : 0),
+            'files_is_array' => $request->hasFile('files') ? is_array($request->file('files')) : false,
+            'all_files' => $allFiles,
+            'request_keys' => array_keys($request->all()),
+            'file_keys' => array_keys($request->allFiles())
+        ]);
     }
 }

@@ -8,9 +8,11 @@ use App\Models\History;
 use App\Services\Modules\UnifiedProcessingService;
 use App\Services\Modules\AIProcessingModule;
 use App\Services\Modules\UniversalFileManagementModule;
+use App\Services\Modules\TranscriberModule;
 use App\Services\WebScrapingService;
 use App\Services\AIResultService;
 use App\Services\UniversalJobService;
+use App\Services\DocumentIntelligenceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -276,6 +278,7 @@ class SummarizeController extends Controller
 
     /**
      * Process document for chat
+     * Now uses Document Intelligence microservice instead
      */
     public function processDocument(Request $request, $uploadId)
     {
@@ -298,14 +301,20 @@ class SummarizeController extends Controller
                 ], 404);
             }
 
-            // Process document based on type
-            $result = $this->enhancedDocumentService->processDocument($uploadId, $filePath, $upload->file_type);
+            // Use Document Intelligence microservice for ingestion
+            // This handles chunking, vectorization, and indexing automatically
+            $docIntelligence = app(\App\Services\DocumentIntelligenceService::class);
+            $result = $docIntelligence->ingestFromFileId($upload->id);
+
+            if (!$result['success']) {
+                throw new \Exception($result['error'] ?? 'Document ingestion failed');
+            }
 
             return response()->json([
                 'success' => true,
-                'message' => 'Document processed successfully',
-                'total_chunks' => $result['total_chunks'],
-                'total_pages' => $result['total_pages']
+                'message' => 'Document ingestion started',
+                'job_id' => $result['job_id'],
+                'doc_id' => $result['doc_id']
             ]);
 
         } catch (\Exception $e) {
@@ -388,33 +397,295 @@ class SummarizeController extends Controller
             case 'image':
             case 'audio':
             case 'video':
-                // Use universal file management module for all file types
-                $result = $this->universalFileModule->processFile($source['data'], 'summarize', $options);
-                return $result['success'] ? $result['result'] : ['error' => $result['error']];
+                // Route to appropriate service based on file type
+                return $this->processFile($source['data'], $options);
             default:
                 return null;
         }
     }
+    
+    /**
+     * Process file summarization - routes to Document Intelligence or AI Manager based on file type
+     */
+    private function processFile($fileId, $options)
+    {
+        try {
+            $file = \App\Models\FileUpload::find($fileId);
+            if (!$file) {
+                return [
+                    'error' => 'File not found',
+                    'metadata' => [
+                        'content_type' => 'file',
+                        'processing_time' => '0.0s',
+                        'tokens_used' => 0,
+                        'confidence' => 0.0
+                    ]
+                ];
+            }
+
+            $fileType = strtolower($file->file_type ?? '');
+            $isAudioVideo = in_array($fileType, ['audio', 'video']);
+
+            if ($isAudioVideo) {
+                // Audio/Video: TranscriberModule → AI Manager
+                return $this->processAudioVideoFile($file, $options);
+            } else {
+                // PDF/Doc/Image: Document Intelligence
+                return $this->processDocumentFile($file, $options);
+            }
+        } catch (\Exception $e) {
+            Log::error('File processing error: ' . $e->getMessage());
+            return [
+                'error' => 'File processing failed: ' . $e->getMessage(),
+                'metadata' => [
+                    'content_type' => 'file',
+                    'processing_time' => '0.0s',
+                    'tokens_used' => 0,
+                    'confidence' => 0.0
+                ]
+            ];
+        }
+    }
+    
+    /**
+     * Process audio/video file: TranscriberModule → AI Manager
+     */
+    private function processAudioVideoFile($file, $options)
+    {
+        try {
+            $transcriberModule = app(TranscriberModule::class);
+            $filePath = storage_path('app/' . $file->file_path);
+            
+            if (!file_exists($filePath)) {
+                return [
+                    'error' => 'File not found on disk',
+                    'metadata' => [
+                        'content_type' => $file->file_type,
+                        'processing_time' => '0.0s',
+                        'tokens_used' => 0,
+                        'confidence' => 0.0
+                    ]
+                ];
+            }
+
+            // Use YouTubeTranscriberService for audio/video files
+            $transcriberService = app(\App\Services\YouTubeTranscriberService::class);
+            $transcriptionResult = $transcriberService->transcribe($filePath, [
+                'format' => 'article',
+                'language' => $options['language'] ?? 'auto'
+            ]);
+
+            if (!$transcriptionResult['success'] || empty($transcriptionResult['subtitle_text'])) {
+                return [
+                    'error' => 'Failed to transcribe audio/video: ' . ($transcriptionResult['error'] ?? 'Unknown error'),
+                    'metadata' => [
+                        'content_type' => $file->file_type,
+                        'processing_time' => '0.0s',
+                        'tokens_used' => 0,
+                        'confidence' => 0.0
+                    ]
+                ];
+            }
+
+            $transcript = $transcriptionResult['subtitle_text'];
+            
+            // Use AI Manager to summarize
+            $model = $options['model'] ?? config('services.ai_manager.default_model', 'deepseek-chat');
+            $summaryResult = $this->aiProcessingModule->summarize($transcript, [
+                'model' => $model,
+                'language' => $options['language'] ?? 'en',
+                'format' => $options['format'] ?? 'detailed'
+            ]);
+
+            $summary = $summaryResult['insights'] ?? $summaryResult['summary'] ?? '';
+
+            return [
+                'summary' => $summary,
+                'key_points' => $summaryResult['key_points'] ?? [],
+                'metadata' => [
+                    'content_type' => $file->file_type,
+                    'processing_time' => '5-10 minutes',
+                    'tokens_used' => $summaryResult['tokens_used'] ?? strlen($transcript) / 4,
+                    'confidence' => $summaryResult['confidence_score'] ?? 0.8,
+                    'model_used' => $summaryResult['model_used'] ?? $model
+                ],
+                'source_info' => [
+                    'file_name' => $file->original_name,
+                    'file_type' => $file->file_type,
+                    'transcript_length' => strlen($transcript),
+                    'word_count' => str_word_count($transcript)
+                ]
+            ];
+        } catch (\Exception $e) {
+            Log::error('Audio/video file processing error: ' . $e->getMessage());
+            return [
+                'error' => 'Audio/video processing failed: ' . $e->getMessage(),
+                'metadata' => [
+                    'content_type' => $file->file_type ?? 'audio',
+                    'processing_time' => '0.0s',
+                    'tokens_used' => 0,
+                    'confidence' => 0.0
+                ]
+            ];
+        }
+    }
+    
+    /**
+     * Process PDF/Doc/Image file: Document Intelligence
+     */
+    private function processDocumentFile($file, $options)
+    {
+        try {
+            $docIntelligenceService = app(DocumentIntelligenceService::class);
+            $filePath = storage_path('app/' . $file->file_path);
+            
+            if (!file_exists($filePath)) {
+                return [
+                    'error' => 'File not found on disk',
+                    'metadata' => [
+                        'content_type' => $file->file_type,
+                        'processing_time' => '0.0s',
+                        'tokens_used' => 0,
+                        'confidence' => 0.0
+                    ]
+                ];
+            }
+
+            // Check if already ingested
+            $docId = $file->doc_id;
+            
+            if (empty($docId)) {
+                // Ingest document
+                $ingestResult = $docIntelligenceService->ingestDocument($filePath, [
+                    'ocr' => $options['ocr'] ?? 'auto',
+                    'lang' => $options['lang'] ?? 'eng',
+                    'metadata' => [
+                        'file_id' => $file->id,
+                        'user_id' => $file->user_id,
+                        'original_name' => $file->original_name
+                    ]
+                ]);
+
+                $docId = $ingestResult['doc_id'] ?? null;
+                $ingestJobId = $ingestResult['job_id'] ?? null;
+
+                if (empty($docId)) {
+                    return [
+                        'error' => 'Document ingestion failed: No doc_id returned',
+                        'metadata' => [
+                            'content_type' => $file->file_type,
+                            'processing_time' => '0.0s',
+                            'tokens_used' => 0,
+                            'confidence' => 0.0
+                        ]
+                    ];
+                }
+
+                // Store doc_id in file record
+                $file->doc_id = $docId;
+                $file->save();
+
+                // Poll ingestion job if needed
+                if (!empty($ingestJobId)) {
+                    $pollResult = $docIntelligenceService->pollJobCompletion($ingestJobId, 60, 2);
+                    
+                    if (in_array($pollResult['status'], ['failed', 'error', 'timeout'])) {
+                        return [
+                            'error' => 'Document ingestion job failed or timed out. Status: ' . ($pollResult['status'] ?? 'unknown'),
+                            'metadata' => [
+                                'content_type' => $file->file_type,
+                                'processing_time' => '0.0s',
+                                'tokens_used' => 0,
+                                'confidence' => 0.0
+                            ],
+                            'doc_id' => $docId // Return doc_id for manual retry
+                        ];
+                    }
+                }
+            }
+
+            // Generate summary using Document Intelligence
+            $summaryResult = $docIntelligenceService->answer(
+                "Please provide a comprehensive summary of this document. Include key points, main themes, and important details.",
+                [
+                    'doc_ids' => [$docId],
+                    'llm_model' => $options['llm_model'] ?? 'llama3',
+                    'max_tokens' => $options['max_tokens'] ?? 512,
+                    'top_k' => $options['top_k'] ?? 3,
+                    'temperature' => $options['temperature'] ?? 0.7,
+                    'force_fallback' => $options['force_fallback'] ?? true
+                ]
+            );
+
+            $summary = $summaryResult['answer'] ?? '';
+            
+            if (empty($summary)) {
+                return [
+                    'error' => 'Summarization failed: No answer in response',
+                    'metadata' => [
+                        'content_type' => $file->file_type,
+                        'processing_time' => '0.0s',
+                        'tokens_used' => 0,
+                        'confidence' => 0.0
+                    ],
+                    'doc_id' => $docId // Return doc_id for manual chat
+                ];
+            }
+
+            return [
+                'summary' => $summary,
+                'sources' => $summaryResult['sources'] ?? [],
+                'metadata' => [
+                    'content_type' => $file->file_type,
+                    'processing_time' => '2-5 minutes',
+                    'tokens_used' => 0, // Document Intelligence doesn't return token count
+                    'confidence' => 0.9,
+                    'doc_id' => $docId
+                ],
+                'source_info' => [
+                    'file_name' => $file->original_name,
+                    'file_type' => $file->file_type,
+                    'sources_count' => count($summaryResult['sources'] ?? [])
+                ]
+            ];
+        } catch (\Exception $e) {
+            Log::error('Document file processing error: ' . $e->getMessage());
+            return [
+                'error' => 'Document processing failed: ' . $e->getMessage(),
+                'metadata' => [
+                    'content_type' => $file->file_type ?? 'file',
+                    'processing_time' => '0.0s',
+                    'tokens_used' => 0,
+                    'confidence' => 0.0
+                ]
+            ];
+        }
+    }
 
     /**
-     * Process text content
+     * Process text content using AI Manager
      */
     private function processText($text, $options)
     {
-        // Truncate content if too long for OpenAI
+        // Truncate content if too long
         $maxTokens = 12000;
         $truncatedText = $this->truncateTextForOpenAI($text, $maxTokens);
         
-        $result = $this->aiProcessingModule->summarize($truncatedText, $options);
-        $summary = $result['summary'];
+        // Use AI Manager with default model
+        $model = $options['model'] ?? config('services.ai_manager.default_model', 'deepseek-chat');
+        $result = $this->aiProcessingModule->summarize($truncatedText, array_merge($options, ['model' => $model]));
+        
+        $summary = $result['insights'] ?? $result['summary'] ?? '';
 
         return [
             'summary' => $summary,
+            'key_points' => $result['key_points'] ?? [],
             'metadata' => [
                 'content_type' => 'text',
                 'processing_time' => '1.2s',
-                'tokens_used' => 800,
-                'confidence' => 0.95
+                'tokens_used' => $result['tokens_used'] ?? strlen($text) / 4,
+                'confidence' => $result['confidence_score'] ?? 0.95,
+                'model_used' => $result['model_used'] ?? $model
             ],
             'source_info' => [
                 'word_count' => str_word_count($text),
@@ -457,21 +728,24 @@ class SummarizeController extends Controller
             $content = $scrapingResult['content'];
             $metadata = $scrapingResult['metadata'];
             
-        // Truncate content if too long for OpenAI
+        // Truncate content if too long
         $maxTokens = 12000;
         $truncatedContent = $this->truncateTextForOpenAI($content, $maxTokens);
         
-        // Generate summary using AI Manager
-        $result = $this->aiProcessingModule->summarize($truncatedContent, $options);
-        $summary = $result['summary'];
+        // Generate summary using AI Manager with default model
+        $model = $options['model'] ?? config('services.ai_manager.default_model', 'deepseek-chat');
+        $result = $this->aiProcessingModule->summarize($truncatedContent, array_merge($options, ['model' => $model]));
+        $summary = $result['insights'] ?? $result['summary'] ?? '';
 
             return [
                 'summary' => $summary,
+                'key_points' => $result['key_points'] ?? [],
                 'metadata' => [
                     'content_type' => 'link',
                     'processing_time' => '3.2s',
-                    'tokens_used' => strlen($content) / 4, // Rough estimate
-                    'confidence' => 0.95
+                    'tokens_used' => $result['tokens_used'] ?? strlen($content) / 4,
+                    'confidence' => $result['confidence_score'] ?? 0.95,
+                    'model_used' => $result['model_used'] ?? $model
                 ],
                 'source_info' => [
                     'url' => $url,
@@ -504,19 +778,23 @@ class SummarizeController extends Controller
     }
 
     /**
-     * Process YouTube video using YouTube Transcriber
+     * Process YouTube video: TranscriberModule → AI Manager
      */
     private function processYouTubeVideo($videoUrl, $options)
     {
         try {
             Log::info("Processing YouTube video: {$videoUrl}");
             
-            // Use unified processing service for YouTube videos
-            $result = $this->unifiedProcessingService->processYouTubeVideo($videoUrl, $options);
-            
-            if (!$result['success']) {
+            // Use TranscriberModule to get transcript
+            $transcriberModule = app(TranscriberModule::class);
+            $transcriptionResult = $transcriberModule->transcribeVideo($videoUrl, [
+                'format' => 'article',
+                'language' => $options['language'] ?? 'auto'
+            ]);
+
+            if (!$transcriptionResult['success'] || empty($transcriptionResult['transcript'])) {
                 return [
-                    'error' => $result['error'],
+                    'error' => 'Failed to transcribe YouTube video: ' . ($transcriptionResult['error'] ?? 'Unknown error'),
                     'metadata' => [
                         'content_type' => 'youtube',
                         'processing_time' => '0.5s',
@@ -525,29 +803,43 @@ class SummarizeController extends Controller
                     ],
                     'source_info' => [
                         'url' => $videoUrl,
-                        'title' => 'Failed to process YouTube video',
+                        'title' => 'Failed to transcribe YouTube video',
                         'word_count' => 0
                     ]
                 ];
             }
 
+            $transcript = $transcriptionResult['transcript'];
+            
+            // Use AI Manager to summarize transcript
+            $model = $options['model'] ?? config('services.ai_manager.default_model', 'deepseek-chat');
+            $summaryResult = $this->aiProcessingModule->summarize($transcript, [
+                'model' => $model,
+                'language' => $options['language'] ?? 'en',
+                'format' => $options['format'] ?? 'detailed'
+            ]);
+
+            $summary = $summaryResult['insights'] ?? $summaryResult['summary'] ?? '';
+
             return [
-                'summary' => $result['summary'],
+                'summary' => $summary,
+                'key_points' => $summaryResult['key_points'] ?? [],
                 'metadata' => [
                     'content_type' => 'youtube',
                     'processing_time' => '5-10 minutes',
-                    'tokens_used' => strlen($result['summary']) / 4,
-                    'confidence' => 0.95
+                    'tokens_used' => $summaryResult['tokens_used'] ?? strlen($transcript) / 4,
+                    'confidence' => $summaryResult['confidence_score'] ?? 0.95,
+                    'model_used' => $summaryResult['model_used'] ?? $model
                 ],
                 'source_info' => [
                     'url' => $videoUrl,
-                    'title' => $result['metadata']['title'] ?? 'YouTube Video',
+                    'title' => 'YouTube Video',
                     'description' => 'Video content extracted via transcription',
-                    'author' => $result['metadata']['channel'] ?? 'Unknown',
-                    'published_date' => '',
-                    'word_count' => $result['metadata']['total_words'] ?? 0
-                ],
-                'ai_result' => $result['ai_result']
+                    'video_id' => $transcriptionResult['video_id'] ?? null,
+                    'language' => $transcriptionResult['language'] ?? null,
+                    'word_count' => str_word_count($transcript),
+                    'transcript_length' => strlen($transcript)
+                ]
             ];
 
         } catch (\Exception $e) {
@@ -591,44 +883,36 @@ class SummarizeController extends Controller
                 throw new \Exception('PDF file not found on server. Please re-upload the file.');
             }
             
-            // Check if PDF is password-protected
-            Log::info('Checking if PDF is password-protected...');
-            $isPasswordProtected = $this->enhancedPDFService->isPasswordProtected($filePath);
-            Log::info('PDF password protection check result: ' . ($isPasswordProtected ? 'PROTECTED' : 'NOT PROTECTED'));
+            // Use PDF microservice for extraction
+            Log::info('Extracting PDF content using microservice...');
+            $converterService = app(\App\Services\DocumentConverterService::class);
             
-            if ($isPasswordProtected) {
-                Log::info('Password-protected PDF detected - cannot process');
-                return [
-                    'error' => 'This PDF is password-protected and cannot be summarized. Please use an unprotected PDF file.',
-                    'metadata' => [
-                        'content_type' => 'pdf',
-                        'processing_time' => '0.5s',
-                        'tokens_used' => 0,
-                        'confidence' => 0.0
-                    ],
-                    'source_info' => [
-                        'pages' => 0,
-                        'word_count' => 0,
-                        'file_size' => $this->formatFileSize($upload->file_size),
-                        'password_protected' => true
-                    ]
-                ];
+            $extractResult = $converterService->extractContent($filePath, [
+                'content' => true,
+                'metadata' => true,
+                'images' => false
+            ]);
+            
+            if (!$extractResult['success']) {
+                Log::error('PDF extraction failed', ['error' => $extractResult['error']]);
+                throw new \Exception($extractResult['error'] ?? 'PDF extraction failed');
             }
             
-            // Use regular PDF processing for unprotected PDFs
-            $pdfData = $this->enhancedPDFService->extractTextFromPDF($filePath);
+            $pdfData = $extractResult['result'];
+            $text = $pdfData['content'] ?? '';
             
-            if (!$pdfData['success']) {
-                throw new \Exception($pdfData['error']);
-            }
-            
-            if (empty($pdfData['text'])) {
+            if (empty($text)) {
                 throw new \Exception('No readable text found in PDF. The document may be scanned or image-based.');
             }
             
-            // Truncate content if too long for OpenAI (max ~12,000 tokens to leave room for prompt)
+            Log::info('PDF extraction successful', [
+                'text_length' => strlen($text),
+                'metadata' => $pdfData['metadata'] ?? []
+            ]);
+            
+            // Truncate content if too long for AI processing (max ~12,000 tokens to leave room for prompt)
             $maxTokens = 12000;
-            $truncatedText = $this->truncateTextForOpenAI($pdfData['text'], $maxTokens);
+            $truncatedText = $this->truncateTextForOpenAI($text, $maxTokens);
             
             // Generate summary using AI Manager
             $result = $this->aiProcessingModule->summarize($truncatedText, $options);
@@ -996,10 +1280,43 @@ class SummarizeController extends Controller
                 'source' => $source
             ], $options, $user->id);
 
-            // Queue background processing (non-blocking kickoff)
-            \Illuminate\Support\Facades\Artisan::queue('universal:process-job', [
-                'jobId' => $job['id']
-            ]);
+            // Process job in background (non-blocking)
+            // Use dispatch to run in background queue, or process immediately if queue is sync
+            try {
+                // Try to dispatch as a job first (if queue is configured)
+                if (config('queue.default') !== 'sync') {
+                    \Illuminate\Support\Facades\Artisan::queue('universal:process-job', [
+                        'jobId' => $job['id']
+                    ]);
+                } else {
+                    // If queue is sync, process immediately in background using exec
+                    // This prevents blocking the HTTP response
+                    if (PHP_OS_FAMILY === 'Windows') {
+                        // Windows: use start /B to run in background
+                        $command = "php artisan universal:process-job {$job['id']}";
+                        pclose(popen("start /B " . $command, "r"));
+                    } else {
+                        // Linux/Unix: use nohup to run in background
+                        $command = "php artisan universal:process-job {$job['id']} > /dev/null 2>&1 &";
+                        exec($command);
+                    }
+                }
+            } catch (\Exception $e) {
+                // Fallback: try to process immediately but don't block
+                Log::warning("Failed to queue job, processing in background thread", [
+                    'job_id' => $job['id'],
+                    'error' => $e->getMessage()
+                ]);
+                
+                // Use exec to run in background
+                if (PHP_OS_FAMILY === 'Windows') {
+                    $command = "php artisan universal:process-job {$job['id']}";
+                    pclose(popen("start /B " . $command, "r"));
+                } else {
+                    $command = "php artisan universal:process-job {$job['id']} > /dev/null 2>&1 &";
+                    exec($command);
+                }
+            }
 
             return response()->json([
                 'success' => true,

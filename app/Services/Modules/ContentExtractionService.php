@@ -3,28 +3,24 @@
 namespace App\Services\Modules;
 
 use App\Services\YouTubeService;
-use App\Services\DocumentExtractionMicroservice;
-use App\Services\EnhancedDocumentProcessingService;
-use App\Services\WordProcessingService;
+use App\Services\DocumentConverterService;
 use App\Services\WebScrapingService;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class ContentExtractionService
 {
     private $youtubeService;
-    private $documentExtractionService;
-    private $documentService;
+    private $documentConverterService;
     private $webScrapingService;
 
     public function __construct(
         YouTubeService $youtubeService,
-        DocumentExtractionMicroservice $documentExtractionService,
-        EnhancedDocumentProcessingService $documentService,
+        DocumentConverterService $documentConverterService,
         WebScrapingService $webScrapingService
     ) {
         $this->youtubeService = $youtubeService;
-        $this->documentExtractionService = $documentExtractionService;
-        $this->documentService = $documentService;
+        $this->documentConverterService = $documentConverterService;
         $this->webScrapingService = $webScrapingService;
     }
 
@@ -89,7 +85,6 @@ class ContentExtractionService
                 'source_type' => 'text',
                 'word_count' => str_word_count($text),
                 'character_count' => strlen($text),
-                'language' => $this->detectLanguage($text),
             ]
         ];
     }
@@ -105,48 +100,21 @@ class ContentExtractionService
             throw new \Exception('Invalid YouTube URL');
         }
 
-        // Try to get full transcript using YouTube Transcriber microservice
+        // Use YouTube Transcriber microservice
         $transcript = $this->youtubeService->getVideoContentWithCaptions($videoId);
         
-        // Create minimal video data for metadata
-        $videoData = [
-            'id' => $videoId,
-            'title' => 'YouTube Video',
-            'description' => 'Video content extracted via transcription',
-            'channel_title' => 'Unknown',
-            'published_at' => null,
-            'duration' => null,
-            'view_count' => 0,
-            'like_count' => 0,
-            'comment_count' => 0,
-            'tags' => [],
-            'category_id' => null,
-            'thumbnail' => null,
-        ];
-        
-        if ($transcript) {
-            // Use full transcript
-            $content = $this->buildYouTubeContentWithTranscript($videoData, $transcript);
-            $hasTranscript = true;
-        } else {
-            // Fallback to metadata only
-            $content = $this->buildYouTubeContentFromMetadata($videoData);
-            $hasTranscript = false;
+        if (!$transcript) {
+            throw new \Exception('Failed to get transcript from YouTube video');
         }
 
         return [
             'success' => true,
-            'content' => $content,
+            'content' => $transcript,
             'metadata' => [
                 'source_type' => 'youtube',
                 'video_id' => $videoId,
-                'title' => $videoData['title'],
-                'channel' => $videoData['channel_title'],
-                'duration' => $videoData['duration'],
-                'views' => $videoData['view_count'],
-                'has_transcript' => $hasTranscript,
-                'word_count' => str_word_count($content),
-                'character_count' => strlen($content),
+                'word_count' => str_word_count($transcript),
+                'character_count' => strlen($transcript),
             ]
         ];
     }
@@ -175,308 +143,117 @@ class ContentExtractionService
 
     /**
      * Extract content from PDF file
+     * Uses PDF microservice
      */
     private function extractFromPDF($filePath, $options)
     {
-        $result = $this->pdfService->extractTextFromPDF($filePath);
+        // Ensure we have absolute path
+        if (!file_exists($filePath)) {
+            $filePath = Storage::path($filePath);
+        }
+
+        // Use PDF microservice for extraction
+        $result = $this->documentConverterService->extractContent($filePath, [
+            'content' => true,
+            'metadata' => true,
+            'images' => $options['include_images'] ?? false
+        ]);
         
         if (!$result['success']) {
-            throw new \Exception($result['error']);
+            throw new \Exception($result['error'] ?? 'PDF extraction failed');
         }
+
+        $extractedData = $result['result'] ?? [];
+        $content = $extractedData['content'] ?? '';
 
         return [
             'success' => true,
-            'content' => $result['content'],
-            'metadata' => array_merge($result['metadata'], [
+            'content' => $content,
+            'metadata' => array_merge($extractedData['metadata'] ?? [], [
                 'source_type' => 'pdf',
-                'word_count' => str_word_count($result['content']),
-                'character_count' => strlen($result['content']),
+                'word_count' => str_word_count($content),
+                'character_count' => strlen($content),
             ])
         ];
     }
 
     /**
      * Extract content from Word document
-     */
-    private function extractFromWord($filePath, $options)
-    {
-        $result = $this->wordService->extractTextFromWord($filePath);
-        
-        if (!$result['success']) {
-            throw new \Exception($result['error']);
-        }
-
-        return [
-            'success' => true,
-            'content' => $result['text'],
-            'metadata' => array_merge($result['metadata'], [
-                'source_type' => 'word',
-                'word_count' => $result['word_count'],
-                'character_count' => $result['character_count'],
-                'paragraphs' => $result['paragraphs'],
-            ])
-        ];
-    }
-
-    /**
-     * Extract content from text file
-     */
-    private function extractFromTxt($filePath, $options)
-    {
-        $result = $this->txtService->extractTextFromTxt($filePath);
-        
-        if (!$result['success']) {
-            throw new \Exception($result['error']);
-        }
-
-        return [
-            'success' => true,
-            'content' => $result['text'],
-            'metadata' => array_merge($result['metadata'], [
-                'source_type' => 'txt',
-                'word_count' => $result['word_count'],
-                'character_count' => $result['character_count'],
-                'lines' => $result['lines'],
-            ])
-        ];
-    }
-
-    /**
-     * Extract content from PowerPoint file
-     */
-    private function extractFromPpt($filePath, $options)
-    {
-        $result = $this->pptService->extractTextFromPpt($filePath);
-        
-        if (!$result['success']) {
-            throw new \Exception($result['error']);
-        }
-
-        return [
-            'success' => true,
-            'content' => $result['text'],
-            'metadata' => array_merge($result['metadata'], [
-                'source_type' => 'ppt',
-                'word_count' => $result['word_count'],
-                'character_count' => $result['character_count'],
-                'slides' => $result['slides'],
-            ])
-        ];
-    }
-
-    /**
-     * Extract content from Excel file
-     */
-    private function extractFromExcel($filePath, $options)
-    {
-        $result = $this->excelService->extractTextFromExcel($filePath);
-        
-        if (!$result['success']) {
-            throw new \Exception($result['error']);
-        }
-
-        return [
-            'success' => true,
-            'content' => $result['text'],
-            'metadata' => array_merge($result['metadata'], [
-                'source_type' => 'excel',
-                'word_count' => $result['word_count'],
-                'character_count' => $result['character_count'],
-                'sheets' => $result['sheets'],
-            ])
-        ];
-    }
-
-    /**
-     * Extract content from document file (legacy)
+     * Uses PDF/Document microservice
      */
     private function extractFromDocument($filePath, $options)
     {
-        $result = $this->documentService->extractTextFromDocument($filePath);
-        
-        if (!$result['success']) {
-            throw new \Exception($result['error']);
+        // Ensure we have absolute path
+        if (!file_exists($filePath)) {
+            $filePath = Storage::path($filePath);
         }
 
-        return [
-            'success' => true,
-            'content' => $result['content'],
-            'metadata' => array_merge($result['metadata'], [
-                'source_type' => 'document',
-                'word_count' => str_word_count($result['content']),
-                'character_count' => strlen($result['content']),
-            ])
-        ];
-    }
-
-    /**
-     * Extract content from uploaded file
-     */
-    public function extractFromFile($fileId, $options)
-    {
-        $fileUpload = \App\Models\FileUpload::find($fileId);
-        
-        if (!$fileUpload) {
-            throw new \Exception('File not found');
-        }
-
-        // Check if file exists in public storage first, then app storage
-        $publicPath = storage_path('app/public/' . $fileUpload->file_path);
-        $appPath = storage_path('app/' . $fileUpload->file_path);
-        
-        if (file_exists($publicPath)) {
-            $filePath = $publicPath;
-        } elseif (file_exists($appPath)) {
-            $filePath = $appPath;
-        } else {
-            throw new \Exception('File not found at expected location: ' . $fileUpload->file_path);
-        }
-        
-        $fileType = strtolower($fileUpload->file_type);
-        
-        // Use the document extraction microservice
-        $result = $this->documentExtractionService->extractText($filePath, $fileType, $options);
+        // Use PDF/Document microservice for extraction
+        $result = $this->documentConverterService->extractContent($filePath, [
+            'content' => true,
+            'metadata' => true,
+            'images' => $options['include_images'] ?? false
+        ]);
         
         if (!$result['success']) {
             throw new \Exception($result['error'] ?? 'Document extraction failed');
         }
 
+        $extractedData = $result['result'] ?? [];
+        $content = $extractedData['content'] ?? '';
+
         return [
             'success' => true,
-            'content' => $result['text'],
-            'metadata' => array_merge($result['metadata'], [
-                'source_type' => $fileType,
-                'word_count' => $result['word_count'],
-                'character_count' => $result['character_count'],
-                'extraction_method' => $result['extraction_method'] ?? 'microservice'
+            'content' => $content,
+            'metadata' => array_merge($extractedData['metadata'] ?? [], [
+                'source_type' => 'document',
+                'word_count' => str_word_count($content),
+                'character_count' => strlen($content),
             ])
         ];
     }
 
     /**
-     * Build YouTube content with full transcript
+     * Extract content from generic file
+     * Routes to appropriate extraction method
      */
-    private function buildYouTubeContentWithTranscript($videoData, $transcript)
+    private function extractFromFile($filePath, $options)
     {
-        $content = "Title: {$videoData['title']}\n\n";
-        $content .= "Channel: {$videoData['channel_title']}\n";
-        $content .= "Duration: {$videoData['duration']}\n";
-        $content .= "Views: {$videoData['view_count']}\n\n";
+        $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
         
-        $content .= "=== FULL VIDEO TRANSCRIPT ===\n";
-        $content .= $transcript . "\n\n";
-        
-        $content .= "=== VIDEO DESCRIPTION ===\n";
-        $content .= $videoData['description'] . "\n";
-        
-        if (!empty($videoData['tags'])) {
-            $content .= "\nTags: " . implode(', ', $videoData['tags']) . "\n";
-        }
-        
-        return $content;
-    }
-
-    /**
-     * Build YouTube content from metadata only
-     */
-    private function buildYouTubeContentFromMetadata($videoData)
-    {
-        $content = "Title: {$videoData['title']}\n\n";
-        $content .= "Description: {$videoData['description']}\n\n";
-        $content .= "Channel: {$videoData['channel_title']}\n";
-        $content .= "Duration: {$videoData['duration']}\n";
-        $content .= "Views: {$videoData['view_count']}\n";
-        
-        if (!empty($videoData['tags'])) {
-            $content .= "Tags: " . implode(', ', $videoData['tags']) . "\n";
-        }
-        
-        return $content;
-    }
-
-    /**
-     * Detect content language
-     */
-    private function detectLanguage($text)
-    {
-        // Simple language detection - can be enhanced with proper NLP
-        $sample = substr($text, 0, 1000);
-        
-        // Basic heuristics
-        if (preg_match('/[а-яё]/i', $sample)) return 'ru';
-        if (preg_match('/[一-龯]/', $sample)) return 'zh';
-        if (preg_match('/[あ-ん]/', $sample)) return 'ja';
-        if (preg_match('/[ا-ي]/', $sample)) return 'ar';
-        
-        return 'en'; // Default to English
-    }
-
-    /**
-     * Get extraction statistics
-     */
-    public function getExtractionStats($result)
-    {
-        if (!$result['success']) {
-            return ['error' => $result['error']];
-        }
-        
-        return [
-            'source_type' => $result['metadata']['source_type'],
-            'word_count' => $result['metadata']['word_count'],
-            'character_count' => $result['metadata']['character_count'],
-            'language' => $result['metadata']['language'] ?? 'unknown',
-            'has_transcript' => $result['metadata']['has_transcript'] ?? false,
-        ];
-    }
-
-    /**
-     * Detect input type based on input content
-     */
-    public function detectInputType($input)
-    {
-        if (is_numeric($input)) {
-            return 'file';
-        }
-        
-        if (filter_var($input, FILTER_VALIDATE_URL)) {
-            if (strpos($input, 'youtube.com') !== false || strpos($input, 'youtu.be') !== false) {
-                return 'youtube';
-            }
-            return 'url';
-        }
-        
-        return 'text';
-    }
-
-    /**
-     * Validate input based on type
-     */
-    public function validateInput($input, $inputType)
-    {
-        switch ($inputType) {
-            case 'text':
-                if (empty(trim($input))) {
-                    throw new \Exception('Text input cannot be empty');
+        switch ($extension) {
+            case 'pdf':
+                return $this->extractFromPDF($filePath, $options);
+            
+            case 'doc':
+            case 'docx':
+                return $this->extractFromDocument($filePath, $options);
+            
+            case 'txt':
+                if (!file_exists($filePath)) {
+                    $filePath = Storage::path($filePath);
                 }
-                break;
-                
-            case 'url':
-            case 'youtube':
-                if (!filter_var($input, FILTER_VALIDATE_URL)) {
-                    throw new \Exception('Invalid URL format');
-                }
-                break;
-                
-            case 'file':
-                if (!is_numeric($input)) {
-                    throw new \Exception('File ID must be numeric');
-                }
-                break;
-                
+                $content = file_get_contents($filePath);
+                return [
+                    'success' => true,
+                    'content' => $content,
+                    'metadata' => [
+                        'source_type' => 'text_file',
+                        'word_count' => str_word_count($content),
+                        'character_count' => strlen($content),
+                    ]
+                ];
+            
             default:
-                throw new \Exception("Unsupported input type: {$inputType}");
+                throw new \Exception("Unsupported file type: {$extension}");
         }
-        
-        return true;
+    }
+
+    /**
+     * Get supported input types
+     */
+    public function getSupportedTypes()
+    {
+        return ['text', 'youtube', 'video', 'url', 'web', 'pdf', 'document', 'doc', 'docx', 'file'];
     }
 }

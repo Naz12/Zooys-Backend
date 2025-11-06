@@ -4,6 +4,11 @@ namespace App\Services\Modules;
 
 use Illuminate\Support\Facades\Log;
 use App\Services\Modules\SubscriptionBillingModule;
+use App\Services\Modules\MathModule;
+use App\Services\Modules\PresentationModule;
+use App\Services\Modules\TranscriberModule;
+use App\Services\Modules\FileOperationsModule;
+use App\Services\Modules\DocumentIntelligenceModule;
 
 class ModuleRegistry
 {
@@ -31,30 +36,12 @@ class ModuleRegistry
      */
     private static function registerCoreModules()
     {
-        self::registerModule('content_chunking', [
-            'class' => ContentChunkingService::class,
-            'description' => 'Smart content chunking for large texts',
-            'dependencies' => [],
-            'config' => [
-                'max_chunk_size' => 3000,
-                'overlap_size' => 200,
-                'min_chunk_size' => 500,
-            ]
-        ]);
-
-        self::registerModule('ai_summarization', [
-            'class' => AISummarizationService::class,
-            'description' => 'AI-powered content summarization',
-            'dependencies' => ['content_chunking', 'ai_processing'],
-            'config' => [
-                'max_tokens' => 1000,
-                'temperature' => 0.7,
-            ]
-        ]);
-
+        // Content chunking now handled by Document Intelligence microservice
+        // AI summarization now handled by AI Manager microservice
+        
         self::registerModule('content_extraction', [
             'class' => ContentExtractionService::class,
-            'description' => 'Unified content extraction from various sources',
+            'description' => 'Unified content extraction from various sources using microservices',
             'dependencies' => [],
             'config' => [
                 'supported_types' => ['text', 'youtube', 'pdf', 'url', 'document'],
@@ -71,84 +58,118 @@ class ModuleRegistry
         self::registerModule('youtube', [
             'class' => \App\Services\YouTubeService::class,
             'description' => 'YouTube video processing and caption extraction',
-            'dependencies' => ['content_extraction', 'transcription'],
+            'dependencies' => ['content_extraction', 'transcriber'],
             'config' => [
                 'api_key' => config('services.youtube.api_key'),
                 'transcriber_enabled' => true,
             ]
         ]);
 
-        // Register PDF module
-        self::registerModule('pdf', [
-            'class' => \App\Services\PythonPDFProcessingService::class,
-            'description' => 'PDF document processing and text extraction',
-            'dependencies' => ['content_extraction'],
-            'config' => [
-                'max_file_size' => '10MB',
-                'supported_formats' => ['pdf'],
-            ]
-        ]);
+        // PDF processing now handled by PDF microservice via DocumentConverterService
+        // No local PDF module needed
 
-        // Register Web Scraping module
-        self::registerModule('web_scraping', [
-            'class' => \App\Services\WebScrapingService::class,
-            'description' => 'Web content scraping and extraction',
-            'dependencies' => ['content_extraction'],
-            'config' => [
-                'timeout' => 30,
-                'user_agent' => 'Mozilla/5.0 (compatible; AIBot/1.0)',
-            ]
-        ]);
+        // Web Scraping is now part of TranscriberModule (BrightData microservice)
+        // Removed duplicate registration - web scraping handled by transcriber module
 
-        // Register AI Maths module
-        self::registerModule('ai_math', [
-            'class' => \App\Services\AIMathService::class,
-            'description' => 'AI-powered mathematical problem solving',
+        // Register Math Module (wraps AIMathService)
+        self::registerModule('math', [
+            'class' => MathModule::class,
+            'description' => 'Mathematical problem solving via Math microservice',
             'dependencies' => [],
             'config' => [
-                'supported_subjects' => ['algebra', 'geometry', 'calculus', 'statistics', 'trigonometry', 'arithmetic'],
+                'api_url' => env('MATH_MICROSERVICE_URL', 'http://localhost:8002'),
+                'timeout' => env('MATH_MICROSERVICE_TIMEOUT', 60),
+                'supported_subjects' => ['algebra', 'geometry', 'calculus', 'statistics', 'trigonometry', 'arithmetic', 'general'],
                 'difficulty_levels' => ['beginner', 'intermediate', 'advanced'],
                 'max_image_size' => '10MB',
                 'supported_formats' => ['text', 'image'],
             ]
         ]);
 
-        // Register AI Presentation module
-        self::registerModule('ai_presentation', [
-            'class' => \App\Services\AIPresentationService::class,
-            'description' => 'AI-powered presentation generation with PowerPoint creation',
+        // Register Presentation Module (wraps AIPresentationService)
+        self::registerModule('presentation', [
+            'class' => PresentationModule::class,
+            'description' => 'AI-powered presentation generation via Presentation microservice',
             'dependencies' => ['content_extraction'],
             'config' => [
+                'api_url' => env('PRESENTATION_MICROSERVICE_URL', 'http://localhost:8001'),
                 'supported_input_types' => ['text', 'file', 'url', 'youtube'],
                 'supported_templates' => ['corporate_blue', 'modern_white', 'creative_colorful', 'minimalist_gray', 'academic_formal'],
                 'supported_languages' => ['English', 'Spanish', 'French', 'German', 'Italian', 'Portuguese', 'Chinese', 'Japanese'],
                 'supported_tones' => ['Professional', 'Casual', 'Academic', 'Creative', 'Formal'],
                 'supported_lengths' => ['Short', 'Medium', 'Long'],
-                'python_script_path' => 'python/generate_presentation.py',
             ]
         ]);
 
         // Register AI Processing Module
         self::registerModule('ai_processing', [
             'class' => AIProcessingModule::class,
-            'description' => 'AI text processing via AI API Manager microservice',
+            'description' => 'AI text processing via AI API Manager microservice with multi-model support',
             'dependencies' => [],
             'config' => [
                 'api_url' => config('services.ai_manager.url'),
                 'timeout' => config('services.ai_manager.timeout'),
-                'supported_tasks' => ['summarize', 'generate', 'qa', 'translate', 'sentiment', 'code-review'],
+                'default_model' => config('services.ai_manager.default_model', 'ollama:llama3'),
+                'supported_tasks' => [
+                    'summarize',
+                    'generate',
+                    'qa',
+                    'translate',
+                    'sentiment',
+                    'code-review',
+                    'ppt-generate',
+                    'flashcard'
+                ],
+                'supported_features' => [
+                    'model_selection',
+                    'topic_chat',
+                    'model_discovery',
+                    'multi_backend_routing'
+                ],
+                'supported_models' => [
+                    'ollama:llama3',
+                    'ollama:mistral',
+                    'gpt-4o',
+                    'auto' // Workload-aware routing
+                ]
             ]
         ]);
 
-        // Register Transcription Module
-        self::registerModule('transcription', [
-            'class' => TranscriptionModule::class,
-            'description' => 'YouTube video transcription via Transcriber microservice',
+        // Register Transcriber Module (BrightData microservice - YouTube + Web Scraping)
+        self::registerModule('transcriber', [
+            'class' => TranscriberModule::class,
+            'description' => 'Content transcription and extraction: YouTube videos, web scraping via BrightData microservice',
             'dependencies' => [],
             'config' => [
                 'api_url' => config('services.youtube_transcriber.url'),
+                'client_key' => config('services.youtube_transcriber.client_key'),
                 'timeout' => config('services.youtube_transcriber.timeout'),
+                'supported_operations' => ['youtube_transcribe', 'web_scrape'],
                 'supported_formats' => ['plain', 'json', 'srt', 'article'],
+                'providers' => ['brightdata', 'smartproxy'],
+            ]
+        ]);
+
+        // Register File Operations Module (PDF microservice - convert, extract, edit operations)
+        self::registerModule('file_operations', [
+            'class' => FileOperationsModule::class,
+            'description' => 'File manipulation: document conversion, PDF operations, content extraction via PDF microservice',
+            'dependencies' => [],
+            'config' => [
+                'api_url' => config('services.document_converter.url'),
+                'api_key' => config('services.document_converter.api_key'),
+                'timeout' => config('services.document_converter.timeout'),
+                'supported_operations' => [
+                    // Conversion
+                    'convert', 'extract',
+                    // PDF Operations
+                    'merge', 'split', 'compress', 'watermark', 'page_numbers',
+                    'annotate', 'protect', 'unlock', 'preview', 'batch', 'edit_pdf'
+                ],
+                'supported_formats' => [
+                    'input' => ['pdf', 'docx', 'doc', 'jpg', 'jpeg', 'png', 'gif', 'html', 'txt'],
+                    'output' => ['pdf', 'png', 'jpg', 'jpeg', 'docx', 'txt', 'html']
+                ]
             ]
         ]);
 
@@ -156,7 +177,7 @@ class ModuleRegistry
         self::registerModule('universal_file_management', [
             'class' => UniversalFileManagementModule::class,
             'description' => 'Universal file upload, processing, and management for all AI tools',
-            'dependencies' => ['content_extraction', 'ai_processing', 'transcription'],
+            'dependencies' => ['content_extraction', 'ai_processing', 'transcriber'],
             'config' => [
                 'supported_types' => ['pdf', 'doc', 'docx', 'txt', 'audio', 'video', 'image'],
                 'max_file_size' => '100MB',
@@ -176,6 +197,39 @@ class ModuleRegistry
                 'stripe_enabled' => true,
                 'monthly_billing_cycle' => true,
                 'auto_reset_usage' => true,
+            ]
+        ]);
+
+        // Register Document Intelligence Module
+        self::registerModule('document_intelligence', [
+            'class' => DocumentIntelligenceModule::class,
+            'description' => 'Document ingestion, semantic search, RAG-powered Q&A, and conversational chat',
+            'dependencies' => [],
+            'config' => [
+                'api_url' => config('services.document_intelligence.url'),
+                'tenant' => config('services.document_intelligence.tenant'),
+                'timeout' => config('services.document_intelligence.timeout'),
+                'supported_actions' => ['ingest', 'search', 'answer', 'chat'],
+                'supported_llm_models' => ['llama3', 'deepseek-chat', 'mistral:latest', 'gpt-4'],
+                'default_ocr' => 'auto',
+                'default_language' => 'eng',
+                'default_force_fallback' => true,
+            ]
+        ]);
+
+        // Register SMS Gateway Module
+        self::registerModule('sms_gateway', [
+            'class' => \App\Services\SmsGatewayService::class,
+            'description' => 'Universal SMS gateway for OTP, transactional, marketing, alert, and service messages',
+            'dependencies' => [],
+            'config' => [
+                'api_url' => config('services.sms_gateway.url'),
+                'client_id' => config('services.sms_gateway.client_id'),
+                'timeout' => config('services.sms_gateway.timeout'),
+                'supported_types' => ['otp', 'transactional', 'marketing', 'alert', 'service'],
+                'providers' => ['twilio', 'local'],
+                'idempotency_enabled' => true,
+                'multi_app' => ['zooys', 'akili', 'dagu'],
             ]
         ]);
     }

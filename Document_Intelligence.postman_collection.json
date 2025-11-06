@@ -1,0 +1,543 @@
+{
+  "info": {
+    "name": "Document Intelligence Microservice",
+    "description": "Complete API collection for Document Intelligence - Ingestion, semantic search, RAG Q&A, and conversational chat",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Health Check",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// Generate HMAC signature for authentication",
+              "const CryptoJS = require('crypto-js');",
+              "",
+              "const method = 'GET';",
+              "const resource = '/health';",
+              "const query = '';",
+              "const timestamp = Math.floor(Date.now() / 1000).toString();",
+              "const clientId = pm.environment.get('client_id');",
+              "const keyId = pm.environment.get('key_id');",
+              "const secret = pm.environment.get('secret');",
+              "",
+              "// Create base string: METHOD|RESOURCE|QUERY|TIMESTAMP|CLIENT_ID|KEY_ID",
+              "const baseString = `${method}|${resource}|${query}|${timestamp}|${clientId}|${keyId}`;",
+              "",
+              "// Generate HMAC-SHA256 signature",
+              "const signature = CryptoJS.HmacSHA256(baseString, secret).toString(CryptoJS.enc.Hex);",
+              "",
+              "// Set environment variables for headers",
+              "pm.environment.set('timestamp', timestamp);",
+              "pm.environment.set('signature', signature);",
+              "",
+              "console.log('Base String:', baseString);",
+              "console.log('Signature:', signature);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-Tenant-Id",
+            "value": "{{tenant_id}}"
+          },
+          {
+            "key": "X-Client-Id",
+            "value": "{{client_id}}"
+          },
+          {
+            "key": "X-Key-Id",
+            "value": "{{key_id}}"
+          },
+          {
+            "key": "X-Timestamp",
+            "value": "{{timestamp}}"
+          },
+          {
+            "key": "X-Signature",
+            "value": "{{signature}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/health",
+          "host": ["{{base_url}}"],
+          "path": ["health"]
+        },
+        "description": "Check service health and verify all dependencies are running."
+      },
+      "response": []
+    },
+    {
+      "name": "2. Ingest Document",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// Generate HMAC signature for POST /v1/ingest",
+              "const CryptoJS = require('crypto-js');",
+              "",
+              "const method = 'POST';",
+              "const resource = '/v1/ingest';",
+              "const query = '';",
+              "const timestamp = Math.floor(Date.now() / 1000).toString();",
+              "const clientId = pm.environment.get('client_id');",
+              "const keyId = pm.environment.get('key_id');",
+              "const secret = pm.environment.get('secret');",
+              "",
+              "const baseString = `${method}|${resource}|${query}|${timestamp}|${clientId}|${keyId}`;",
+              "const signature = CryptoJS.HmacSHA256(baseString, secret).toString(CryptoJS.enc.Hex);",
+              "",
+              "pm.environment.set('timestamp', timestamp);",
+              "pm.environment.set('signature', signature);"
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "// Save job_id and doc_id for later requests",
+              "if (pm.response.code === 200) {",
+              "    const response = pm.response.json();",
+              "    if (response.job_id) {",
+              "        pm.environment.set('job_id', response.job_id);",
+              "        console.log('Saved job_id:', response.job_id);",
+              "    }",
+              "    if (response.doc_id) {",
+              "        pm.environment.set('doc_id', response.doc_id);",
+              "        console.log('Saved doc_id:', response.doc_id);",
+              "    }",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-Tenant-Id",
+            "value": "{{tenant_id}}"
+          },
+          {
+            "key": "X-Client-Id",
+            "value": "{{client_id}}"
+          },
+          {
+            "key": "X-Key-Id",
+            "value": "{{key_id}}"
+          },
+          {
+            "key": "X-Timestamp",
+            "value": "{{timestamp}}"
+          },
+          {
+            "key": "X-Signature",
+            "value": "{{signature}}"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": []
+            },
+            {
+              "key": "ocr",
+              "value": "auto",
+              "type": "text"
+            },
+            {
+              "key": "lang",
+              "value": "eng",
+              "type": "text"
+            },
+            {
+              "key": "metadata",
+              "value": "{\"tags\":[\"test\",\"postman\"],\"source\":\"manual_upload\"}",
+              "type": "text"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/v1/ingest",
+          "host": ["{{base_url}}"],
+          "path": ["v1", "ingest"]
+        },
+        "description": "Upload and index a document. Returns job_id and doc_id. Auto-saves them for polling."
+      },
+      "response": []
+    },
+    {
+      "name": "3. Check Job Status",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// Generate HMAC signature for GET /v1/jobs/{job_id}",
+              "const CryptoJS = require('crypto-js');",
+              "",
+              "const jobId = pm.environment.get('job_id') || 'REPLACE_WITH_JOB_ID';",
+              "const method = 'GET';",
+              "const resource = `/v1/jobs/${jobId}`;",
+              "const query = '';",
+              "const timestamp = Math.floor(Date.now() / 1000).toString();",
+              "const clientId = pm.environment.get('client_id');",
+              "const keyId = pm.environment.get('key_id');",
+              "const secret = pm.environment.get('secret');",
+              "",
+              "const baseString = `${method}|${resource}|${query}|${timestamp}|${clientId}|${keyId}`;",
+              "const signature = CryptoJS.HmacSHA256(baseString, secret).toString(CryptoJS.enc.Hex);",
+              "",
+              "pm.environment.set('timestamp', timestamp);",
+              "pm.environment.set('signature', signature);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "X-Tenant-Id",
+            "value": "{{tenant_id}}"
+          },
+          {
+            "key": "X-Client-Id",
+            "value": "{{client_id}}"
+          },
+          {
+            "key": "X-Key-Id",
+            "value": "{{key_id}}"
+          },
+          {
+            "key": "X-Timestamp",
+            "value": "{{timestamp}}"
+          },
+          {
+            "key": "X-Signature",
+            "value": "{{signature}}"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/v1/jobs/{{job_id}}",
+          "host": ["{{base_url}}"],
+          "path": ["v1", "jobs", "{{job_id}}"]
+        },
+        "description": "Poll ingestion job status. Status can be: pending, processing, completed, failed."
+      },
+      "response": []
+    },
+    {
+      "name": "4. Search Documents",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// Generate HMAC signature for POST /v1/search",
+              "const CryptoJS = require('crypto-js');",
+              "",
+              "const method = 'POST';",
+              "const resource = '/v1/search';",
+              "const query = '';",
+              "const timestamp = Math.floor(Date.now() / 1000).toString();",
+              "const clientId = pm.environment.get('client_id');",
+              "const keyId = pm.environment.get('key_id');",
+              "const secret = pm.environment.get('secret');",
+              "",
+              "const baseString = `${method}|${resource}|${query}|${timestamp}|${clientId}|${keyId}`;",
+              "const signature = CryptoJS.HmacSHA256(baseString, secret).toString(CryptoJS.enc.Hex);",
+              "",
+              "pm.environment.set('timestamp', timestamp);",
+              "pm.environment.set('signature', signature);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-Tenant-Id",
+            "value": "{{tenant_id}}"
+          },
+          {
+            "key": "X-Client-Id",
+            "value": "{{client_id}}"
+          },
+          {
+            "key": "X-Key-Id",
+            "value": "{{key_id}}"
+          },
+          {
+            "key": "X-Timestamp",
+            "value": "{{timestamp}}"
+          },
+          {
+            "key": "X-Signature",
+            "value": "{{signature}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"What is the main topic of this document?\",\n  \"doc_ids\": [\"{{doc_id}}\"],\n  \"top_k\": 5,\n  \"filters\": {\n    \"page_range\": [1, 10]\n  }\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/v1/search",
+          "host": ["{{base_url}}"],
+          "path": ["v1", "search"]
+        },
+        "description": "Semantic vector search across documents. Returns relevant text chunks with scores."
+      },
+      "response": []
+    },
+    {
+      "name": "5. Ask Question (RAG)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// Generate HMAC signature for POST /v1/answer",
+              "const CryptoJS = require('crypto-js');",
+              "",
+              "const method = 'POST';",
+              "const resource = '/v1/answer';",
+              "const query = '';",
+              "const timestamp = Math.floor(Date.now() / 1000).toString();",
+              "const clientId = pm.environment.get('client_id');",
+              "const keyId = pm.environment.get('key_id');",
+              "const secret = pm.environment.get('secret');",
+              "",
+              "const baseString = `${method}|${resource}|${query}|${timestamp}|${clientId}|${keyId}`;",
+              "const signature = CryptoJS.HmacSHA256(baseString, secret).toString(CryptoJS.enc.Hex);",
+              "",
+              "pm.environment.set('timestamp', timestamp);",
+              "pm.environment.set('signature', signature);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-Tenant-Id",
+            "value": "{{tenant_id}}"
+          },
+          {
+            "key": "X-Client-Id",
+            "value": "{{client_id}}"
+          },
+          {
+            "key": "X-Key-Id",
+            "value": "{{key_id}}"
+          },
+          {
+            "key": "X-Timestamp",
+            "value": "{{timestamp}}"
+          },
+          {
+            "key": "X-Signature",
+            "value": "{{signature}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"What are the key findings in this document?\",\n  \"doc_ids\": [\"{{doc_id}}\"],\n  \"llm_model\": \"llama3\",\n  \"max_tokens\": 512,\n  \"top_k\": 3,\n  \"temperature\": 0.7\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/v1/answer",
+          "host": ["{{base_url}}"],
+          "path": ["v1", "answer"]
+        },
+        "description": "One-shot Q&A with RAG. Returns answer with source citations (page numbers, doc IDs)."
+      },
+      "response": []
+    },
+    {
+      "name": "6. Chat (Start Conversation)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// Generate HMAC signature for POST /v1/chat",
+              "const CryptoJS = require('crypto-js');",
+              "",
+              "const method = 'POST';",
+              "const resource = '/v1/chat';",
+              "const query = '';",
+              "const timestamp = Math.floor(Date.now() / 1000).toString();",
+              "const clientId = pm.environment.get('client_id');",
+              "const keyId = pm.environment.get('key_id');",
+              "const secret = pm.environment.get('secret');",
+              "",
+              "const baseString = `${method}|${resource}|${query}|${timestamp}|${clientId}|${keyId}`;",
+              "const signature = CryptoJS.HmacSHA256(baseString, secret).toString(CryptoJS.enc.Hex);",
+              "",
+              "pm.environment.set('timestamp', timestamp);",
+              "pm.environment.set('signature', signature);"
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "// Save conversation_id for follow-up messages",
+              "if (pm.response.code === 200) {",
+              "    const response = pm.response.json();",
+              "    if (response.conversation_id) {",
+              "        pm.environment.set('conversation_id', response.conversation_id);",
+              "        console.log('Saved conversation_id:', response.conversation_id);",
+              "    }",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-Tenant-Id",
+            "value": "{{tenant_id}}"
+          },
+          {
+            "key": "X-Client-Id",
+            "value": "{{client_id}}"
+          },
+          {
+            "key": "X-Key-Id",
+            "value": "{{key_id}}"
+          },
+          {
+            "key": "X-Timestamp",
+            "value": "{{timestamp}}"
+          },
+          {
+            "key": "X-Signature",
+            "value": "{{signature}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"What is this document about?\",\n  \"doc_ids\": [\"{{doc_id}}\"],\n  \"llm_model\": \"mistral:latest\",\n  \"max_tokens\": 512,\n  \"top_k\": 3\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/v1/chat",
+          "host": ["{{base_url}}"],
+          "path": ["v1", "chat"]
+        },
+        "description": "Start multi-turn conversation. Auto-saves conversation_id for follow-ups."
+      },
+      "response": []
+    },
+    {
+      "name": "7. Chat (Continue Conversation)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// Generate HMAC signature for POST /v1/chat",
+              "const CryptoJS = require('crypto-js');",
+              "",
+              "const method = 'POST';",
+              "const resource = '/v1/chat';",
+              "const query = '';",
+              "const timestamp = Math.floor(Date.now() / 1000).toString();",
+              "const clientId = pm.environment.get('client_id');",
+              "const keyId = pm.environment.get('key_id');",
+              "const secret = pm.environment.get('secret');",
+              "",
+              "const baseString = `${method}|${resource}|${query}|${timestamp}|${clientId}|${keyId}`;",
+              "const signature = CryptoJS.HmacSHA256(baseString, secret).toString(CryptoJS.enc.Hex);",
+              "",
+              "pm.environment.set('timestamp', timestamp);",
+              "pm.environment.set('signature', signature);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "X-Tenant-Id",
+            "value": "{{tenant_id}}"
+          },
+          {
+            "key": "X-Client-Id",
+            "value": "{{client_id}}"
+          },
+          {
+            "key": "X-Key-Id",
+            "value": "{{key_id}}"
+          },
+          {
+            "key": "X-Timestamp",
+            "value": "{{timestamp}}"
+          },
+          {
+            "key": "X-Signature",
+            "value": "{{signature}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"conversation_id\": \"{{conversation_id}}\",\n  \"query\": \"Can you elaborate on that?\",\n  \"doc_ids\": [\"{{doc_id}}\"],\n  \"llm_model\": \"mistral:latest\",\n  \"max_tokens\": 512,\n  \"top_k\": 3\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}/v1/chat",
+          "host": ["{{base_url}}"],
+          "path": ["v1", "chat"]
+        },
+        "description": "Continue conversation using saved conversation_id. Maintains context from previous messages."
+      },
+      "response": []
+    }
+  ]
+}
+
+
+
+
+
+

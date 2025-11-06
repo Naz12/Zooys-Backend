@@ -1,0 +1,42 @@
+﻿{
+    "submit":  {
+                   "success":  true,
+                   "job_id":  "67d5b049-cd2c-4214-b310-3b2e352d2830",
+                   "status":  "pending",
+                   "message":  "PDF job queued successfully"
+               },
+    "status":  {
+                   "job_id":  "67d5b049-cd2c-4214-b310-3b2e352d2830",
+                   "status":  "completed",
+                   "progress":  100,
+                   "stage":  "completed",
+                   "error":  null,
+                   "created_at":  "2025-10-30T19:09:48.778817Z",
+                   "updated_at":  "2025-10-30T19:10:02.929541Z"
+               },
+    "result":  {
+                   "success":  true,
+                   "job_id":  "67d5b049-cd2c-4214-b310-3b2e352d2830",
+                   "operation":  "annotate",
+                   "data":  {
+                                "remote_job_id":  "6fe4a3f7-c54b-483c-a553-ba30ee5d13f2",
+                                "operation":  "annotate",
+                                "result":  null
+                            },
+                   "metadata":  {
+                                    "processing_started_at":  "2025-10-30T19:09:51.050627Z",
+                                    "processing_completed_at":  "2025-10-30T19:10:02.926390Z",
+                                    "total_processing_time":  11.860809999999999,
+                                    "file_count":  1,
+                                    "tokens_used":  0,
+                                    "confidence_score":  0,
+                                    "processing_stages":  [
+                                                              "validating",
+                                                              "preparing_files",
+                                                              "starting_microservice_job",
+                                                              "monitoring",
+                                                              "fetching_result"
+                                                          ]
+                                }
+               }
+}

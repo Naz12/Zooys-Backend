@@ -14,7 +14,7 @@ class FileUpload extends Model
 
     protected $fillable = [
         'user_id', 'original_name', 'stored_name', 'file_path', 
-        'mime_type', 'file_size', 'file_type', 'metadata', 'is_processed'
+        'mime_type', 'file_size', 'file_type', 'metadata', 'is_processed', 'doc_id'
     ];
 
     protected $casts = [

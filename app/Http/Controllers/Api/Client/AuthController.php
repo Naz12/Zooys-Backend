@@ -24,7 +24,8 @@ class AuthController extends Controller
             'password' => Hash::make($request->password),
         ]);
 
-        $token = $user->createToken('auth_token')->plainTextToken;
+        // Create token without expiration (null = never expires)
+        $token = $user->createToken('auth_token', ['*'], null)->plainTextToken;
 
         return response()->json([
             'user'  => $user,
@@ -47,7 +48,8 @@ class AuthController extends Controller
             ]);
         }
 
-        $token = $user->createToken('auth_token')->plainTextToken;
+        // Create token without expiration (null = never expires)
+        $token = $user->createToken('auth_token', ['*'], null)->plainTextToken;
 
         return response()->json([
             'user'  => $user,

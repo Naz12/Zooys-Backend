@@ -5,38 +5,31 @@ namespace App\Services\Modules;
 use App\Services\AIResultService;
 use App\Services\YouTubeTranscriberService;
 use App\Services\AIManagerService;
-use App\Services\YouTubeFallbackService;
 use Illuminate\Support\Facades\Log;
 
 class UnifiedProcessingService
 {
     private $contentExtractionService;
-    private $contentChunkingService;
     private $aiSummarizationService;
     private $aiResultService;
     private $moduleRegistry;
     private $youtubeTranscriberService;
     private $aiManagerService;
-    private $youtubeFallbackService;
 
     public function __construct(
         ContentExtractionService $contentExtractionService,
-        ContentChunkingService $contentChunkingService,
         AISummarizationService $aiSummarizationService,
         AIResultService $aiResultService,
         ModuleRegistry $moduleRegistry,
         YouTubeTranscriberService $youtubeTranscriberService,
-        AIManagerService $aiManagerService,
-        YouTubeFallbackService $youtubeFallbackService
+        AIManagerService $aiManagerService
     ) {
         $this->contentExtractionService = $contentExtractionService;
-        $this->contentChunkingService = $contentChunkingService;
         $this->aiSummarizationService = $aiSummarizationService;
         $this->aiResultService = $aiResultService;
         $this->moduleRegistry = $moduleRegistry;
         $this->youtubeTranscriberService = $youtubeTranscriberService;
         $this->aiManagerService = $aiManagerService;
-        $this->youtubeFallbackService = $youtubeFallbackService;
     }
 
     /**
@@ -56,17 +49,7 @@ class UnifiedProcessingService
             
             Log::info("Content extracted: " . $extractionResult['metadata']['word_count'] . " words");
             
-            // Step 2: Chunk content if needed
-            $chunkingOptions = $this->getChunkingOptions($extractionResult, $options);
-            $chunks = $this->contentChunkingService->chunkContent(
-                $extractionResult['content'], 
-                $inputType, 
-                $chunkingOptions
-            );
-            
-            Log::info("Content chunked into " . count($chunks) . " chunks");
-            
-            // Step 3: Summarize content
+            // Step 2: Summarize content (chunking now handled by Document Intelligence or AI Manager)
             $summarizationOptions = $this->getSummarizationOptions($options);
             $summaryResult = $this->aiSummarizationService->summarizeContent(
                 $extractionResult['content'], 
@@ -92,7 +75,6 @@ class UnifiedProcessingService
                     $summaryResult['metadata'],
                     [
                         'processing_method' => 'unified',
-                        'chunks_processed' => count($chunks),
                         'total_characters' => $extractionResult['metadata']['character_count'],
                         'total_words' => $extractionResult['metadata']['word_count'],
                     ]
@@ -138,17 +120,12 @@ class UnifiedProcessingService
             ]);
 
             if (!$transcriptionResult['success']) {
-                Log::warning("Transcriber service failed, using fallback strategy", [
+                Log::error("Transcriber service failed", [
                     'error' => $transcriptionResult['error'],
                     'video_url' => $videoUrl
                 ]);
                 
-                // Use fallback service
-                $transcriptionResult = $this->youtubeFallbackService->processYouTubeVideo($videoUrl, $options, $userId);
-                
-                if (!$transcriptionResult['success']) {
-                    throw new \Exception('Both transcriber and fallback failed: ' . $transcriptionResult['error']);
-                }
+                throw new \Exception('Transcription failed: ' . ($transcriptionResult['error'] ?? 'Unknown error'));
             }
 
             Log::info("Bundle received from transcriber", [
@@ -257,33 +234,6 @@ class UnifiedProcessingService
     }
 
     /**
-     * Get chunking options based on content
-     */
-    private function getChunkingOptions($extractionResult, $options)
-    {
-        $wordCount = $extractionResult['metadata']['word_count'];
-        $characterCount = $extractionResult['metadata']['character_count'];
-        
-        // Determine if chunking is needed
-        $needsChunking = $characterCount > 8000; // OpenAI context limit
-        
-        if (!$needsChunking) {
-            return ['enabled' => false];
-        }
-        
-        // Calculate optimal chunk size
-        $maxChunkSize = $options['max_chunk_size'] ?? 3000;
-        $overlapSize = $options['overlap_size'] ?? 200;
-        
-        return [
-            'enabled' => true,
-            'max_size' => $maxChunkSize,
-            'overlap' => $overlapSize,
-            'strategy' => $this->getChunkingStrategy($extractionResult['metadata']['source_type']),
-        ];
-    }
-
-    /**
      * Get summarization options
      */
     private function getSummarizationOptions($options)
@@ -294,21 +244,6 @@ class UnifiedProcessingService
             'max_tokens' => $options['max_tokens'] ?? 1000,
             'temperature' => $options['temperature'] ?? 0.7,
         ];
-    }
-
-    /**
-     * Get chunking strategy based on content type
-     */
-    private function getChunkingStrategy($sourceType)
-    {
-        $strategies = [
-            'youtube' => 'transcript',
-            'pdf' => 'document',
-            'text' => 'text',
-            'url' => 'text',
-        ];
-        
-        return $strategies[$sourceType] ?? 'text';
     }
 
     /**
@@ -525,7 +460,6 @@ class UnifiedProcessingService
         
         return [
             'processing_method' => $result['metadata']['processing_method'],
-            'chunks_processed' => $result['metadata']['chunks_processed'],
             'total_characters' => $result['metadata']['total_characters'],
             'total_words' => $result['metadata']['total_words'],
             'summary_length' => strlen($result['summary']),

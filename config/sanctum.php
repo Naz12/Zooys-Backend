@@ -47,7 +47,7 @@ return [
     |
     */
 
-    'expiration' => null,
+    'expiration' => null, // null = tokens never expire
 
     /*
     |--------------------------------------------------------------------------

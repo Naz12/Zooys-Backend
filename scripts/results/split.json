@@ -1,0 +1,60 @@
+﻿{
+    "submit":  {
+                   "success":  true,
+                   "job_id":  "a2b04837-a965-4275-8090-3a7f3602399f",
+                   "status":  "pending",
+                   "message":  "PDF job queued successfully"
+               },
+    "status":  {
+                   "job_id":  "a2b04837-a965-4275-8090-3a7f3602399f",
+                   "status":  "completed",
+                   "progress":  100,
+                   "stage":  "completed",
+                   "error":  null,
+                   "created_at":  "2025-10-30T19:08:40.910833Z",
+                   "updated_at":  "2025-10-30T19:08:54.191461Z"
+               },
+    "result":  {
+                   "success":  true,
+                   "job_id":  "a2b04837-a965-4275-8090-3a7f3602399f",
+                   "operation":  "split",
+                   "data":  {
+                                "remote_job_id":  "faa75ec9-1bad-4748-9430-4763882e2ead",
+                                "operation":  "split",
+                                "result":  {
+                                               "job_id":  "faa75ec9-1bad-4748-9430-4763882e2ead",
+                                               "job_type":  "split",
+                                               "status":  "completed",
+                                               "files":  [
+                                                             "split_1_1-4.pdf",
+                                                             "split_documents.zip"
+                                                         ],
+                                               "download_urls":  [
+                                                                     "http://localhost:8004/v1/files/faa75ec9-1bad-4748-9430-4763882e2ead/split_1_1-4.pdf",
+                                                                     "http://localhost:8004/v1/files/faa75ec9-1bad-4748-9430-4763882e2ead/split_documents.zip"
+                                                                 ],
+                                               "file_paths":  [
+                                                                  "./pdf\\job_faa75ec9-1bad-4748-9430-4763882e2ead\\split_1_1-4.pdf",
+                                                                  "./pdf\\job_faa75ec9-1bad-4748-9430-4763882e2ead\\split_documents.zip"
+                                                              ],
+                                               "created_at":  1761851322.6041846,
+                                               "completed_at":  1761851331.1436453
+                                           }
+                            },
+                   "metadata":  {
+                                    "processing_started_at":  "2025-10-30T19:08:42.364265Z",
+                                    "processing_completed_at":  "2025-10-30T19:08:54.188723Z",
+                                    "total_processing_time":  11.809778,
+                                    "file_count":  1,
+                                    "tokens_used":  0,
+                                    "confidence_score":  0,
+                                    "processing_stages":  [
+                                                              "validating",
+                                                              "preparing_files",
+                                                              "starting_microservice_job",
+                                                              "monitoring",
+                                                              "fetching_result"
+                                                          ]
+                                }
+               }
+}
