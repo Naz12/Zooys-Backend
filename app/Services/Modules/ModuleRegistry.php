@@ -9,6 +9,7 @@ use App\Services\Modules\PresentationModule;
 use App\Services\Modules\TranscriberModule;
 use App\Services\Modules\FileOperationsModule;
 use App\Services\Modules\DocumentIntelligenceModule;
+use App\Services\Modules\FlashcardModule;
 
 class ModuleRegistry
 {
@@ -214,6 +215,27 @@ class ModuleRegistry
                 'default_ocr' => 'auto',
                 'default_language' => 'eng',
                 'default_force_fallback' => true,
+            ]
+        ]);
+
+        // Register Flashcard Module
+        self::registerModule('flashcard', [
+            'class' => FlashcardModule::class,
+            'description' => 'AI-powered flashcard generation from text, files, URLs, and YouTube videos',
+            'dependencies' => ['ai_processing', 'document_intelligence', 'transcriber', 'universal_file_management'],
+            'config' => [
+                'supported_input_types' => ['text', 'file', 'url', 'youtube'],
+                'supported_difficulties' => ['beginner', 'intermediate', 'advanced'],
+                'supported_styles' => ['definition', 'application', 'analysis', 'comparison', 'mixed'],
+                'min_count' => 1,
+                'max_count' => 40,
+                'default_count' => 5,
+                'default_difficulty' => 'intermediate',
+                'default_style' => 'mixed',
+                'content_validation' => [
+                    'min_words' => 5,
+                    'max_words' => 50000
+                ]
             ]
         ]);
 

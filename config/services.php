@@ -74,4 +74,16 @@ return [
         'timeout' => env('SMS_GATEWAY_TIMEOUT', 30),
     ],
 
+    'presentation_microservice' => [
+        'url' => env('PRESENTATION_MICROSERVICE_URL', 'http://localhost:8001'),
+        'api_key' => env('PRESENTATION_MICROSERVICE_API_KEY'),
+        'timeout' => env('PRESENTATION_MICROSERVICE_TIMEOUT', 300),
+    ],
+
+    'math_microservice' => [
+        'url' => env('MATH_MICROSERVICE_URL', 'http://localhost:8002'),
+        'api_key' => env('MATH_MICROSERVICE_API_KEY'),
+        'timeout' => env('MATH_MICROSERVICE_TIMEOUT', 60),
+    ],
+
 ];

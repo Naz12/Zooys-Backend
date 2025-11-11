@@ -339,5 +339,56 @@ class DocumentIntelligenceModule
             ];
         }
     }
+
+    /**
+     * Ingest text content directly (without a file)
+     * 
+     * @param string $text Text content to ingest
+     * @param array $options Ingestion options
+     *   - filename: Filename to use (default: 'summary.txt')
+     *   - lang: Language code (default: 'eng')
+     *   - metadata: Custom metadata array
+     *   - force_fallback: Skip local LLM (default: true)
+     *   - llm_model: LLM model to use (default: 'llama3')
+     * @return array Ingestion result
+     */
+    public function ingestText(string $text, array $options = [])
+    {
+        try {
+            Log::info('DocumentIntelligenceModule: Ingesting text content', [
+                'text_length' => strlen($text),
+                'filename' => $options['filename'] ?? 'summary.txt',
+                'options' => $options
+            ]);
+
+            // Ensure force_fallback is always true
+            $options['force_fallback'] = true;
+            
+            $result = $this->docIntelligenceService->ingestText($text, $options);
+
+            Log::info('DocumentIntelligenceModule: Text ingestion started', [
+                'doc_id' => $result['doc_id'] ?? null,
+                'job_id' => $result['job_id'] ?? null
+            ]);
+
+            return [
+                'success' => true,
+                'doc_id' => $result['doc_id'] ?? null,
+                'job_id' => $result['job_id'] ?? null,
+                'data' => $result
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('DocumentIntelligenceModule: Text ingestion failed', [
+                'error' => $e->getMessage(),
+                'text_length' => strlen($text)
+            ]);
+
+            return [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+    }
 }
 

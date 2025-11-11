@@ -175,6 +175,47 @@ class UniversalJobService
     }
 
     /**
+     * Queue a job for background processing
+     */
+    public function queueJob($jobId)
+    {
+        try {
+            // Try to dispatch as a job first (if queue is configured)
+            if (config('queue.default') !== 'sync') {
+                \Illuminate\Support\Facades\Artisan::queue('universal:process-job', [
+                    'jobId' => $jobId
+                ]);
+            } else {
+                // If queue is sync, process immediately in background using exec
+                // This prevents blocking the HTTP response
+                if (PHP_OS_FAMILY === 'Windows') {
+                    // Windows: use start /B to run in background
+                    $command = "php artisan universal:process-job {$jobId}";
+                    pclose(popen("start /B " . $command, "r"));
+                } else {
+                    // Linux/Unix: use nohup to run in background
+                    $command = "php artisan universal:process-job {$jobId} > /dev/null 2>&1 &";
+                    exec($command);
+                }
+            }
+        } catch (\Exception $e) {
+            Log::warning("Failed to queue job, processing in background thread", [
+                'job_id' => $jobId,
+                'error' => $e->getMessage()
+            ]);
+            
+            // Use exec to run in background
+            if (PHP_OS_FAMILY === 'Windows') {
+                $command = "php artisan universal:process-job {$jobId}";
+                pclose(popen("start /B " . $command, "r"));
+            } else {
+                $command = "php artisan universal:process-job {$jobId} > /dev/null 2>&1 &";
+                exec($command);
+            }
+        }
+    }
+
+    /**
      * Process a universal job with detailed stage tracking
      */
     public function processJob($jobId)
@@ -2062,84 +2103,305 @@ class UniversalJobService
     }
 
     /**
-     * Process flashcards job with stages
+     * Process flashcards job with stages using FlashcardModule
      */
     private function processFlashcardsJobWithStages($jobId, $input, $options)
     {
         try {
-            // Stage 2: Content Analysis
+            $flashcardModule = app(\App\Services\Modules\FlashcardModule::class);
+            $job = $this->getJob($jobId);
+            $userId = $job['user_id'] ?? null;
+            $user = $userId ? \App\Models\User::find($userId) : null;
+            
+            if (!$user) {
+                $this->failJob($jobId, "User not found");
+                return ['success' => false, 'error' => 'User not found'];
+            }
+            
+            // Stage 1: Content Analysis
             $this->updateJob($jobId, [
                 'stage' => 'analyzing_content',
-                'progress' => 20
+                'progress' => 10
             ]);
             $this->addLog($jobId, "Analyzing content for flashcard generation", 'info');
 
+            $inputType = $options['input_type'] ?? 'text';
+            $inputValue = null;
+            $fileUpload = null;
+
             if (isset($input['file_id'])) {
                 // File-based flashcard generation
+                $fileId = $input['file_id'];
                 $this->updateJob($jobId, [
-                    'stage' => 'processing_file',
-                    'progress' => 40
+                    'stage' => 'validating_file',
+                    'progress' => 20
                 ]);
-                $this->addLog($jobId, "Processing file for flashcard generation", 'info');
+                $this->addLog($jobId, "Validating file for flashcard generation", 'info');
 
-                $result = $this->universalFileModule->processFile($input['file_id'], 'flashcards', $options);
+                $fileResult = $this->universalFileModule->getFile($fileId);
                 
-                if (!$result['success']) {
-                    $this->failJob($jobId, "Flashcard generation failed: " . $result['error']);
-                    return ['success' => false, 'error' => $result['error']];
+                if (!$fileResult['success']) {
+                    $this->failJob($jobId, "File not found: " . ($fileResult['error'] ?? 'Unknown error'));
+                    return ['success' => false, 'error' => 'File not found'];
                 }
 
-                $this->updateJob($jobId, [
-                    'stage' => 'finalizing',
-                    'progress' => 90
-                ]);
-                $this->addLog($jobId, "Flashcards generated successfully", 'info', [
-                    'flashcard_count' => count($result['result']['flashcards'] ?? [])
-                ]);
-
-                return [
-                    'success' => true,
-                    'data' => $result['result'],
-                    'metadata' => [
-                        'file_count' => 1,
-                        'flashcard_count' => count($result['result']['flashcards'] ?? []),
-                        'confidence_score' => 0.9,
-                        'processing_stages' => ['analyzing_content', 'processing_file', 'finalizing']
-                    ]
-                ];
+                $fileUpload = $fileResult['file'];
+                $inputType = 'file';
+                $inputValue = $fileId;
             } else {
-                // Text-based flashcard generation
-                $this->updateJob($jobId, [
-                    'stage' => 'generating_flashcards',
-                    'progress' => 60
-                ]);
-                $this->addLog($jobId, "Generating flashcards from text", 'info');
+                // Text/URL/YouTube-based flashcard generation
+                $inputValue = $input['input'] ?? null;
+                
+                if (empty($inputValue)) {
+                    $this->failJob($jobId, "Input is required");
+                    return ['success' => false, 'error' => 'Input is required'];
+                }
 
-                $count = $options['count'] ?? 5;
-                $result = $this->universalFileModule->flashcardService->generateFlashcards($input['text'], $count, $options);
-                
-                $this->updateJob($jobId, [
-                    'stage' => 'finalizing',
-                    'progress' => 90
-                ]);
-                $this->addLog($jobId, "Flashcards generated successfully", 'info', [
-                    'flashcard_count' => count($result['flashcards'] ?? [])
-                ]);
-                
-                return [
-                    'success' => true,
-                    'data' => $result,
-                    'metadata' => [
-                        'file_count' => 0,
-                        'flashcard_count' => count($result['flashcards'] ?? []),
-                        'confidence_score' => 0.9,
-                        'processing_stages' => ['analyzing_content', 'generating_flashcards', 'finalizing']
-                    ]
-                ];
+                // Auto-detect input type if not specified
+                if ($inputType === 'text') {
+                    $inputType = $flashcardModule->detectInputType($inputValue);
+                }
             }
+
+            // Stage 2: Validate input
+            $this->updateJob($jobId, [
+                'stage' => 'validating_input',
+                'progress' => 30
+            ]);
+            $this->addLog($jobId, "Validating input", 'info', [
+                'input_type' => $inputType
+            ]);
+
+            try {
+                $flashcardModule->validateInput($inputValue, $inputType);
+            } catch (\Exception $e) {
+                $this->failJob($jobId, "Input validation failed: " . $e->getMessage());
+                return ['success' => false, 'error' => $e->getMessage()];
+            }
+
+            // Stage 3: Extract content
+            $this->updateJob($jobId, [
+                'stage' => 'extracting_content',
+                'progress' => 40
+            ]);
+            $this->addLog($jobId, "Extracting content from {$inputType}", 'info');
+
+            $extractionResult = $flashcardModule->extractContent($inputValue, $inputType, $options);
+            
+            if (!$extractionResult['success']) {
+                $this->failJob($jobId, "Content extraction failed: " . ($extractionResult['error'] ?? 'Unknown error'));
+                return ['success' => false, 'error' => $extractionResult['error']];
+            }
+
+            // Stage 4: Validate content
+            $this->updateJob($jobId, [
+                'stage' => 'validating_content',
+                'progress' => 50
+            ]);
+            $this->addLog($jobId, "Validating content for flashcard generation", 'info');
+
+            $contentValidation = $flashcardModule->validateContent($extractionResult['content']);
+            
+            if (!$contentValidation['valid']) {
+                $this->failJob($jobId, "Content validation failed: " . ($contentValidation['error'] ?? 'Unknown error'));
+                return ['success' => false, 'error' => $contentValidation['error']];
+            }
+
+            // Stage 5: Generate flashcards
+            $this->updateJob($jobId, [
+                'stage' => 'generating_flashcards',
+                'progress' => 60
+            ]);
+            $this->addLog($jobId, "Generating flashcards using AI", 'info', [
+                'content_length' => strlen($extractionResult['content']),
+                'word_count' => str_word_count($extractionResult['content']),
+                'count' => $options['count'] ?? 5
+            ]);
+
+            $count = $options['count'] ?? 5;
+            $generationResult = $flashcardModule->generateFlashcards(
+                $extractionResult['content'],
+                $count,
+                [
+                    'difficulty' => $options['difficulty'] ?? 'intermediate',
+                    'style' => $options['style'] ?? 'mixed',
+                    'model' => $options['model'] ?? config('services.ai_manager.default_model', 'deepseek-chat')
+                ]
+            );
+
+            if (!$generationResult['success']) {
+                $this->failJob($jobId, "Flashcard generation failed: " . ($generationResult['error'] ?? 'Unknown error'));
+                return ['success' => false, 'error' => $generationResult['error']];
+            }
+
+            // Stage 6: Save to database
+            $this->updateJob($jobId, [
+                'stage' => 'saving_flashcards',
+                'progress' => 80
+            ]);
+            $this->addLog($jobId, "Saving flashcards to database", 'info');
+
+            $flashcardSet = $this->saveFlashcardSetToDatabase(
+                $user,
+                $inputValue,
+                $inputType,
+                $options['difficulty'] ?? 'intermediate',
+                $options['style'] ?? 'mixed',
+                $generationResult['flashcards'],
+                $extractionResult['metadata']
+            );
+
+            // Save AI result
+            $aiResultService = app(\App\Services\AIResultService::class);
+            $aiResult = $aiResultService->saveResult(
+                $user->id,
+                'flashcards',
+                $flashcardSet->title,
+                $flashcardSet->description,
+                [
+                    'input' => $inputValue,
+                    'input_type' => $inputType,
+                    'count' => $count,
+                    'difficulty' => $options['difficulty'] ?? 'intermediate',
+                    'style' => $options['style'] ?? 'mixed'
+                ],
+                $generationResult['flashcards'],
+                array_merge($generationResult['metadata'], [
+                    'input_type' => $inputType,
+                    'source_metadata' => $extractionResult['metadata'],
+                    'flashcard_set_id' => $flashcardSet->id
+                ]),
+                $fileUpload ? $fileUpload->id : null
+            );
+
+            // Stage 7: Finalizing
+            $this->updateJob($jobId, [
+                'stage' => 'finalizing',
+                'progress' => 90
+            ]);
+            $this->addLog($jobId, "Flashcard generation completed", 'info', [
+                'flashcard_count' => count($generationResult['flashcards']),
+                'flashcard_set_id' => $flashcardSet->id
+            ]);
+
+            return [
+                'success' => true,
+                'data' => [
+                    'flashcards' => $generationResult['flashcards'],
+                    'flashcard_set' => [
+                        'id' => $flashcardSet->id,
+                        'title' => $flashcardSet->title,
+                        'description' => $flashcardSet->description,
+                        'total_cards' => $flashcardSet->total_cards,
+                        'created_at' => $flashcardSet->created_at
+                    ],
+                    'ai_result' => [
+                        'id' => $aiResult['ai_result']->id,
+                        'title' => $aiResult['ai_result']->title,
+                        'file_url' => $aiResult['ai_result']->file_url,
+                        'created_at' => $aiResult['ai_result']->created_at
+                    ]
+                ],
+                'metadata' => array_merge($generationResult['metadata'], [
+                    'input_type' => $inputType,
+                    'source_metadata' => $extractionResult['metadata'],
+                    'flashcard_set_id' => $flashcardSet->id,
+                    'file_count' => $fileUpload ? 1 : 0,
+                    'confidence_score' => 0.9,
+                    'processing_stages' => [
+                        'analyzing_content',
+                        'validating_input',
+                        'extracting_content',
+                        'validating_content',
+                        'generating_flashcards',
+                        'saving_flashcards',
+                        'finalizing'
+                    ]
+                ])
+            ];
+
         } catch (\Exception $e) {
             $this->failJob($jobId, "Flashcard generation failed: " . $e->getMessage());
+            Log::error('Flashcard job processing error', [
+                'job_id' => $jobId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
             return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Save flashcard set to database
+     */
+    private function saveFlashcardSetToDatabase($user, $input, $inputType, $difficulty, $style, $flashcards, $sourceMetadata)
+    {
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($user, $input, $inputType, $difficulty, $style, $flashcards, $sourceMetadata) {
+            // Create flashcard set
+            $flashcardSet = \App\Models\FlashcardSet::create([
+                'user_id' => $user->id,
+                'title' => $this->generateFlashcardTitle($input, $inputType),
+                'description' => $this->generateFlashcardDescription($input, $inputType, $sourceMetadata),
+                'input_type' => $inputType,
+                'input_content' => $input,
+                'difficulty' => $difficulty,
+                'style' => $style,
+                'total_cards' => count($flashcards),
+                'source_metadata' => $sourceMetadata,
+                'is_public' => false
+            ]);
+
+            // Create individual flashcards
+            foreach ($flashcards as $index => $card) {
+                \App\Models\Flashcard::create([
+                    'flashcard_set_id' => $flashcardSet->id,
+                    'question' => $card['question'],
+                    'answer' => $card['answer'],
+                    'order_index' => $index
+                ]);
+            }
+
+            return $flashcardSet->load('flashcards');
+        });
+    }
+
+    /**
+     * Generate title for flashcard set
+     */
+    private function generateFlashcardTitle($input, $inputType)
+    {
+        $maxLength = 50;
+        
+        switch ($inputType) {
+            case 'youtube':
+                return 'YouTube Video Flashcards';
+            case 'url':
+                return 'Web Page Flashcards';
+            case 'file':
+                return 'Document Flashcards';
+            default:
+                $title = trim($input);
+                if (strlen($title) > $maxLength) {
+                    $title = substr($title, 0, $maxLength) . '...';
+                }
+                return $title ?: 'Text Flashcards';
+        }
+    }
+
+    /**
+     * Generate description for flashcard set
+     */
+    private function generateFlashcardDescription($input, $inputType, $sourceMetadata)
+    {
+        switch ($inputType) {
+            case 'youtube':
+                return "Flashcards generated from YouTube video: " . ($sourceMetadata['title'] ?? 'Unknown Video');
+            case 'url':
+                return "Flashcards generated from web page: " . ($sourceMetadata['title'] ?? 'Web Content');
+            case 'file':
+                return "Flashcards generated from document: " . ($sourceMetadata['source_type'] ?? 'File');
+            default:
+                return "Flashcards generated from text input";
         }
     }
 
@@ -2824,6 +3086,88 @@ class UniversalJobService
                         'doc_id' => $docId,
                         'remote_job_id' => $remoteJobId,
                         'action' => 'ingest'
+                    ]
+                ];
+
+            } elseif ($action === 'ingest_text') {
+                // Ingest text content directly
+                $text = $input['text'] ?? null;
+                if (!$text) {
+                    $this->failJob($jobId, 'text is required for text ingestion');
+                    return ['success' => false, 'error' => 'text is required'];
+                }
+
+                $this->updateJob($jobId, [
+                    'stage' => 'preparing_text',
+                    'progress' => 20
+                ]);
+                $this->addLog($jobId, 'Preparing text for ingestion', 'info', [
+                    'text_length' => strlen($text)
+                ]);
+
+                // Start text ingestion
+                $this->updateJob($jobId, [
+                    'stage' => 'starting_ingestion',
+                    'progress' => 30
+                ]);
+                $this->addLog($jobId, 'Starting text ingestion', 'info');
+
+                $ingestionOptions = [
+                    'filename' => $params['filename'] ?? 'summary.txt',
+                    'lang' => $params['lang'] ?? 'eng',
+                    'llm_model' => $params['llm_model'] ?? 'llama3',
+                    'force_fallback' => $params['force_fallback'] ?? true,
+                    'metadata' => $params['metadata'] ?? []
+                ];
+
+                $ingestionResult = $docService->ingestText($text, $ingestionOptions);
+                $remoteJobId = $ingestionResult['job_id'] ?? null;
+                $docId = $ingestionResult['doc_id'] ?? null;
+
+                if (!$remoteJobId) {
+                    $this->failJob($jobId, 'Failed to start text ingestion: no job_id returned');
+                    return ['success' => false, 'error' => 'Failed to start text ingestion'];
+                }
+
+                $this->updateJob($jobId, [
+                    'stage' => 'monitoring',
+                    'progress' => 50,
+                    'metadata' => array_merge($this->getJob($jobId)['metadata'], [
+                        'remote_job_id' => $remoteJobId,
+                        'doc_id' => $docId
+                    ])
+                ]);
+                $this->addLog($jobId, 'Monitoring text ingestion job', 'info', [
+                    'remote_job_id' => $remoteJobId,
+                    'doc_id' => $docId
+                ]);
+
+                // Poll until completion
+                $finalStatus = $docService->pollJobCompletion($remoteJobId, 60, 2);
+
+                if ($finalStatus['status'] !== 'completed') {
+                    $this->failJob($jobId, 'Text ingestion failed: ' . ($finalStatus['error'] ?? 'Unknown error'));
+                    return ['success' => false, 'error' => 'Text ingestion failed'];
+                }
+
+                $this->updateJob($jobId, [
+                    'stage' => 'completed',
+                    'progress' => 100,
+                    'status' => 'completed',
+                    'result' => [
+                        'doc_id' => $docId,
+                        'job_id' => $remoteJobId,
+                        'status' => 'completed'
+                    ]
+                ]);
+                $this->addLog($jobId, 'Text ingestion completed', 'success');
+
+                return [
+                    'success' => true,
+                    'data' => [
+                        'doc_id' => $docId,
+                        'remote_job_id' => $remoteJobId,
+                        'action' => 'ingest_text'
                     ]
                 ];
 

@@ -124,16 +124,16 @@ class ContentExtractionService
      */
     private function extractFromUrl($url, $options)
     {
-        $result = $this->webScrapingService->scrapeContent($url);
+        $result = $this->webScrapingService->extractContent($url);
         
         if (!$result['success']) {
-            throw new \Exception($result['error']);
+            throw new \Exception($result['error'] ?? 'Failed to extract content from URL');
         }
 
         return [
             'success' => true,
             'content' => $result['content'],
-            'metadata' => array_merge($result['metadata'], [
+            'metadata' => array_merge($result['metadata'] ?? [], [
                 'source_type' => 'url',
                 'word_count' => str_word_count($result['content']),
                 'character_count' => strlen($result['content']),
@@ -247,6 +247,76 @@ class ContentExtractionService
             default:
                 throw new \Exception("Unsupported file type: {$extension}");
         }
+    }
+
+    /**
+     * Detect input type automatically from input string
+     */
+    public function detectInputType($input)
+    {
+        if (empty(trim($input))) {
+            return 'text';
+        }
+
+        $input = trim($input);
+
+        // Check if it's a YouTube URL
+        if (preg_match('/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/', $input)) {
+            return 'youtube';
+        }
+
+        // Check if it's a URL (http:// or https://)
+        if (preg_match('/^https?:\/\/.+/', $input)) {
+            return 'url';
+        }
+
+        // Default to text
+        return 'text';
+    }
+
+    /**
+     * Validate input based on input type
+     */
+    public function validateInput($input, $inputType)
+    {
+        if (empty(trim($input))) {
+            throw new \Exception('Input cannot be empty');
+        }
+
+        switch ($inputType) {
+            case 'youtube':
+            case 'video':
+                $videoId = $this->youtubeService->extractVideoId($input);
+                if (!$videoId) {
+                    throw new \Exception('Invalid YouTube URL');
+                }
+                break;
+
+            case 'url':
+            case 'web':
+                if (!filter_var($input, FILTER_VALIDATE_URL)) {
+                    throw new \Exception('Invalid URL format');
+                }
+                break;
+
+            case 'text':
+                if (strlen(trim($input)) < 3) {
+                    throw new \Exception('Text input is too short (minimum 3 characters)');
+                }
+                break;
+
+            case 'file':
+                // File validation is handled by the file upload system
+                break;
+
+            default:
+                if (!in_array($inputType, $this->getSupportedTypes())) {
+                    throw new \Exception("Unsupported input type: {$inputType}");
+                }
+                break;
+        }
+
+        return true;
     }
 
     /**

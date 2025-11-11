@@ -1681,6 +1681,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     
     // Document Intelligence
     Route::post('/documents/ingest', [DocumentIntelligenceController::class, 'ingest']);
+    Route::post('/documents/ingest/text', [DocumentIntelligenceController::class, 'ingestText']);
     Route::post('/documents/search', [DocumentIntelligenceController::class, 'search']);
     Route::post('/documents/answer', [DocumentIntelligenceController::class, 'answer']);
     Route::post('/documents/chat', [DocumentIntelligenceController::class, 'chat']);

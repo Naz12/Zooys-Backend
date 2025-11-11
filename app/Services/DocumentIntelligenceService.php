@@ -226,6 +226,78 @@ class DocumentIntelligenceService
     }
 
     /**
+     * Ingest text content directly (without a file)
+     * 
+     * @param string $text Text content to ingest
+     * @param array $options Ingestion options
+     *   - filename: Filename to use (default: 'summary.txt')
+     *   - lang: Language code (default: 'eng')
+     *   - metadata: Custom metadata array (tags, source, etc.)
+     *   - force_fallback: Skip local LLM, use remote immediately (default: true)
+     *   - llm_model: LLM model to use (default: 'llama3')
+     * @return array Ingestion result with doc_id and job_id
+     */
+    public function ingestText(string $text, array $options = []): array
+    {
+        $resource = '/v1/ingest/text';
+        $headers = $this->getAuthHeaders('POST', $resource);
+
+        if (empty(trim($text))) {
+            throw new \InvalidArgumentException('Text content cannot be empty');
+        }
+
+        $filename = $options['filename'] ?? 'summary.txt';
+        $lang = $options['lang'] ?? 'eng';
+        $metadata = $options['metadata'] ?? [];
+        $forceFallback = $options['force_fallback'] ?? true;
+        $llmModel = $options['llm_model'] ?? 'llama3';
+
+        $payload = [
+            'text' => $text,
+            'filename' => $filename,
+            'lang' => $lang,
+            'force_fallback' => $forceFallback,
+            'llm_model' => $llmModel,
+        ];
+
+        if (!empty($metadata)) {
+            $payload['metadata'] = $metadata;
+        }
+
+        try {
+            $response = Http::timeout($this->timeout)
+                ->withHeaders(array_merge($headers, [
+                    'Content-Type' => 'application/json'
+                ]))
+                ->post($this->baseUrl . $resource, $payload);
+
+            if ($response->successful()) {
+                $data = $response->json();
+                Log::info('Text ingestion started', [
+                    'filename' => $filename,
+                    'text_length' => strlen($text),
+                    'doc_id' => $data['doc_id'] ?? null,
+                    'job_id' => $data['job_id'] ?? null
+                ]);
+                return $data;
+            }
+
+            Log::error('Text ingestion failed', [
+                'status' => $response->status(),
+                'body' => $response->body()
+            ]);
+
+            throw new \RuntimeException("Text ingestion failed: {$response->body()}");
+        } catch (\Exception $e) {
+            Log::error('Text ingestion exception', [
+                'filename' => $filename,
+                'error' => $e->getMessage()
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
      * Get job status
      * 
      * @param string $jobId Job ID from ingestion

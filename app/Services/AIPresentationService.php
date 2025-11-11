@@ -16,6 +16,8 @@ class AIPresentationService
     private $aiResultService;
     private $contentExtractionService;
     private $microserviceUrl;
+    private $microserviceApiKey;
+    private $microserviceTimeout;
 
     public function __construct(
         AIProcessingModule $aiProcessingModule,
@@ -26,6 +28,8 @@ class AIPresentationService
         $this->aiResultService = $aiResultService;
         $this->contentExtractionService = $contentExtractionService;
         $this->microserviceUrl = env('PRESENTATION_MICROSERVICE_URL', 'http://localhost:8001');
+        $this->microserviceApiKey = env('PRESENTATION_MICROSERVICE_API_KEY');
+        $this->microserviceTimeout = env('PRESENTATION_MICROSERVICE_TIMEOUT', 300);
     }
 
     /**
@@ -1096,56 +1100,57 @@ Format the response as a JSON object with a 'content' field containing an array 
     private function callMicroservice($url, $data)
     {
         try {
-            $ch = curl_init();
-            curl_setopt($ch, CURLOPT_URL, $url);
-            curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-            curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'Content-Type: application/json',
-                'Accept: application/json'
-            ]);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 60);
-            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-
-            $response = curl_exec($ch);
-            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            $error = curl_error($ch);
-            curl_close($ch);
-
-            if ($error) {
-                Log::error('Microservice cURL error', ['error' => $error, 'url' => $url]);
-                return [
-                    'success' => false,
-                    'error' => 'cURL error: ' . $error
-                ];
+            // Prepare headers with API key
+            $headers = [
+                'Content-Type' => 'application/json',
+                'Accept' => 'application/json'
+            ];
+            
+            if ($this->microserviceApiKey) {
+                $headers['X-API-Key'] = $this->microserviceApiKey;
             }
 
-            if ($httpCode !== 200) {
+            // Make HTTP request using Laravel Http facade
+            $response = Http::timeout($this->microserviceTimeout)
+                ->withHeaders($headers)
+                ->post($url, $data);
+
+            if (!$response->successful()) {
+                $errorBody = $response->body();
+                $errorMessage = 'Microservice request failed: ' . $response->status();
+                
+                // Try to extract error message from response body
+                if ($errorBody) {
+                    $errorData = json_decode($errorBody, true);
+                    if (isset($errorData['error']['message'])) {
+                        $errorMessage = $errorData['error']['message'];
+                    } elseif (isset($errorData['detail'])) {
+                        $errorMessage = $errorData['detail'];
+                    }
+                }
+                
                 Log::error('Microservice HTTP error', [
-                    'http_code' => $httpCode,
-                    'response' => $response,
+                    'http_code' => $response->status(),
+                    'error' => $errorMessage,
                     'url' => $url
                 ]);
+                
                 return [
                     'success' => false,
-                    'error' => 'HTTP error ' . $httpCode . ': ' . $response
+                    'error' => $errorMessage
                 ];
             }
 
-            $decodedResponse = json_decode($response, true);
-            if (json_last_error() !== JSON_ERROR_NONE) {
-                Log::error('Microservice JSON decode error', [
-                    'json_error' => json_last_error_msg(),
-                    'response' => $response
-                ]);
-                return [
-                    'success' => false,
-                    'error' => 'Invalid JSON response from microservice'
-                ];
+            $responseData = $response->json();
+
+            // Check if this is an async job response
+            if (isset($responseData['job_id']) && isset($responseData['status'])) {
+                // Poll for job completion
+                return $this->pollJobResult($responseData['job_id']);
             }
 
-            return $decodedResponse;
+            // Handle direct response (shouldn't happen with new API, but keep for compatibility)
+            return $responseData;
 
         } catch (\Exception $e) {
             Log::error('Microservice call exception', [
@@ -1157,6 +1162,108 @@ Format the response as a JSON object with a 'content' field containing an array 
                 'error' => 'Microservice call failed: ' . $e->getMessage()
             ];
         }
+    }
+
+    /**
+     * Poll job result for async processing
+     */
+    private function pollJobResult($jobId, $maxAttempts = 300, $intervalSeconds = 2)
+    {
+        $headers = [
+            'Accept' => 'application/json'
+        ];
+        
+        if ($this->microserviceApiKey) {
+            $headers['X-API-Key'] = $this->microserviceApiKey;
+        }
+
+        Log::info('Polling presentation job', [
+            'job_id' => $jobId,
+            'max_attempts' => $maxAttempts,
+            'interval' => $intervalSeconds
+        ]);
+
+        for ($attempt = 0; $attempt < $maxAttempts; $attempt++) {
+            // Check job status
+            $statusResponse = Http::timeout(10)
+                ->withHeaders($headers)
+                ->get($this->microserviceUrl . '/jobs/' . $jobId . '/status');
+
+            if (!$statusResponse->successful()) {
+                Log::error('Failed to check job status', [
+                    'job_id' => $jobId,
+                    'http_code' => $statusResponse->status()
+                ]);
+                return [
+                    'success' => false,
+                    'error' => 'Failed to check job status: ' . $statusResponse->status()
+                ];
+            }
+
+            $statusData = $statusResponse->json();
+            $status = $statusData['data']['status'] ?? $statusData['status'] ?? 'unknown';
+            $progress = $statusData['data']['progress'] ?? $statusData['progress'] ?? null;
+
+            Log::info('Job status check', [
+                'job_id' => $jobId,
+                'status' => $status,
+                'progress' => $progress,
+                'attempt' => $attempt + 1
+            ]);
+
+            if ($status === 'completed') {
+                // Get result
+                $resultResponse = Http::timeout(30)
+                    ->withHeaders($headers)
+                    ->get($this->microserviceUrl . '/jobs/' . $jobId . '/result');
+
+                if (!$resultResponse->successful()) {
+                    return [
+                        'success' => false,
+                        'error' => 'Failed to get job result: ' . $resultResponse->status()
+                    ];
+                }
+
+                $resultData = $resultResponse->json();
+                
+                // Extract data from nested structure
+                $data = $resultData['data']['data'] ?? $resultData['data'] ?? $resultData;
+                
+                return [
+                    'success' => true,
+                    'data' => $data,
+                    'metadata' => $resultData['data']['metadata'] ?? $resultData['metadata'] ?? []
+                ];
+            } elseif ($status === 'failed') {
+                $error = $statusData['data']['error'] ?? $statusData['error'] ?? 'Job processing failed';
+                Log::error('Job failed', [
+                    'job_id' => $jobId,
+                    'error' => $error
+                ]);
+                return [
+                    'success' => false,
+                    'error' => $error
+                ];
+            } elseif ($status === 'cancelled') {
+                return [
+                    'success' => false,
+                    'error' => 'Job was cancelled'
+                ];
+            }
+
+            // Wait before next attempt
+            sleep($intervalSeconds);
+        }
+
+        Log::error('Job polling timeout', [
+            'job_id' => $jobId,
+            'max_attempts' => $maxAttempts
+        ]);
+
+        return [
+            'success' => false,
+            'error' => 'Job processing timeout after ' . ($maxAttempts * $intervalSeconds) . ' seconds'
+        ];
     }
 
     /**
@@ -1246,8 +1353,7 @@ Format the response as a JSON object with a 'content' field containing an array 
             ]);
 
             // Call enhanced microservice with content generation capability
-            $microserviceUrl = config('services.presentation_microservice.url', 'http://localhost:8001');
-            $response = $this->callMicroservice($microserviceUrl . '/export', $requestData);
+            $response = $this->callMicroservice($this->microserviceUrl . '/export', $requestData);
 
             if (!$response['success']) {
                 return [
@@ -1499,7 +1605,8 @@ Format the response as a JSON object with a 'content' field containing an array 
     {
         try {
             $response = Http::timeout(5)->get($this->microserviceUrl . '/health');
-            return $response->successful();
+            $responseData = $response->json();
+            return $response->successful() && ($responseData['status'] ?? '') === 'healthy';
         } catch (\Exception $e) {
             return false;
         }

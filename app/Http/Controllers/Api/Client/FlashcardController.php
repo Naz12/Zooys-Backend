@@ -8,32 +8,35 @@ use App\Models\Tool;
 use App\Models\History;
 use App\Models\FlashcardSet;
 use App\Models\Flashcard;
-use App\Services\Modules\ContentExtractionService;
-use App\Services\FlashcardGenerationService;
+use App\Services\Modules\FlashcardModule;
 use App\Services\Modules\UniversalFileManagementModule;
 use App\Services\AIResultService;
+use App\Services\UniversalJobService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 
 class FlashcardController extends Controller
 {
-    protected $contentExtractionService;
-    protected $flashcardGenerationService;
+    protected $flashcardModule;
     protected $universalFileModule;
     protected $aiResultService;
+    protected $universalJobService;
 
     public function __construct(
-        ContentExtractionService $contentExtractionService,
-        FlashcardGenerationService $flashcardGenerationService,
+        FlashcardModule $flashcardModule,
         UniversalFileManagementModule $universalFileModule,
-        AIResultService $aiResultService
+        AIResultService $aiResultService,
+        UniversalJobService $universalJobService
     ) {
-        $this->contentExtractionService = $contentExtractionService;
-        $this->flashcardGenerationService = $flashcardGenerationService;
+        $this->flashcardModule = $flashcardModule;
         $this->universalFileModule = $universalFileModule;
         $this->aiResultService = $aiResultService;
+        $this->universalJobService = $universalJobService;
     }
 
+    /**
+     * Generate flashcards asynchronously using Universal Job Scheduler
+     */
     public function generate(Request $request)
     {
         $request->validate([
@@ -42,159 +45,94 @@ class FlashcardController extends Controller
             'input_type' => 'string|in:text,url,youtube,file',
             'count' => 'integer|min:1|max:40',
             'difficulty' => 'string|in:beginner,intermediate,advanced',
-            'style' => 'string|in:definition,application,analysis,comparison,mixed'
+            'style' => 'string|in:definition,application,analysis,comparison,mixed',
+            'model' => 'nullable|string'
         ]);
 
         $user = $request->user();
-        $tool = Tool::where('slug', 'flashcards')->first();
-        $input = trim($request->input);
+        $input = $request->has('input') ? trim($request->input('input')) : null;
         $inputType = $request->input('input_type', 'text');
-        $count = $request->input('count', 5);
-        $difficulty = $request->input('difficulty', 'intermediate');
-        $style = $request->input('style', 'mixed');
-        $fileUpload = null;
+        $fileId = $request->input('file_id');
 
         try {
-            // Handle file-based flashcards using Universal File Management
-            if ($request->has('file_id')) {
-                $fileId = $request->input('file_id');
-                
-                // Use Universal File Management Module to get file
-                $universalFileModule = app(\App\Services\Modules\UniversalFileManagementModule::class);
-                $fileResult = $universalFileModule->getFile($fileId);
-                
-                if (!$fileResult['success']) {
-                    return response()->json([
-                        'error' => 'File not found: ' . $fileResult['error']
-                    ], 404);
-                }
-                
-                $fileUpload = $fileResult['file'];
+            // Determine input type and prepare job input
+            $jobInput = [
+                'user_id' => $user->id
+            ];
+            $contentType = 'text'; // Default for status/result endpoints
+
+            if ($fileId) {
+                // File-based flashcard generation
+                $jobInput['file_id'] = $fileId;
+                $contentType = 'file';
                 $inputType = 'file';
-                $input = $fileId; // Use file ID as input
+            } else {
+                // Text/URL/YouTube-based flashcard generation
+                if (empty($input)) {
+                    return response()->json([
+                        'error' => 'Either input or file_id is required'
+                    ], 400);
+                }
+
+                // Auto-detect input type if not specified
+                if ($inputType === 'text') {
+                    $inputType = $this->flashcardModule->detectInputType($input);
+                }
+
+                $jobInput['input'] = $input;
+                $jobInput['input_type'] = $inputType;
+                
+                // Map input_type to content_type for status/result endpoints
+                if ($inputType === 'youtube') {
+                    $contentType = 'text'; // Use 'text' for status endpoint
+                } elseif ($inputType === 'url') {
+                    $contentType = 'text'; // Use 'text' for status endpoint
+                } else {
+                    $contentType = 'text';
+                }
             }
 
-            // Auto-detect input type if not specified
-            if ($inputType === 'text') {
-                $inputType = $this->contentExtractionService->detectInputType($input);
-            }
+            // Prepare options
+            $options = [
+                'count' => $request->input('count', 5),
+                'difficulty' => $request->input('difficulty', 'intermediate'),
+                'style' => $request->input('style', 'mixed'),
+                'model' => $request->input('model', config('services.ai_manager.default_model', 'deepseek-chat')),
+                'input_type' => $inputType
+            ];
 
-            // Validate input
-            $this->contentExtractionService->validateInput($input, $inputType);
+            // Create universal job
+            $job = $this->universalJobService->createJob('flashcards', $jobInput, $options, $user->id);
 
-            // Extract content from input
-            $extractionResult = $this->contentExtractionService->extractContent($input, $inputType);
+            // Queue the job for processing
+            $this->universalJobService->queueJob($job['id']);
+
+            // Determine status/result endpoint based on content type
+            $statusEndpoint = $contentType === 'file' 
+                ? url('/api/status/flashcards/file?job_id=' . $job['id'])
+                : url('/api/status/flashcards/text?job_id=' . $job['id']);
             
-            if (!$extractionResult['success']) {
-                return response()->json([
-                    'error' => $extractionResult['error']
-                ], 400);
-            }
-
-            // Validate content for flashcard generation
-            $contentValidation = $this->flashcardGenerationService->validateContent($extractionResult['content']);
-            
-            if (!$contentValidation['valid']) {
-                return response()->json([
-                    'error' => $contentValidation['error']
-                ], 400);
-            }
-
-            // Generate flashcards
-            $generationResult = $this->flashcardGenerationService->generateFlashcards(
-                $extractionResult['content'],
-                $count,
-                [
-                    'difficulty' => $difficulty,
-                    'style' => $style
-                ]
-            );
-
-            if (!$generationResult['success']) {
-                return response()->json([
-                    'error' => $generationResult['error']
-                ], 500);
-            }
-
-            // Save flashcard set to database
-            $flashcardSet = $this->saveFlashcardSetToDatabase(
-                $user,
-                $input,
-                $inputType,
-                $difficulty,
-                $style,
-                $generationResult['flashcards'],
-                $extractionResult['metadata']
-            );
-
-            // Save AI result to database
-            $aiResult = $this->aiResultService->saveResult(
-                $user->id,
-                'flashcards',
-                $flashcardSet->title,
-                $flashcardSet->description,
-                [
-                    'input' => $input,
-                    'input_type' => $inputType,
-                    'count' => $count,
-                    'difficulty' => $difficulty,
-                    'style' => $style
-                ],
-                $generationResult['flashcards'],
-                array_merge($generationResult['metadata'], [
-                    'input_type' => $inputType,
-                    'source_metadata' => $extractionResult['metadata'],
-                    'flashcard_set_id' => $flashcardSet->id
-                ]),
-                $fileUpload ? $fileUpload->id : null
-            );
-
-            // Store in history
-        if ($tool) {
-            History::create([
-                'user_id' => $user->id,
-                'tool_id' => $tool->id,
-                    'input'   => $input,
-                    'output'  => json_encode($generationResult['flashcards']),
-                    'meta'    => json_encode([
-                        'input_type' => $inputType,
-                        'count' => count($generationResult['flashcards']),
-                        'difficulty' => $difficulty,
-                        'style' => $style,
-                        'source_metadata' => $extractionResult['metadata'],
-                        'flashcard_set_id' => $flashcardSet->id,
-                        'ai_result_id' => $aiResult['ai_result']->id
-                    ]),
-                ]);
-            }
+            $resultEndpoint = $contentType === 'file'
+                ? url('/api/result/flashcards/file?job_id=' . $job['id'])
+                : url('/api/result/flashcards/text?job_id=' . $job['id']);
 
             return response()->json([
-                'flashcards' => $generationResult['flashcards'],
-                'flashcard_set' => [
-                    'id' => $flashcardSet->id,
-                    'title' => $flashcardSet->title,
-                    'description' => $flashcardSet->description,
-                    'total_cards' => $flashcardSet->total_cards,
-                    'created_at' => $flashcardSet->created_at
-                ],
-                'ai_result' => [
-                    'id' => $aiResult['ai_result']->id,
-                    'title' => $aiResult['ai_result']->title,
-                    'file_url' => $aiResult['ai_result']->file_url,
-                    'created_at' => $aiResult['ai_result']->created_at
-                ],
-                'metadata' => array_merge($generationResult['metadata'], [
-                    'input_type' => $inputType,
-                    'source_metadata' => $extractionResult['metadata']
-                ])
-            ]);
+                'success' => true,
+                'message' => 'Flashcard generation job started',
+                'job_id' => $job['id'],
+                'status' => $job['status'],
+                'poll_url' => $statusEndpoint,
+                'result_url' => $resultEndpoint
+            ], 202);
 
         } catch (\Exception $e) {
-            Log::error('Flashcard Generation Error: ' . $e->getMessage());
+            Log::error('Flashcard Generation Error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
             
             return response()->json([
-                'error' => 'AI service is currently unavailable. Please try again later.'
-            ], 503);
+                'error' => 'Failed to start flashcard generation: ' . $e->getMessage()
+            ], 500);
         }
     }
 

@@ -1,0 +1,609 @@
+{
+	"info": {
+		"_postman_id": "zooys-math-collection",
+		"name": "Zooys Math Module",
+		"description": "Complete API collection for Zooys Math Module - Solve mathematical problems with step-by-step explanations",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Solve Problems",
+			"item": [
+				{
+					"name": "Solve Math Problem (Text)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"problem_text\": \"2x + 5 = 13\",\n  \"subject_area\": \"algebra\",\n  \"difficulty_level\": \"intermediate\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/math/solve",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"math",
+								"solve"
+							]
+						},
+						"description": "Solve a mathematical problem from text input (synchronous processing)"
+					},
+					"response": []
+				},
+				{
+					"name": "Solve Math Problem (Image)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"file_id\": \"{{file_id}}\",\n  \"subject_area\": \"algebra\",\n  \"difficulty_level\": \"intermediate\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/math/solve",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"math",
+								"solve"
+							]
+						},
+						"description": "Solve a mathematical problem from image (asynchronous processing - returns job_id)"
+					},
+					"response": []
+				},
+				{
+					"name": "Solve Word Problem",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"problem_text\": \"what is two plus two\",\n  \"subject_area\": \"arithmetic\",\n  \"difficulty_level\": \"beginner\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/math/solve",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"math",
+								"solve"
+							]
+						},
+						"description": "Solve a word problem using natural language"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Client API (Aliases)",
+			"item": [
+				{
+					"name": "Generate Math Solution",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"problem_text\": \"2x + 5 = 13\",\n  \"subject_area\": \"algebra\",\n  \"difficulty_level\": \"intermediate\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/client/math/generate",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"client",
+								"math",
+								"generate"
+							]
+						},
+						"description": "Alias for /math/solve (client endpoint)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Math Help",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"problem_text\": \"2x + 5 = 13\",\n  \"subject_area\": \"algebra\",\n  \"difficulty_level\": \"intermediate\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/client/math/help",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"client",
+								"math",
+								"help"
+							]
+						},
+						"description": "Alias for /math/solve (client endpoint)"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Problem Management",
+			"item": [
+				{
+					"name": "List Math Problems",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/math/problems?page=1&per_page=15&subject=algebra&difficulty=intermediate",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"math",
+								"problems"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number"
+								},
+								{
+									"key": "per_page",
+									"value": "15",
+									"description": "Items per page"
+								},
+								{
+									"key": "subject",
+									"value": "algebra",
+									"description": "Filter by subject (optional)",
+									"disabled": true
+								},
+								{
+									"key": "difficulty",
+									"value": "intermediate",
+									"description": "Filter by difficulty (optional)",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Get list of user's math problems with pagination and filters"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Math Problem",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/math/problems/{{problem_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"math",
+								"problems",
+								"{{problem_id}}"
+							]
+						},
+						"description": "Get specific math problem with solutions"
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Math Problem",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/math/problems/{{problem_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"math",
+								"problems",
+								"{{problem_id}}"
+							]
+						},
+						"description": "Delete a math problem and its solutions"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "History & Statistics",
+			"item": [
+				{
+					"name": "Get Math History",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/math/history",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"math",
+								"history"
+							]
+						},
+						"description": "Get user's math problem solving history"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Math History (Client)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/client/math/history",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"client",
+								"math",
+								"history"
+							]
+						},
+						"description": "Get math history (client endpoint)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Math Statistics",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/math/stats",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"math",
+								"stats"
+							]
+						},
+						"description": "Get user's math solving statistics"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Math Statistics (Client)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/client/math/stats",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"client",
+								"math",
+								"stats"
+							]
+						},
+						"description": "Get math statistics (client endpoint)"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Job Status & Results",
+			"item": [
+				{
+					"name": "Get Text Job Status",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/status/math/text?job_id={{job_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"status",
+								"math",
+								"text"
+							],
+							"query": [
+								{
+									"key": "job_id",
+									"value": "{{job_id}}"
+								}
+							]
+						},
+						"description": "Get status of text-based math job"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Text Job Result",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/result/math/text?job_id={{job_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"result",
+								"math",
+								"text"
+							],
+							"query": [
+								{
+									"key": "job_id",
+									"value": "{{job_id}}"
+								}
+							]
+						},
+						"description": "Get result of text-based math job"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Image Job Status",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/status/math/image?job_id={{job_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"status",
+								"math",
+								"image"
+							],
+							"query": [
+								{
+									"key": "job_id",
+									"value": "{{job_id}}"
+								}
+							]
+						},
+						"description": "Get status of image-based math job (async processing)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Image Job Result",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/result/math/image?job_id={{job_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"result",
+								"math",
+								"image"
+							],
+							"query": [
+								{
+									"key": "job_id",
+									"value": "{{job_id}}"
+								}
+							]
+						},
+						"description": "Get result of image-based math job (async processing)"
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000/api",
+			"type": "string"
+		},
+		{
+			"key": "auth_token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "problem_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "file_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "job_id",
+			"value": "",
+			"type": "string"
+		}
+	]
+}
+

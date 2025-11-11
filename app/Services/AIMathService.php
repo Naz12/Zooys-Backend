@@ -14,12 +14,14 @@ class AIMathService
     private $aiProcessingModule;
     private $microserviceUrl;
     private $microserviceTimeout;
+    private $microserviceApiKey;
 
     public function __construct(AIProcessingModule $aiProcessingModule)
     {
         $this->aiProcessingModule = $aiProcessingModule;
         $this->microserviceUrl = env('MATH_MICROSERVICE_URL', 'http://localhost:8002');
         $this->microserviceTimeout = env('MATH_MICROSERVICE_TIMEOUT', 60);
+        $this->microserviceApiKey = env('MATH_MICROSERVICE_API_KEY');
     }
 
     /**
@@ -81,6 +83,7 @@ class AIMathService
 
     /**
      * Solve problem using Python microservice
+     * Supports both sync (text) and async (image) processing
      */
     private function solveWithMicroservice($mathProblem, $problemData)
     {
@@ -91,9 +94,11 @@ class AIMathService
                 'subject_area' => $mathProblem->subject_area,
                 'difficulty_level' => $mathProblem->difficulty_level,
                 'timeout_ms' => 30000, // 30 seconds
-                'include_explanation' => true
+                'include_explanation' => true,
+                'explanation_style' => 'educational'
             ];
 
+            $hasImage = false;
             // Handle image if present
             if ($mathProblem->problem_image) {
                 $imagePath = storage_path('app/public/' . $mathProblem->problem_image);
@@ -101,11 +106,24 @@ class AIMathService
                     $imageData = base64_encode(file_get_contents($imagePath));
                     $requestData['problem_image'] = $imageData;
                     $requestData['image_type'] = 'auto';
+                    unset($requestData['problem_text']); // Remove text when image is provided
+                    $hasImage = true;
                 }
+            }
+
+            // Prepare headers with API key
+            $headers = [
+                'Content-Type' => 'application/json',
+                'Accept' => 'application/json'
+            ];
+            
+            if ($this->microserviceApiKey) {
+                $headers['X-API-Key'] = $this->microserviceApiKey;
             }
 
             // Make HTTP request to microservice
             $response = Http::timeout($this->microserviceTimeout)
+                ->withHeaders($headers)
                 ->post($this->microserviceUrl . '/explain', $requestData);
 
             if (!$response->successful()) {
@@ -130,6 +148,13 @@ class AIMathService
 
             $responseData = $response->json();
 
+            // Check if this is an async job response (image processing)
+            if (isset($responseData['job_id']) && $responseData['processing_mode'] === 'async') {
+                // Poll for job completion
+                return $this->pollJobResult($responseData['job_id']);
+            }
+
+            // Handle sync response (text processing)
             if (!$responseData['success']) {
                 return [
                     'success' => false,
@@ -138,7 +163,7 @@ class AIMathService
             }
 
             // Extract solution data from microservice response
-            $solutionData = $responseData['solution'];
+            $solutionData = $responseData['solution'] ?? [];
             $explanationData = $responseData['explanation'] ?? null;
 
             return [
@@ -152,7 +177,8 @@ class AIMathService
                     'solver_used' => $responseData['metadata']['solver_used'] ?? 'microservice',
                     'processing_time' => $responseData['metadata']['processing_time'] ?? 0,
                     'classification' => $responseData['classification'] ?? null,
-                    'tokens_used' => $explanationData['tokens_used'] ?? 0
+                    'tokens_used' => $explanationData['tokens_used'] ?? 0,
+                    'processing_mode' => $responseData['processing_mode'] ?? 'sync'
                 ]
             ];
 
@@ -167,6 +193,87 @@ class AIMathService
                 'error' => 'Microservice request failed: ' . $e->getMessage()
             ];
         }
+    }
+
+    /**
+     * Poll job result for async processing
+     */
+    private function pollJobResult($jobId, $maxAttempts = 60, $intervalSeconds = 2)
+    {
+        $headers = [
+            'Accept' => 'application/json'
+        ];
+        
+        if ($this->microserviceApiKey) {
+            $headers['X-API-Key'] = $this->microserviceApiKey;
+        }
+
+        for ($attempt = 0; $attempt < $maxAttempts; $attempt++) {
+            // Check job status
+            $statusResponse = Http::timeout(10)
+                ->withHeaders($headers)
+                ->get($this->microserviceUrl . '/jobs/' . $jobId . '/status');
+
+            if (!$statusResponse->successful()) {
+                return [
+                    'success' => false,
+                    'error' => 'Failed to check job status: ' . $statusResponse->status()
+                ];
+            }
+
+            $statusData = $statusResponse->json();
+            $status = $statusData['status'] ?? 'unknown';
+
+            if ($status === 'completed') {
+                // Get result
+                $resultResponse = Http::timeout(10)
+                    ->withHeaders($headers)
+                    ->get($this->microserviceUrl . '/jobs/' . $jobId . '/result');
+
+                if (!$resultResponse->successful()) {
+                    return [
+                        'success' => false,
+                        'error' => 'Failed to get job result: ' . $resultResponse->status()
+                    ];
+                }
+
+                $resultData = $resultResponse->json();
+                $result = $resultData['result'] ?? [];
+
+                // Extract solution data
+                $solutionData = $result['solution'] ?? [];
+                $explanationData = $result['explanation'] ?? null;
+
+                return [
+                    'success' => true,
+                    'solution' => $solutionData['answer'] ?? $result['answer'] ?? 'No solution provided',
+                    'steps' => $this->formatMicroserviceSteps($solutionData['steps'] ?? []),
+                    'method' => $solutionData['method'] ?? $result['method'] ?? 'unknown',
+                    'explanation' => $explanationData['content'] ?? null,
+                    'verification' => 'Solution verified by microservice',
+                    'metadata' => [
+                        'solver_used' => $result['solver_used'] ?? 'microservice',
+                        'processing_time' => $resultData['processing_time'] ?? 0,
+                        'classification' => $result['classification'] ?? null,
+                        'processing_mode' => 'async',
+                        'job_id' => $jobId
+                    ]
+                ];
+            } elseif ($status === 'failed') {
+                return [
+                    'success' => false,
+                    'error' => $statusData['error'] ?? 'Job processing failed'
+                ];
+            }
+
+            // Wait before next attempt
+            sleep($intervalSeconds);
+        }
+
+        return [
+            'success' => false,
+            'error' => 'Job processing timeout after ' . ($maxAttempts * $intervalSeconds) . ' seconds'
+        ];
     }
 
     /**
@@ -196,7 +303,8 @@ class AIMathService
     {
         try {
             $response = Http::timeout(5)->get($this->microserviceUrl . '/health');
-            return $response->successful() && $response->json()['status'] === 'healthy';
+            $responseData = $response->json();
+            return $response->successful() && ($responseData['status'] ?? '') === 'healthy';
         } catch (\Exception $e) {
             return false;
         }

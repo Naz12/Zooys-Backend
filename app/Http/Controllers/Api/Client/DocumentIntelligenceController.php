@@ -101,6 +101,87 @@ class DocumentIntelligenceController extends Controller
     }
 
     /**
+     * Ingest text content directly (without a file)
+     * 
+     * POST /api/documents/ingest/text
+     * 
+     * Body:
+     * {
+     *   "text": "Summarized PDF text or any prepared content goes here.",
+     *   "filename": "summary.txt",        // optional: default "summary.txt"
+     *   "language": "eng",                // optional: language code
+     *   "llm_model": "llama3",            // optional: LLM model
+     *   "force_fallback": true,           // optional: skip local LLM
+     *   "metadata": {                     // optional: custom metadata
+     *     "tags": ["summary", "external"],
+     *     "business_unit": "ops"
+     *   }
+     * }
+     */
+    public function ingestText(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'text' => 'required|string|min:1',
+            'filename' => 'nullable|string|max:255',
+            'language' => 'nullable|string|max:10',
+            'llm_model' => 'nullable|string|max:50',
+            'force_fallback' => 'nullable|boolean',
+            'metadata' => 'nullable|array',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $userId = auth()->id();
+
+            $job = $this->universalJobService->createJob(
+                'document_intelligence',
+                [
+                    'action' => 'ingest_text',
+                    'text' => $request->input('text'),
+                    'params' => [
+                        'filename' => $request->input('filename', 'summary.txt'),
+                        'lang' => $request->input('language', 'eng'),
+                        'llm_model' => $request->input('llm_model', 'llama3'),
+                        'force_fallback' => $request->input('force_fallback', true),
+                        'metadata' => $request->input('metadata', [])
+                    ]
+                ],
+                [],
+                $userId
+            );
+
+            // Queue the job for processing
+            $this->universalJobService->queueJob($job['id']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Text ingestion started',
+                'job_id' => $job['id'],
+                'status' => 'pending'
+            ], 202);
+
+        } catch (\Exception $e) {
+            Log::error('Text ingestion request failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to start text ingestion',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Semantic search across documents
      * 
      * POST /api/documents/search
