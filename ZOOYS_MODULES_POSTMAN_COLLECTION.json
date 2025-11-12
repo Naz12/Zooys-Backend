@@ -1,0 +1,3482 @@
+{
+	"info": {
+		"_postman_id": "zooys-modules-collection",
+		"name": "Zooys Modules - Complete API Collection",
+		"description": "Complete API collection for all Zooys modules: Diagram, Math, Presentation, Summarize, PDF Operations, and Flashcards",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "📊 Diagram Module",
+			"item": [
+				{
+					"name": "Generate Diagrams",
+					"item": [
+						{
+							"name": "Generate Flowchart",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"prompt\": \"User login process: Start -> Enter credentials -> Validate -> Success or Error -> End\",\n  \"diagram_type\": \"flowchart\",\n  \"language\": \"en\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/diagram/generate",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"diagram",
+										"generate"
+									]
+								},
+								"description": "Generate a flowchart diagram"
+							},
+							"response": []
+						},
+						{
+							"name": "Generate Sequence Diagram",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"prompt\": \"User -> Frontend -> Backend -> Database\",\n  \"diagram_type\": \"sequence\",\n  \"language\": \"en\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/diagram/generate",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"diagram",
+										"generate"
+									]
+								},
+								"description": "Generate a sequence diagram"
+							},
+							"response": []
+						},
+						{
+							"name": "Generate Class Diagram",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"prompt\": \"Book class with title, author, ISBN. User class with name, email. Order class with order_id, date\",\n  \"diagram_type\": \"class\",\n  \"language\": \"en\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/diagram/generate",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"diagram",
+										"generate"
+									]
+								},
+								"description": "Generate a class diagram"
+							},
+							"response": []
+						},
+						{
+							"name": "Generate Pie Chart",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"prompt\": \"Market share: Apple 30%, Samsung 25%, Others 45%\",\n  \"diagram_type\": \"pie\",\n  \"language\": \"en\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/diagram/generate",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"diagram",
+										"generate"
+									]
+								},
+								"description": "Generate a pie chart"
+							},
+							"response": []
+						},
+						{
+							"name": "Generate Timeline",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"prompt\": \"Project timeline: Q1 Planning, Q2 Development, Q3 Testing, Q4 Launch\",\n  \"diagram_type\": \"timeline\",\n  \"language\": \"en\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/diagram/generate",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"diagram",
+										"generate"
+									]
+								},
+								"description": "Generate a timeline chart"
+							},
+							"response": []
+						},
+						{
+							"name": "Generate Mind Map",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"prompt\": \"Project Management: Planning, Development, Testing, Deployment\",\n  \"diagram_type\": \"mindmap\",\n  \"language\": \"en\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/diagram/generate",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"diagram",
+										"generate"
+									]
+								},
+								"description": "Generate a mind map"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Job Status & Results",
+					"item": [
+						{
+							"name": "Get Job Status",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/diagram/status?job_id={{job_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"diagram",
+										"status"
+									],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Get status of diagram generation job"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Job Result",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/diagram/result?job_id={{job_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"diagram",
+										"result"
+									],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Get result of completed diagram generation job"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Job Status (Alt Endpoint)",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/status/diagram?job_id={{job_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"status",
+										"diagram"
+									],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Get job status using alternative endpoint"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Job Result (Alt Endpoint)",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/result/diagram?job_id={{job_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"result",
+										"diagram"
+									],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Get job result using alternative endpoint"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Diagram Management",
+					"item": [
+						{
+							"name": "List Diagrams",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/diagram?page=1&per_page=15",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"diagram"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "1",
+											"description": "Page number"
+										},
+										{
+											"key": "per_page",
+											"value": "15",
+											"description": "Items per page"
+										}
+									]
+								},
+								"description": "Get list of user's diagrams"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Diagram",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/diagram/{{ai_result_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"diagram",
+										"{{ai_result_id}}"
+									]
+								},
+								"description": "Get specific diagram by ID"
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Diagram",
+							"request": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/diagram/{{ai_result_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"diagram",
+										"{{ai_result_id}}"
+									]
+								},
+								"description": "Delete a diagram and its associated image"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Information & Health",
+					"item": [
+						{
+							"name": "Get Diagram Types",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/diagram/types",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"diagram",
+										"types"
+									]
+								},
+								"description": "Get list of supported diagram types"
+							},
+							"response": []
+						},
+						{
+							"name": "Check Health",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/diagram/health",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"diagram",
+										"health"
+									]
+								},
+								"description": "Check if diagram microservice is available"
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "🧮 Math Module",
+			"item": [
+				{
+					"name": "Solve Problems",
+					"item": [
+						{
+							"name": "Solve Math Problem (Text)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"problem_text\": \"2x + 5 = 13\",\n  \"subject_area\": \"algebra\",\n  \"difficulty_level\": \"intermediate\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/math/solve",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"math",
+										"solve"
+									]
+								},
+								"description": "Solve a mathematical problem from text input (synchronous processing)"
+							},
+							"response": []
+						},
+						{
+							"name": "Solve Math Problem (Image)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"file_id\": \"{{file_id}}\",\n  \"subject_area\": \"algebra\",\n  \"difficulty_level\": \"intermediate\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/math/solve",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"math",
+										"solve"
+									]
+								},
+								"description": "Solve a mathematical problem from image (asynchronous processing - returns job_id)"
+							},
+							"response": []
+						},
+						{
+							"name": "Solve Word Problem",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"problem_text\": \"what is two plus two\",\n  \"subject_area\": \"arithmetic\",\n  \"difficulty_level\": \"beginner\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/math/solve",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"math",
+										"solve"
+									]
+								},
+								"description": "Solve a word problem using natural language"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Client API (Aliases)",
+					"item": [
+						{
+							"name": "Generate Math Solution",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"problem_text\": \"2x + 5 = 13\",\n  \"subject_area\": \"algebra\",\n  \"difficulty_level\": \"intermediate\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/client/math/generate",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"client",
+										"math",
+										"generate"
+									]
+								},
+								"description": "Alias for /math/solve (client endpoint)"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Math Help",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"problem_text\": \"2x + 5 = 13\",\n  \"subject_area\": \"algebra\",\n  \"difficulty_level\": \"intermediate\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/client/math/help",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"client",
+										"math",
+										"help"
+									]
+								},
+								"description": "Alias for /math/solve (client endpoint)"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Problem Management",
+					"item": [
+						{
+							"name": "List Math Problems",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/math/problems?page=1&per_page=15&subject=algebra&difficulty=intermediate",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"math",
+										"problems"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "1",
+											"description": "Page number"
+										},
+										{
+											"key": "per_page",
+											"value": "15",
+											"description": "Items per page"
+										},
+										{
+											"key": "subject",
+											"value": "algebra",
+											"description": "Filter by subject (optional)",
+											"disabled": true
+										},
+										{
+											"key": "difficulty",
+											"value": "intermediate",
+											"description": "Filter by difficulty (optional)",
+											"disabled": true
+										}
+									]
+								},
+								"description": "Get list of user's math problems with pagination and filters"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Math Problem",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/math/problems/{{problem_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"math",
+										"problems",
+										"{{problem_id}}"
+									]
+								},
+								"description": "Get specific math problem with solutions"
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Math Problem",
+							"request": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/math/problems/{{problem_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"math",
+										"problems",
+										"{{problem_id}}"
+									]
+								},
+								"description": "Delete a math problem and its solutions"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "History & Statistics",
+					"item": [
+						{
+							"name": "Get Math History",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/math/history",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"math",
+										"history"
+									]
+								},
+								"description": "Get user's math problem solving history"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Math History (Client)",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/client/math/history",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"client",
+										"math",
+										"history"
+									]
+								},
+								"description": "Get math history (client endpoint)"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Math Statistics",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/math/stats",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"math",
+										"stats"
+									]
+								},
+								"description": "Get user's math solving statistics"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Math Statistics (Client)",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/client/math/stats",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"client",
+										"math",
+										"stats"
+									]
+								},
+								"description": "Get math statistics (client endpoint)"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Job Status & Results",
+					"item": [
+						{
+							"name": "Get Text Job Status",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/status/math/text?job_id={{job_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"status",
+										"math",
+										"text"
+									],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Get status of text-based math job"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Text Job Result",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/result/math/text?job_id={{job_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"result",
+										"math",
+										"text"
+									],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Get result of text-based math job"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Image Job Status",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/status/math/image?job_id={{job_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"status",
+										"math",
+										"image"
+									],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Get status of image-based math job (async processing)"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Image Job Result",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/result/math/image?job_id={{job_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"result",
+										"math",
+										"image"
+									],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Get result of image-based math job (async processing)"
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "📊 Presentation Module",
+			"item": [
+				{
+					"name": "Templates",
+					"item": [
+						{
+							"name": "Get Templates",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/presentations/templates",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"presentations",
+										"templates"
+									]
+								},
+								"description": "Get available presentation templates"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Outline Generation",
+					"item": [
+						{
+							"name": "Generate Outline (Text)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"input_type\": \"text\",\n  \"topic\": \"Introduction to Machine Learning\",\n  \"language\": \"English\",\n  \"tone\": \"Professional\",\n  \"length\": \"Medium\",\n  \"model\": \"gpt-4\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/presentations/generate-outline",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"presentations",
+										"generate-outline"
+									]
+								},
+								"description": "Generate presentation outline from text input"
+							},
+							"response": []
+						},
+						{
+							"name": "Generate Outline (File)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"input_type\": \"file\",\n  \"file_id\": \"{{file_id}}\",\n  \"language\": \"English\",\n  \"tone\": \"Professional\",\n  \"length\": \"Medium\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/presentations/generate-outline",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"presentations",
+										"generate-outline"
+									]
+								},
+								"description": "Generate presentation outline from uploaded file"
+							},
+							"response": []
+						},
+						{
+							"name": "Generate Outline (URL)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"input_type\": \"url\",\n  \"url\": \"https://example.com/article\",\n  \"language\": \"English\",\n  \"tone\": \"Professional\",\n  \"length\": \"Medium\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/presentations/generate-outline",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"presentations",
+										"generate-outline"
+									]
+								},
+								"description": "Generate presentation outline from URL"
+							},
+							"response": []
+						},
+						{
+							"name": "Generate Outline (YouTube)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"input_type\": \"youtube\",\n  \"youtube_url\": \"https://www.youtube.com/watch?v=example\",\n  \"language\": \"English\",\n  \"tone\": \"Professional\",\n  \"length\": \"Medium\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/presentations/generate-outline",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"presentations",
+										"generate-outline"
+									]
+								},
+								"description": "Generate presentation outline from YouTube video"
+							},
+							"response": []
+						},
+						{
+							"name": "Update Outline",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"outline\": {\n    \"title\": \"Updated Presentation Title\",\n    \"slides\": [\n      {\n        \"slide_number\": 1,\n        \"header\": \"Introduction\",\n        \"subheaders\": [\"What is ML?\", \"Why ML?\"],\n        \"slide_type\": \"title\"\n      }\n    ]\n  }\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/presentations/{{ai_result_id}}/update-outline",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"presentations",
+										"{{ai_result_id}}",
+										"update-outline"
+									]
+								},
+								"description": "Update presentation outline"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Content Generation",
+					"item": [
+						{
+							"name": "Generate Content",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"language\": \"English\",\n  \"tone\": \"Professional\",\n  \"detail_level\": \"detailed\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/presentations/{{ai_result_id}}/generate-content",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"presentations",
+										"{{ai_result_id}}",
+										"generate-content"
+									]
+								},
+								"description": "Generate detailed content for presentation slides"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Export & Download",
+					"item": [
+						{
+							"name": "Export Presentation",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"template\": \"corporate_blue\",\n  \"color_scheme\": \"blue\",\n  \"font_style\": \"modern\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/presentations/{{ai_result_id}}/export",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"presentations",
+										"{{ai_result_id}}",
+										"export"
+									]
+								},
+								"description": "Export presentation to PowerPoint format"
+							},
+							"response": []
+						},
+						{
+							"name": "Generate PowerPoint",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"template\": \"corporate_blue\",\n  \"color_scheme\": \"blue\",\n  \"font_style\": \"modern\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/presentations/{{ai_result_id}}/generate-powerpoint",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"presentations",
+										"{{ai_result_id}}",
+										"generate-powerpoint"
+									]
+								},
+								"description": "Generate PowerPoint file (authenticated)"
+							},
+							"response": []
+						},
+						{
+							"name": "Download Presentation",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/files/download/{{filename}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"files",
+										"download",
+										"{{filename}}"
+									]
+								},
+								"description": "Download presentation file"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Management",
+					"item": [
+						{
+							"name": "List Presentations",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/presentations",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"presentations"
+									]
+								},
+								"description": "Get list of all presentations"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Presentation Data",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/presentations/{{ai_result_id}}/data",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"presentations",
+										"{{ai_result_id}}",
+										"data"
+									]
+								},
+								"description": "Get presentation data for editing"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Presentation",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/presentations/{{ai_result_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"presentations",
+										"{{ai_result_id}}"
+									]
+								},
+								"description": "Get specific presentation details (authenticated)"
+							},
+							"response": []
+						},
+						{
+							"name": "Save Presentation",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"title\": \"Updated Presentation Title\",\n  \"slides\": [\n    {\n      \"slide_number\": 1,\n      \"header\": \"Introduction\",\n      \"content\": \"Updated content here\"\n    }\n  ]\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/presentations/{{ai_result_id}}/save",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"presentations",
+										"{{ai_result_id}}",
+										"save"
+									]
+								},
+								"description": "Save presentation changes"
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Presentation",
+							"request": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/presentations/{{ai_result_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"presentations",
+										"{{ai_result_id}}"
+									]
+								},
+								"description": "Delete a presentation"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Status & Health",
+					"item": [
+						{
+							"name": "Get Progress Status",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/presentations/{{ai_result_id}}/status",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"presentations",
+										"{{ai_result_id}}",
+										"status"
+									]
+								},
+								"description": "Get presentation generation progress"
+							},
+							"response": []
+						},
+						{
+							"name": "Check Microservice Status",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/presentations/microservice-status",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"presentations",
+										"microservice-status"
+									]
+								},
+								"description": "Check if presentation microservice is available"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Text Job Status",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/status/presentations/text?job_id={{job_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"status",
+										"presentations",
+										"text"
+									],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Get status of text-based presentation job"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Text Job Result",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/result/presentations/text?job_id={{job_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"result",
+										"presentations",
+										"text"
+									],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Get result of text-based presentation job"
+							},
+							"response": []
+						},
+						{
+							"name": "Get File Job Status",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/status/presentations/file?job_id={{job_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"status",
+										"presentations",
+										"file"
+									],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Get status of file-based presentation job"
+							},
+							"response": []
+						},
+						{
+							"name": "Get File Job Result",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/result/presentations/file?job_id={{job_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"result",
+										"presentations",
+										"file"
+									],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Get result of file-based presentation job"
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "📝 Summarize Module",
+			"item": [
+				{
+					"name": "YouTube Video Summarization",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"url\": \"https://www.youtube.com/watch?v=dQw4w9WgXcQ\",\n  \"options\": {\n    \"language\": \"en\",\n    \"format\": \"detailed\",\n    \"model\": \"deepseek-chat\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/summarize/async/youtube",
+							"host": ["{{base_url}}"],
+							"path": ["summarize", "async", "youtube"]
+						},
+						"description": "Summarize YouTube video content"
+					},
+					"response": []
+				},
+				{
+					"name": "Text Summarization",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"text\": \"Artificial intelligence (AI) is transforming industries across the globe. From healthcare to finance, AI technologies are enabling more efficient processes, better decision-making, and innovative solutions.\",\n  \"options\": {\n    \"language\": \"en\",\n    \"format\": \"detailed\",\n    \"model\": \"deepseek-chat\",\n    \"focus\": \"summary\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/summarize/async/text",
+							"host": ["{{base_url}}"],
+							"path": ["summarize", "async", "text"]
+						},
+						"description": "Summarize raw text content"
+					},
+					"response": []
+				},
+				{
+					"name": "File Summarization (PDF/Doc/Image)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"file_id\": \"{{file_id}}\",\n  \"options\": {\n    \"language\": \"en\",\n    \"format\": \"detailed\",\n    \"focus\": \"summary\",\n    \"ocr\": \"auto\",\n    \"lang\": \"eng\",\n    \"llm_model\": \"llama3\",\n    \"max_tokens\": 1024,\n    \"top_k\": 5\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/summarize/async/file",
+							"host": ["{{base_url}}"],
+							"path": ["summarize", "async", "file"]
+						},
+						"description": "Summarize PDF, DOC, DOCX, or Image files"
+					},
+					"response": []
+				},
+				{
+					"name": "Audio/Video File Summarization",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"file_id\": \"{{file_id}}\",\n  \"options\": {\n    \"language\": \"en\",\n    \"format\": \"detailed\",\n    \"focus\": \"summary\",\n    \"model\": \"deepseek-chat\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/summarize/async/audiovideo",
+							"host": ["{{base_url}}"],
+							"path": ["summarize", "async", "audiovideo"]
+						},
+						"description": "Summarize audio or video files"
+					},
+					"response": []
+				},
+				{
+					"name": "Link/URL Summarization",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"url\": \"https://example.com/article\",\n  \"options\": {\n    \"language\": \"en\",\n    \"format\": \"detailed\",\n    \"focus\": \"summary\",\n    \"model\": \"deepseek-chat\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/summarize/link",
+							"host": ["{{base_url}}"],
+							"path": ["summarize", "link"]
+						},
+						"description": "Summarize web page content from any URL"
+					},
+					"response": []
+				},
+				{
+					"name": "Status & Result Endpoints",
+					"item": [
+						{
+							"name": "YouTube Status",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/status/summarize/youtube?job_id={{job_id}}",
+									"host": ["{{base_url}}"],
+									"path": ["status", "summarize", "youtube"],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Check status of YouTube summarization job"
+							},
+							"response": []
+						},
+						{
+							"name": "YouTube Result",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/result/summarize/youtube?job_id={{job_id}}",
+									"host": ["{{base_url}}"],
+									"path": ["result", "summarize", "youtube"],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Get result of completed YouTube summarization job"
+							},
+							"response": []
+						},
+						{
+							"name": "Text Status",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/status/summarize/text?job_id={{job_id}}",
+									"host": ["{{base_url}}"],
+									"path": ["status", "summarize", "text"],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Check status of text summarization job"
+							},
+							"response": []
+						},
+						{
+							"name": "Text Result",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/result/summarize/text?job_id={{job_id}}",
+									"host": ["{{base_url}}"],
+									"path": ["result", "summarize", "text"],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Get result of completed text summarization job"
+							},
+							"response": []
+						},
+						{
+							"name": "File Status",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/status/summarize/file?job_id={{job_id}}",
+									"host": ["{{base_url}}"],
+									"path": ["status", "summarize", "file"],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Check status of file summarization job"
+							},
+							"response": []
+						},
+						{
+							"name": "File Result",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/result/summarize/file?job_id={{job_id}}",
+									"host": ["{{base_url}}"],
+									"path": ["result", "summarize", "file"],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Get result of completed file summarization job"
+							},
+							"response": []
+						},
+						{
+							"name": "Web/Link Status",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/status/summarize/web?job_id={{job_id}}",
+									"host": ["{{base_url}}"],
+									"path": ["status", "summarize", "web"],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Check status of web/link summarization job"
+							},
+							"response": []
+						},
+						{
+							"name": "Web/Link Result",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/result/summarize/web?job_id={{job_id}}",
+									"host": ["{{base_url}}"],
+									"path": ["result", "summarize", "web"],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Get result of completed web/link summarization job"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Get Available Models",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/models",
+							"host": ["{{base_url}}"],
+							"path": ["models"]
+						},
+						"description": "Get list of available AI models for summarization"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "📄 PDF Operations Module",
+			"item": [
+				{
+					"name": "File Upload",
+					"item": [
+						{
+							"name": "Upload Single File",
+							"request": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "file",
+											"type": "file",
+											"src": []
+										}
+									]
+								},
+								"url": {
+									"raw": "{{base_url}}/files/upload",
+									"host": ["{{base_url}}"],
+									"path": ["files", "upload"]
+								},
+								"description": "Upload a file for PDF operations"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "PDF Merge",
+					"item": [
+						{
+							"name": "Submit Merge Job",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"file_ids\": [\"{{file_id}}\", \"205\", \"206\"],\n  \"params\": {\n    \"page_order\": \"as_uploaded\",\n    \"remove_blank_pages\": false,\n    \"add_page_numbers\": false\n  }\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/pdf/edit/merge",
+									"host": ["{{base_url}}"],
+									"path": ["pdf", "edit", "merge"]
+								},
+								"description": "Submit PDF merge job"
+							},
+							"response": []
+						},
+						{
+							"name": "Check Merge Status",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/pdf/edit/merge/status?job_id={{job_id}}",
+									"host": ["{{base_url}}"],
+									"path": ["pdf", "edit", "merge", "status"],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Check status of PDF merge job"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Merge Result",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/pdf/edit/merge/result?job_id={{job_id}}",
+									"host": ["{{base_url}}"],
+									"path": ["pdf", "edit", "merge", "result"],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Get result of PDF merge job"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "PDF Split",
+					"item": [
+						{
+							"name": "Submit Split Job",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"file_id\": \"{{file_id}}\",\n  \"params\": {\n    \"split_points\": \"2,4\",\n    \"title_prefix\": \"Section\",\n    \"author\": \"Your Name\"\n  }\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/pdf/edit/split",
+									"host": ["{{base_url}}"],
+									"path": ["pdf", "edit", "split"]
+								},
+								"description": "Submit PDF split job"
+							},
+							"response": []
+						},
+						{
+							"name": "Check Split Status",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/pdf/edit/split/status?job_id={{job_id}}",
+									"host": ["{{base_url}}"],
+									"path": ["pdf", "edit", "split", "status"],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Check status of PDF split job"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Split Result",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/pdf/edit/split/result?job_id={{job_id}}",
+									"host": ["{{base_url}}"],
+									"path": ["pdf", "edit", "split", "result"],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Get result of PDF split job"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "PDF Compress",
+					"item": [
+						{
+							"name": "Submit Compress Job",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"file_id\": \"{{file_id}}\",\n  \"params\": {\n    \"compression_level\": \"medium\",\n    \"quality\": 75\n  }\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/pdf/edit/compress",
+									"host": ["{{base_url}}"],
+									"path": ["pdf", "edit", "compress"]
+								},
+								"description": "Submit PDF compress job"
+							},
+							"response": []
+						},
+						{
+							"name": "Check Compress Status",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/pdf/edit/compress/status?job_id={{job_id}}",
+									"host": ["{{base_url}}"],
+									"path": ["pdf", "edit", "compress", "status"],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Check status of PDF compress job"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Compress Result",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/pdf/edit/compress/result?job_id={{job_id}}",
+									"host": ["{{base_url}}"],
+									"path": ["pdf", "edit", "compress", "result"],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Get result of PDF compress job"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "PDF Watermark",
+					"item": [
+						{
+							"name": "Submit Watermark Job",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"file_id\": \"{{file_id}}\",\n  \"params\": {\n    \"watermark_type\": \"text\",\n    \"watermark_content\": \"CONFIDENTIAL\",\n    \"position_x\": 50,\n    \"position_y\": 50,\n    \"rotation\": -45,\n    \"opacity\": 0.3,\n    \"color\": \"#FF0000\",\n    \"font_family\": \"Arial\",\n    \"font_size\": 48,\n    \"apply_to_all\": true\n  }\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/pdf/edit/watermark",
+									"host": ["{{base_url}}"],
+									"path": ["pdf", "edit", "watermark"]
+								},
+								"description": "Submit PDF watermark job"
+							},
+							"response": []
+						},
+						{
+							"name": "Check Watermark Status",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/pdf/edit/watermark/status?job_id={{job_id}}",
+									"host": ["{{base_url}}"],
+									"path": ["pdf", "edit", "watermark", "status"],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Check status of PDF watermark job"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Watermark Result",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/pdf/edit/watermark/result?job_id={{job_id}}",
+									"host": ["{{base_url}}"],
+									"path": ["pdf", "edit", "watermark", "result"],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Get result of PDF watermark job"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "PDF Page Numbers",
+					"item": [
+						{
+							"name": "Submit Page Numbers Job",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"file_id\": \"{{file_id}}\",\n  \"params\": {\n    \"position\": \"bottom_right\",\n    \"format_type\": \"arabic\",\n    \"font_size\": 12,\n    \"page_ranges\": []\n  }\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/pdf/edit/page_numbers",
+									"host": ["{{base_url}}"],
+									"path": ["pdf", "edit", "page_numbers"]
+								},
+								"description": "Submit PDF page numbers job"
+							},
+							"response": []
+						},
+						{
+							"name": "Check Page Numbers Status",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/pdf/edit/page_numbers/status?job_id={{job_id}}",
+									"host": ["{{base_url}}"],
+									"path": ["pdf", "edit", "page_numbers", "status"],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Check status of PDF page numbers job"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Page Numbers Result",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/pdf/edit/page_numbers/result?job_id={{job_id}}",
+									"host": ["{{base_url}}"],
+									"path": ["pdf", "edit", "page_numbers", "result"],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Get result of PDF page numbers job"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "PDF Protect",
+					"item": [
+						{
+							"name": "Submit Protect Job",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"file_id\": \"{{file_id}}\",\n  \"params\": {\n    \"password\": \"SecurePassword123\",\n    \"permissions\": [\"print\", \"copy\"]\n  }\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/pdf/edit/protect",
+									"host": ["{{base_url}}"],
+									"path": ["pdf", "edit", "protect"]
+								},
+								"description": "Submit PDF protect job"
+							},
+							"response": []
+						},
+						{
+							"name": "Check Protect Status",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/pdf/edit/protect/status?job_id={{job_id}}",
+									"host": ["{{base_url}}"],
+									"path": ["pdf", "edit", "protect", "status"],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Check status of PDF protect job"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Protect Result",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/pdf/edit/protect/result?job_id={{job_id}}",
+									"host": ["{{base_url}}"],
+									"path": ["pdf", "edit", "protect", "result"],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Get result of PDF protect job"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Document Conversion",
+					"item": [
+						{
+							"name": "Submit Convert Job",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"file_id\": \"{{file_id}}\",\n  \"target_format\": \"docx\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/file-processing/convert",
+									"host": ["{{base_url}}"],
+									"path": ["file-processing", "convert"]
+								},
+								"description": "Submit document conversion job"
+							},
+							"response": []
+						},
+						{
+							"name": "Check Convert Status",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/jobs/status?job_id={{job_id}}&operation=document_conversion",
+									"host": ["{{base_url}}"],
+									"path": ["jobs", "status"],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										},
+										{
+											"key": "operation",
+											"value": "document_conversion"
+										}
+									]
+								},
+								"description": "Check status of document conversion job"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Convert Result",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/jobs/result?job_id={{job_id}}&operation=document_conversion",
+									"host": ["{{base_url}}"],
+									"path": ["jobs", "result"],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										},
+										{
+											"key": "operation",
+											"value": "document_conversion"
+										}
+									]
+								},
+								"description": "Get result of document conversion job"
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "🎴 Flashcard Module",
+			"item": [
+				{
+					"name": "Generate Flashcards",
+					"item": [
+						{
+							"name": "Generate from Text",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"if (pm.response.code === 202) {",
+											"    const response = pm.response.json();",
+											"    if (response.job_id) {",
+											"        pm.collectionVariables.set('job_id', response.job_id);",
+											"        console.log('✅ Job ID saved:', response.job_id);",
+											"    }",
+											"}"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"input\": \"Photosynthesis is the process by which plants convert light energy into chemical energy. It occurs in chloroplasts and requires sunlight, water, and carbon dioxide. The end products are glucose and oxygen.\",\n  \"input_type\": \"text\",\n  \"count\": 5,\n  \"difficulty\": \"intermediate\",\n  \"style\": \"mixed\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/flashcards/generate",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"flashcards",
+										"generate"
+									]
+								},
+								"description": "Generate flashcards from text input"
+							},
+							"response": []
+						},
+						{
+							"name": "Generate from File",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"if (pm.response.code === 202) {",
+											"    const response = pm.response.json();",
+											"    if (response.job_id) {",
+											"        pm.collectionVariables.set('job_id', response.job_id);",
+											"        console.log('✅ Job ID saved:', response.job_id);",
+											"    }",
+											"}"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"file_id\": \"{{file_id}}\",\n  \"input_type\": \"file\",\n  \"count\": 10,\n  \"difficulty\": \"intermediate\",\n  \"style\": \"mixed\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/flashcards/generate",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"flashcards",
+										"generate"
+									]
+								},
+								"description": "Generate flashcards from uploaded file"
+							},
+							"response": []
+						},
+						{
+							"name": "Generate from URL",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"if (pm.response.code === 202) {",
+											"    const response = pm.response.json();",
+											"    if (response.job_id) {",
+											"        pm.collectionVariables.set('job_id', response.job_id);",
+											"        console.log('✅ Job ID saved:', response.job_id);",
+											"    }",
+											"}"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"input\": \"{{web_url}}\",\n  \"input_type\": \"url\",\n  \"count\": 8,\n  \"difficulty\": \"intermediate\",\n  \"style\": \"analysis\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/flashcards/generate",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"flashcards",
+										"generate"
+									]
+								},
+								"description": "Generate flashcards from web page URL"
+							},
+							"response": []
+						},
+						{
+							"name": "Generate from YouTube",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"if (pm.response.code === 202) {",
+											"    const response = pm.response.json();",
+											"    if (response.job_id) {",
+											"        pm.collectionVariables.set('job_id', response.job_id);",
+											"        console.log('✅ Job ID saved:', response.job_id);",
+											"    }",
+											"}"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"input\": \"{{youtube_url}}\",\n  \"input_type\": \"youtube\",\n  \"count\": 6,\n  \"difficulty\": \"beginner\",\n  \"style\": \"definition\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/flashcards/generate",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"flashcards",
+										"generate"
+									]
+								},
+								"description": "Generate flashcards from YouTube video (transcribes video first)"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Job Status & Results",
+					"item": [
+						{
+							"name": "Get Status (Text/URL/YouTube)",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"const response = pm.response.json();",
+											"if (response.status === 'processing' || response.status === 'running') {",
+											"    console.log('⏳ Job still processing, status:', response.status, 'Progress:', response.progress + '%');",
+											"    setTimeout(() => {",
+											"        pm.sendRequest(pm.request, (err, res) => {",
+											"            if (!err) console.log('Retry status check');",
+											"        });",
+											"    }, 2000);",
+											"} else if (response.status === 'completed') {",
+											"    console.log('✅ Job completed!');",
+											"} else if (response.status === 'failed') {",
+											"    console.log('❌ Job failed:', response.error);",
+											"}"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/status/flashcards/text?job_id={{job_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"status",
+										"flashcards",
+										"text"
+									],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Get status of flashcard generation job for text/URL/YouTube inputs"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Result (Text/URL/YouTube)",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/result/flashcards/text?job_id={{job_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"result",
+										"flashcards",
+										"text"
+									],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Get result of completed flashcard generation job for text/URL/YouTube inputs"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Status (File)",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"const response = pm.response.json();",
+											"if (response.status === 'processing' || response.status === 'running') {",
+											"    console.log('⏳ Job still processing, status:', response.status, 'Progress:', response.progress + '%');",
+											"    setTimeout(() => {",
+											"        pm.sendRequest(pm.request, (err, res) => {",
+											"            if (!err) console.log('Retry status check');",
+											"        });",
+											"    }, 2000);",
+											"} else if (response.status === 'completed') {",
+											"    console.log('✅ Job completed!');",
+											"} else if (response.status === 'failed') {",
+											"    console.log('❌ Job failed:', response.error);",
+											"}"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/status/flashcards/file?job_id={{job_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"status",
+										"flashcards",
+										"file"
+									],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Get status of flashcard generation job for file inputs"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Result (File)",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/result/flashcards/file?job_id={{job_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"result",
+										"flashcards",
+										"file"
+									],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}"
+										}
+									]
+								},
+								"description": "Get result of completed flashcard generation job for file inputs"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Flashcard Sets Management",
+					"item": [
+						{
+							"name": "List Flashcard Sets",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/flashcards?page=1&per_page=15&search=",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"flashcards"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "per_page",
+											"value": "15"
+										},
+										{
+											"key": "search",
+											"value": "",
+											"disabled": true
+										}
+									]
+								},
+								"description": "Get list of user's flashcard sets with pagination and search"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Flashcard Set",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"if (pm.response.code === 200) {",
+											"    const response = pm.response.json();",
+											"    if (response.flashcard_set && response.flashcard_set.id) {",
+											"        pm.collectionVariables.set('flashcard_set_id', response.flashcard_set.id);",
+											"        console.log('✅ Flashcard Set ID saved:', response.flashcard_set.id);",
+											"    }",
+											"}"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/flashcards/{{flashcard_set_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"flashcards",
+										"{{flashcard_set_id}}"
+									]
+								},
+								"description": "Get specific flashcard set with all its cards"
+							},
+							"response": []
+						},
+						{
+							"name": "Update Flashcard Set",
+							"request": {
+								"method": "PUT",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"title\": \"Updated Title\",\n  \"description\": \"Updated description\",\n  \"is_public\": false\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/flashcards/{{flashcard_set_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"flashcards",
+										"{{flashcard_set_id}}"
+									]
+								},
+								"description": "Update flashcard set metadata (title, description, is_public)"
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Flashcard Set",
+							"request": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/flashcards/{{flashcard_set_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"flashcards",
+										"{{flashcard_set_id}}"
+									]
+								},
+								"description": "Delete flashcard set and all its cards"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Public Flashcard Sets",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/flashcards/public?page=1&per_page=15&search=",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"flashcards",
+										"public"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "per_page",
+											"value": "15"
+										},
+										{
+											"key": "search",
+											"value": "",
+											"disabled": true
+										}
+									]
+								},
+								"description": "Get list of public flashcard sets from all users"
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000/api",
+			"type": "string"
+		},
+		{
+			"key": "auth_token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "job_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "ai_result_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "problem_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "file_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "filename",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "flashcard_set_id",
+			"value": "",
+			"type": "string"
+		}
+	]
+}
+

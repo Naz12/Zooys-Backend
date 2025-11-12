@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Log;
 use App\Services\Modules\SubscriptionBillingModule;
 use App\Services\Modules\MathModule;
 use App\Services\Modules\PresentationModule;
+use App\Services\Modules\DiagramModule;
 use App\Services\Modules\TranscriberModule;
 use App\Services\Modules\FileOperationsModule;
 use App\Services\Modules\DocumentIntelligenceModule;
@@ -99,6 +100,24 @@ class ModuleRegistry
                 'supported_languages' => ['English', 'Spanish', 'French', 'German', 'Italian', 'Portuguese', 'Chinese', 'Japanese'],
                 'supported_tones' => ['Professional', 'Casual', 'Academic', 'Creative', 'Formal'],
                 'supported_lengths' => ['Short', 'Medium', 'Long'],
+            ]
+        ]);
+
+        // Register Diagram Module (wraps AIDiagramService)
+        self::registerModule('diagram', [
+            'class' => DiagramModule::class,
+            'description' => 'AI-powered diagram generation via Diagram microservice',
+            'dependencies' => [],
+            'config' => [
+                'api_url' => env('DIAGRAM_MICROSERVICE_URL', 'http://localhost:8005'),
+                'timeout' => env('DIAGRAM_MICROSERVICE_TIMEOUT', 120),
+                'supported_diagram_types' => [
+                    'graph_based' => ['flowchart', 'sequence', 'class', 'state', 'er', 'user_journey', 'block', 'mindmap'],
+                    'chart_based' => ['pie', 'quadrant', 'timeline', 'sankey', 'xy']
+                ],
+                'supported_languages' => ['en', 'es', 'fr', 'de', 'it', 'pt', 'zh', 'ja'],
+                'output_format' => 'png',
+                'max_processing_time' => 120
             ]
         ]);
 

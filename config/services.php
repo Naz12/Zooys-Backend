@@ -86,4 +86,10 @@ return [
         'timeout' => env('MATH_MICROSERVICE_TIMEOUT', 60),
     ],
 
+    'diagram_microservice' => [
+        'url' => env('DIAGRAM_MICROSERVICE_URL', 'http://localhost:8005'),
+        'api_key' => env('DIAGRAM_MICROSERVICE_API_KEY', 'diagram-service-api-key-12345'),
+        'timeout' => env('DIAGRAM_MICROSERVICE_TIMEOUT', 120),
+    ],
+
 ];

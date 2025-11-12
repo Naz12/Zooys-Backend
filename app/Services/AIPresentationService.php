@@ -1155,13 +1155,13 @@ Format the response as a JSON object with a 'content' field containing an array 
         } catch (\Exception $e) {
             Log::error('Microservice call exception', [
                 'error' => $e->getMessage(),
-                'url' => $url
-            ]);
-            return [
-                'success' => false,
+                    'url' => $url
+                ]);
+                return [
+                    'success' => false,
                 'error' => 'Microservice call failed: ' . $e->getMessage()
-            ];
-        }
+                ];
+            }
     }
 
     /**
@@ -1218,8 +1218,8 @@ Format the response as a JSON object with a 'content' field containing an array 
                     ->get($this->microserviceUrl . '/jobs/' . $jobId . '/result');
 
                 if (!$resultResponse->successful()) {
-                    return [
-                        'success' => false,
+            return [
+                'success' => false,
                         'error' => 'Failed to get job result: ' . $resultResponse->status()
                     ];
                 }
@@ -1248,8 +1248,8 @@ Format the response as a JSON object with a 'content' field containing an array 
                 return [
                     'success' => false,
                     'error' => 'Job was cancelled'
-                ];
-            }
+            ];
+        }
 
             // Wait before next attempt
             sleep($intervalSeconds);

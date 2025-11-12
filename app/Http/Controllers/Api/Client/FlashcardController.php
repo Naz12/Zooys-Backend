@@ -39,6 +39,21 @@ class FlashcardController extends Controller
      */
     public function generate(Request $request)
     {
+        // Log incoming request for debugging
+        Log::info('FlashcardController: Generate request received', [
+            'request_method' => $request->method(),
+            'request_uri' => $request->fullUrl(),
+            'has_input' => $request->has('input'),
+            'has_file_id' => $request->has('file_id'),
+            'input_type' => $request->input('input_type'),
+            'count' => $request->input('count'),
+            'difficulty' => $request->input('difficulty'),
+            'style' => $request->input('style'),
+            'all_request_data' => $request->all(),
+            'content_type' => $request->header('Content-Type'),
+            'accept' => $request->header('Accept')
+        ]);
+
         $request->validate([
             'input' => 'required_without:file_id|string',
             'file_id' => 'required_without:input|string|exists:file_uploads,id',
@@ -53,6 +68,14 @@ class FlashcardController extends Controller
         $input = $request->has('input') ? trim($request->input('input')) : null;
         $inputType = $request->input('input_type', 'text');
         $fileId = $request->input('file_id');
+        
+        Log::info('FlashcardController: After validation', [
+            'input_length' => $input ? strlen($input) : 0,
+            'input_preview' => $input ? substr($input, 0, 100) : null,
+            'input_type' => $inputType,
+            'file_id' => $fileId,
+            'user_id' => $user->id
+        ]);
 
         try {
             // Determine input type and prepare job input
@@ -122,7 +145,12 @@ class FlashcardController extends Controller
                 'job_id' => $job['id'],
                 'status' => $job['status'],
                 'poll_url' => $statusEndpoint,
-                'result_url' => $resultEndpoint
+                'result_url' => $resultEndpoint,
+                'data' => [
+                    'job_id' => $job['id'],
+                    'status' => $job['status'],
+                    'flashcards' => [] // Empty array for async jobs - will be populated when job completes
+                ]
             ], 202);
 
         } catch (\Exception $e) {

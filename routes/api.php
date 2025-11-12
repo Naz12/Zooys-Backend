@@ -843,6 +843,21 @@ Route::get('/result/flashcards/text', function (Request $request) use ($authenti
     }
     
     $job = $result['job'];
+    
+    // Handle failed jobs - return error information
+    if (($job['status'] ?? '') === 'failed') {
+        return response()->json([
+            'success' => false,
+            'job_id' => $job['id'],
+            'tool_type' => 'flashcards',
+            'input_type' => 'text',
+            'status' => 'failed',
+            'error' => $job['error'] ?? 'Job failed',
+            'stage' => $job['stage'] ?? null,
+            'progress' => $job['progress'] ?? 0
+        ], 200);
+    }
+    
     if (($job['status'] ?? '') !== 'completed') {
         return response()->json(['error' => 'Job not completed', 'status' => $job['status'] ?? 'unknown'], 409);
     }
@@ -897,6 +912,21 @@ Route::get('/result/flashcards/file', function (Request $request) use ($authenti
     }
     
     $job = $result['job'];
+    
+    // Handle failed jobs - return error information
+    if (($job['status'] ?? '') === 'failed') {
+        return response()->json([
+            'success' => false,
+            'job_id' => $job['id'],
+            'tool_type' => 'flashcards',
+            'input_type' => 'file',
+            'status' => 'failed',
+            'error' => $job['error'] ?? 'Job failed',
+            'stage' => $job['stage'] ?? null,
+            'progress' => $job['progress'] ?? 0
+        ], 200);
+    }
+    
     if (($job['status'] ?? '') !== 'completed') {
         return response()->json(['error' => 'Job not completed', 'status' => $job['status'] ?? 'unknown'], 409);
     }
@@ -1016,6 +1046,60 @@ Route::get('/result/presentations/file', function (Request $request) use ($authe
         'job_id' => $job['id'],
         'tool_type' => 'presentations',
         'input_type' => 'file',
+        'data' => $job['result'] ?? null
+    ]);
+});
+
+// 📊 DIAGRAM TOOL ENDPOINTS
+
+// Diagram Status
+Route::get('/status/diagram', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'diagram', 'default');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    return response()->json([
+        'job_id' => $job['id'],
+        'tool_type' => 'diagram',
+        'status' => $job['status'] ?? 'unknown',
+        'progress' => $job['progress'] ?? 0,
+        'stage' => $job['stage'] ?? null,
+        'error' => $job['error'] ?? null,
+        'created_at' => $job['created_at'] ?? null,
+        'updated_at' => $job['updated_at'] ?? null
+    ]);
+});
+
+// Diagram Result
+Route::get('/result/diagram', function (Request $request) use ($authenticateUser, $getJobForTool) {
+    $authResult = $authenticateUser($request);
+    if ($authResult) return $authResult;
+    
+    $jobId = $request->query('job_id');
+    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+    
+    $result = $getJobForTool($jobId, 'diagram', 'default');
+    if (isset($result['error'])) {
+        return response()->json(['error' => $result['error']], $result['code']);
+    }
+    
+    $job = $result['job'];
+    if (($job['status'] ?? '') !== 'completed') {
+        return response()->json(['error' => 'Job not completed', 'status' => $job['status'] ?? 'unknown'], 409);
+    }
+    
+    return response()->json([
+        'success' => true,
+        'job_id' => $job['id'],
+        'tool_type' => 'diagram',
         'data' => $job['result'] ?? null
     ]);
 });
@@ -1571,7 +1655,15 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::delete('/ai-results/{id}', [AIResultController::class, 'destroy']);
     Route::get('/ai-results/stats', [AIResultController::class, 'stats']);
     
+    // Diagram Generation
     Route::post('/diagram/generate', [DiagramController::class, 'generate']);
+    Route::get('/diagram/status', [DiagramController::class, 'status']);
+    Route::get('/diagram/result', [DiagramController::class, 'result']);
+    Route::get('/diagram', [DiagramController::class, 'index']);
+    Route::get('/diagram/{aiResultId}', [DiagramController::class, 'show']);
+    Route::delete('/diagram/{aiResultId}', [DiagramController::class, 'destroy']);
+    Route::get('/diagram/types', [DiagramController::class, 'getTypes']);
+    Route::get('/diagram/health', [DiagramController::class, 'health']);
     
     // File Processing and Conversion
     Route::post('/file-processing/convert', [FileExtractionController::class, 'convertDocument']);

@@ -113,6 +113,21 @@ public function processText($text, $task, $options = [])
 
                     $data = $responseData['data'] ?? $responseData;
                     
+                    // Log structure for flashcard task debugging
+                    if ($task === 'flashcard') {
+                        Log::info("AI Manager API Success - Flashcard Task", [
+                            'task' => $task,
+                            'response_data_keys' => array_keys($responseData),
+                            'has_data_key' => isset($responseData['data']),
+                            'data_keys' => isset($responseData['data']) ? array_keys($responseData['data']) : null,
+                            'has_raw_output' => isset($responseData['data']['raw_output']),
+                            'raw_output_keys' => isset($responseData['data']['raw_output']) ? array_keys($responseData['data']['raw_output']) : null,
+                            'has_cards' => isset($responseData['data']['raw_output']['cards']),
+                            'cards_count' => isset($responseData['data']['raw_output']['cards']) ? count($responseData['data']['raw_output']['cards']) : 0,
+                            'model_used' => $responseData['model_used'] ?? 'unknown'
+                        ]);
+                    }
+                    
                     Log::info("AI Manager API Success", [
                         'task' => $task,
                         'response_length' => strlen($data['insights'] ?? ''),
@@ -344,6 +359,133 @@ public function processText($text, $task, $options = [])
     }
 
     /**
+     * Custom prompt using /api/custom-prompt endpoint
+     * 
+     * @param string|array $prompt User prompt (string) or messages array
+     * @param array $options Optional: system_prompt, response_format, model, max_tokens, etc.
+     * @return array Response with status, model_used, format, and data
+     */
+    public function customPrompt($prompt, array $options = [])
+    {
+        // Check if service is available (circuit breaker)
+        if (!$this->isServiceAvailable()) {
+            throw new \Exception("AI Manager service is currently unavailable");
+        }
+
+        try {
+            $requestData = [];
+
+            // Handle prompt format: string or messages array
+            if (is_array($prompt)) {
+                $requestData['messages'] = $prompt;
+            } else {
+                $requestData['prompt'] = $prompt;
+            }
+
+            // Add system prompt if provided
+            if (isset($options['system_prompt'])) {
+                $requestData['system_prompt'] = $options['system_prompt'];
+                unset($options['system_prompt']);
+            }
+
+            // Add response format (default to 'json' for structured responses)
+            $requestData['response_format'] = $options['response_format'] ?? 'json';
+            unset($options['response_format']);
+
+            // Add model if specified
+            if (isset($options['model'])) {
+                $requestData['model'] = $options['model'];
+                unset($options['model']);
+            }
+
+            // Add other options (max_tokens, temperature, etc.)
+            foreach ($options as $key => $value) {
+                if (!in_array($key, ['model', 'response_format', 'system_prompt'])) {
+                    $requestData[$key] = $value;
+                }
+            }
+
+            Log::info("AI Manager Custom Prompt Request", [
+                'url' => $this->apiUrl . '/api/custom-prompt',
+                'has_prompt' => isset($requestData['prompt']),
+                'has_messages' => isset($requestData['messages']),
+                'response_format' => $requestData['response_format'],
+                'model' => $requestData['model'] ?? 'default'
+            ]);
+
+            $response = Http::timeout($this->timeout)
+                ->withHeaders([
+                    'Accept' => 'application/json',
+                    'Content-Type' => 'application/json',
+                    'X-API-KEY' => $this->apiKey,
+                ])->post($this->apiUrl . '/api/custom-prompt', $requestData);
+
+            if ($response->successful()) {
+                $responseData = $response->json();
+                
+                // Handle response format
+                $isSuccess = ($responseData['status'] ?? 'success') === 'success';
+                
+                if (!$isSuccess) {
+                    Log::warning("AI Manager Custom Prompt returned error status", [
+                        'message' => $responseData['message'] ?? 'Unknown error',
+                        'available_models' => $responseData['available_models'] ?? []
+                    ]);
+
+                    return [
+                        'success' => false,
+                        'error' => $responseData['message'] ?? 'Request failed',
+                        'available_models' => $responseData['available_models'] ?? []
+                    ];
+                }
+
+                return [
+                    'success' => true,
+                    'status' => $responseData['status'] ?? 'success',
+                    'model_used' => $responseData['model_used'] ?? $this->defaultModel,
+                    'model_display' => $responseData['model_display'] ?? 'AI Model',
+                    'format' => $responseData['format'] ?? 'json',
+                    'data' => $responseData['data'] ?? [],
+                    'tokens_used' => $responseData['tokens_used'] ?? 0,
+                    'processing_time' => $responseData['processing_time'] ?? 0
+                ];
+            } else {
+                $errorBody = $response->body();
+                $errorData = null;
+                try {
+                    $errorData = $response->json();
+                } catch (\Exception $e) {
+                    // If JSON parsing fails, use raw body
+                }
+
+                Log::error("AI Manager Custom Prompt API failed", [
+                    'status' => $response->status(),
+                    'response_body' => $errorBody,
+                    'error_data' => $errorData,
+                    'has_available_models' => isset($errorData['available_models'])
+                ]);
+
+                return [
+                    'success' => false,
+                    'error' => $errorData['message'] ?? $errorData['error'] ?? 'Custom prompt request failed',
+                    'status_code' => $response->status(),
+                    'available_models' => $errorData['available_models'] ?? []
+                ];
+            }
+        } catch (\Exception $e) {
+            Log::error("AI Manager Custom Prompt Exception", [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
      * Check if service is available (circuit breaker)
      */
     private function isServiceAvailable()
@@ -408,10 +550,23 @@ public function processText($text, $task, $options = [])
                     'count' => $data['data']['count'] ?? 0
                 ]);
 
+                // Handle both formats: array of strings OR array of objects with 'key' field
+                $availableModels = $data['data']['available_models'] ?? [];
+                $modelKeys = [];
+                foreach ($availableModels as $model) {
+                    if (is_string($model)) {
+                        // Simple string array format
+                        $modelKeys[] = $model;
+                    } elseif (is_array($model) && isset($model['key'])) {
+                        // Object format with 'key' field
+                        $modelKeys[] = $model['key'];
+                    }
+                }
+                
                 return [
                     'success' => true,
                     'count' => $data['data']['count'] ?? 0,
-                    'models' => $data['data']['available_models'] ?? []
+                    'models' => $modelKeys // Return as simple array of strings for consistency
                 ];
             }
 

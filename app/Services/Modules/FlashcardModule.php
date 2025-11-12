@@ -310,15 +310,24 @@ class FlashcardModule
     public function generateFlashcards($content, $count = 5, $options = [])
     {
         try {
-            // Validate content
+            // Validate content is not empty
+            // Note: Content can be short (even a single topic/title) since AI generates flashcards ABOUT the topic
             if (empty(trim($content))) {
-                throw new \Exception('No content available for flashcard generation');
+                throw new \Exception('Content cannot be empty. Please provide a topic, title, or description.');
             }
-
-            // Check if content is too short
-            if (str_word_count($content) < 5) {
-                throw new \Exception('Content is too short. Please provide more detailed content (at least 5 words).');
+            
+            // Minimum 2 characters (to allow single-word topics like "Python", "Java", etc.)
+            if (strlen(trim($content)) < 2) {
+                throw new \Exception('Content is too short. Please provide at least a topic or title.');
             }
+            
+            $wordCount = str_word_count($content);
+            Log::info("FlashcardModule: Content validation", [
+                'content_length' => strlen($content),
+                'word_count' => $wordCount,
+                'requested_count' => $count,
+                'note' => 'Content treated as topic - AI will generate flashcards about this topic'
+            ]);
 
             Log::info("FlashcardModule: Generating flashcards", [
                 'content_length' => strlen($content),
@@ -331,34 +340,83 @@ class FlashcardModule
             $difficulty = $options['difficulty'] ?? 'intermediate';
             $style = $options['style'] ?? 'mixed';
             
-            // Build enhanced prompt with instructions
-            $prompt = "Create exactly {$count} flashcards from the following content:\n\n{$content}\n\n";
-            $prompt .= "Instructions:\n";
-            $prompt .= "- Format each flashcard as JSON with 'question' and 'answer' fields\n";
-            $prompt .= "- Difficulty level: {$difficulty}\n";
-            $prompt .= "- Question style: {$style}\n";
-            $prompt .= "- Create exactly {$count} flashcards\n";
-            $prompt .= "- Return as a JSON array\n\n";
-            $prompt .= "Example format:\n";
-            $prompt .= '[{"question": "What is X?", "answer": "X is..."}, {"question": "How does Y work?", "answer": "Y works by..."}]';
-
-            // Use AIProcessingModule to generate flashcards
+            // Pass raw content and options to AIProcessingModule
+            // It will dynamically construct the prompt from user input
             $aiOptions = array_merge([
                 'model' => $options['model'] ?? config('services.ai_manager.default_model', 'deepseek-chat'),
-                'card_count' => $count,
+                'count' => $count,
                 'difficulty' => $difficulty,
-                'style' => $style
+                'style' => $style,
+                'input_type' => $options['input_type'] ?? 'text'
             ], $options);
 
-            // Use the generateFlashcards method which uses the 'flashcard' task
-            $result = $this->aiProcessingModule->generateFlashcards($prompt, $aiOptions);
+            // Use the generateFlashcards method - it will build the prompt dynamically
+            Log::info("FlashcardModule: Calling AIProcessingModule::generateFlashcards", [
+                'content_preview' => substr($content, 0, 100),
+                'ai_options' => $aiOptions
+            ]);
+            
+            try {
+                $result = $this->aiProcessingModule->generateFlashcards($content, $aiOptions);
+                Log::info("FlashcardModule: AIProcessingModule returned result", [
+                    'has_result' => !empty($result),
+                    'result_keys' => is_array($result) ? array_keys($result) : []
+                ]);
+            } catch (\Exception $e) {
+                Log::error("FlashcardModule: AIProcessingModule exception", [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString()
+                ]);
+                throw $e;
+            }
 
             // Parse flashcards from result
-            $flashcards = $this->parseFlashcards($result);
-
-            if (empty($flashcards)) {
-                throw new \Exception('Failed to parse flashcards from AI response');
+            Log::info("FlashcardModule: About to parse flashcards", [
+                'result_structure' => is_array($result) ? array_keys($result) : gettype($result),
+                'has_data' => isset($result['data']),
+                'has_raw_output' => isset($result['data']['raw_output']),
+                'has_flashcards' => isset($result['flashcards']),
+                'full_result_preview' => is_array($result) ? json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) : (string)$result
+            ]);
+            
+            try {
+                $flashcards = $this->parseFlashcards($result);
+            } catch (\Exception $e) {
+                Log::error("FlashcardModule: parseFlashcards exception", [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                    'result_structure' => is_array($result) ? array_keys($result) : gettype($result)
+                ]);
+                throw $e;
             }
+
+            Log::info("FlashcardModule: After parsing flashcards", [
+                'flashcards_count' => count($flashcards),
+                'first_flashcard' => $flashcards[0] ?? null
+            ]);
+
+               if (empty($flashcards)) {
+                   // Log full result structure for debugging
+                   $resultPreview = is_array($result) ? json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : (string)$result;
+                   
+                   Log::error("FlashcardModule: Failed to parse flashcards - Empty result", [
+                       'result_keys' => is_array($result) ? array_keys($result) : 'not_array',
+                       'result_type' => gettype($result),
+                       'has_data' => isset($result['data']),
+                       'data_keys' => isset($result['data']) && is_array($result['data']) ? array_keys($result['data']) : null,
+                       'has_data_content' => isset($result['data']['content']),
+                       'has_data_raw_output' => isset($result['data']['raw_output']),
+                       'data_content_type' => isset($result['data']['content']) ? gettype($result['data']['content']) : null,
+                       'data_content_count' => isset($result['data']['content']) && is_array($result['data']['content']) ? count($result['data']['content']) : 0,
+                       'data_raw_output_type' => isset($result['data']['raw_output']) ? gettype($result['data']['raw_output']) : null,
+                       'data_raw_output_count' => isset($result['data']['raw_output']) && is_array($result['data']['raw_output']) ? count($result['data']['raw_output']) : 0,
+                       'result_preview' => substr($resultPreview, 0, 2000), // Limit to 2000 chars
+                       'parse_method' => 'parseFlashcards',
+                       'requested_count' => $count ?? 'unknown'
+                   ]);
+                   
+                   throw new \Exception('Failed to parse flashcards from AI response. Result structure: ' . (is_array($result) ? json_encode(array_keys($result)) : gettype($result)) . '. Check logs for full details. Requested count: ' . ($count ?? 'unknown'));
+               }
 
             return [
                 'success' => true,
@@ -392,31 +450,168 @@ class FlashcardModule
     {
         try {
             Log::info('FlashcardModule: Parsing flashcards from result', [
-                'result_keys' => array_keys($result),
+                'result_type' => gettype($result),
+                'result_keys' => is_array($result) ? array_keys($result) : 'not_array',
                 'has_flashcards' => isset($result['flashcards']),
+                'flashcards_count' => isset($result['flashcards']) ? (is_array($result['flashcards']) ? count($result['flashcards']) : 'not_array') : 0,
                 'has_data' => isset($result['data']),
-                'has_insights' => isset($result['insights'])
+                'data_type' => isset($result['data']) ? gettype($result['data']) : null,
+                'data_keys' => isset($result['data']) && is_array($result['data']) ? array_keys($result['data']) : null,
+                'has_data_raw_output' => isset($result['data']['raw_output']),
+                'data_raw_output_type' => isset($result['data']['raw_output']) ? gettype($result['data']['raw_output']) : null,
+                'has_data_raw_output_cards' => isset($result['data']['raw_output']['cards']),
+                'data_raw_output_cards_type' => isset($result['data']['raw_output']['cards']) ? gettype($result['data']['raw_output']['cards']) : null,
+                'data_raw_output_cards_count' => isset($result['data']['raw_output']['cards']) && is_array($result['data']['raw_output']['cards']) ? count($result['data']['raw_output']['cards']) : 0,
+                'has_insights' => isset($result['insights']),
+                'has_raw_output' => isset($result['raw_output']),
+                'raw_output_keys' => isset($result['raw_output']) && is_array($result['raw_output']) ? array_keys($result['raw_output']) : null,
+                'raw_output_cards' => isset($result['raw_output']['cards']) && is_array($result['raw_output']['cards']) ? count($result['raw_output']['cards']) : 0,
+                'full_result_structure' => json_encode($result, JSON_PRETTY_PRINT)
             ]);
 
             // Try to get flashcards from result (multiple possible locations)
-            $flashcards = $result['flashcards'] ?? $result['data']['flashcards'] ?? [];
+            // AI Manager returns flashcards in various formats:
+            // 1. data.raw_output.cards (array with front/back)
+            // 2. data.raw_output (direct array with question/answer or front/back)
+            // 3. raw_output (direct array)
+            // 4. flashcards (direct array)
+            $flashcards = [];
+            
+            // Priority 1: Check data.raw_output.cards (from AIProcessingModule transformation - MOST COMMON FORMAT)
+            Log::info('FlashcardModule: Checking data.raw_output.cards', [
+                'has_data' => isset($result['data']),
+                'has_raw_output' => isset($result['data']['raw_output']),
+                'has_cards' => isset($result['data']['raw_output']['cards']),
+                'cards_is_array' => isset($result['data']['raw_output']['cards']) && is_array($result['data']['raw_output']['cards']),
+                'cards_count' => isset($result['data']['raw_output']['cards']) && is_array($result['data']['raw_output']['cards']) ? count($result['data']['raw_output']['cards']) : 0,
+                'cards_empty' => isset($result['data']['raw_output']['cards']) && is_array($result['data']['raw_output']['cards']) ? empty($result['data']['raw_output']['cards']) : 'n/a'
+            ]);
+            
+            if (isset($result['data']['raw_output']['cards']) && is_array($result['data']['raw_output']['cards']) && !empty($result['data']['raw_output']['cards'])) {
+                $flashcards = $result['data']['raw_output']['cards'];
+                Log::info('FlashcardModule: Found flashcards in data.raw_output.cards (Priority 1)', [
+                    'count' => count($flashcards),
+                    'first_card' => $flashcards[0] ?? null,
+                    'first_card_type' => gettype($flashcards[0] ?? null),
+                    'first_card_keys' => isset($flashcards[0]) && is_array($flashcards[0]) ? array_keys($flashcards[0]) : null,
+                    'all_cards_structure' => json_encode($flashcards, JSON_PRETTY_PRINT)
+                ]);
+            }
+            // Priority 2: Check if flashcards are directly in the result (from AIProcessingModule)
+            elseif (isset($result['flashcards']) && is_array($result['flashcards']) && !empty($result['flashcards'])) {
+                $flashcards = $result['flashcards'];
+                Log::info('FlashcardModule: Found flashcards in result.flashcards (Priority 2)', [
+                    'count' => count($flashcards)
+                ]);
+            }
+            // Priority 3: Check if raw_output is itself an array of flashcards (AI Manager sometimes returns this)
+            elseif (isset($result['raw_output']) && is_array($result['raw_output']) && !empty($result['raw_output'])) {
+                // Check if it's a numeric array (indexed array, likely flashcards)
+                $keys = array_keys($result['raw_output']);
+                $isNumericArray = !empty($keys) && (is_numeric($keys[0]) || $keys[0] === 0 || $keys[0] === '0');
+                
+                if ($isNumericArray) {
+                    $firstItem = $result['raw_output'][0] ?? null;
+                    // Check if first item has flashcard-like structure
+                    if (is_array($firstItem) && (isset($firstItem['question']) || isset($firstItem['front']) || isset($firstItem['answer']) || isset($firstItem['back']))) {
+                        $flashcards = $result['raw_output'];
+                        Log::info('FlashcardModule: Found flashcards in raw_output (direct array)', [
+                            'count' => count($flashcards),
+                            'first_item' => $firstItem
+                        ]);
+                    } else {
+                        Log::warning('FlashcardModule: raw_output is numeric array but first item is not a flashcard', [
+                            'first_item' => $firstItem,
+                            'first_item_type' => gettype($firstItem)
+                        ]);
+                    }
+                } else {
+                    Log::warning('FlashcardModule: raw_output is not a numeric array', [
+                        'keys' => $keys
+                    ]);
+                }
+            }
+            // Check raw_output.cards from AIProcessingModule (preserved structure)
+            elseif (isset($result['raw_output']['cards']) && is_array($result['raw_output']['cards'])) {
+                $flashcards = $result['raw_output']['cards'];
+            }
+            // Priority 4: Check data.raw_output (direct array - check if it's a numeric array of flashcards)
+            elseif (isset($result['data']['raw_output']) && is_array($result['data']['raw_output']) && !empty($result['data']['raw_output'])) {
+                // Check if it's a numeric array (indexed array, likely flashcards)
+                $keys = array_keys($result['data']['raw_output']);
+                $isNumericArray = !empty($keys) && (is_numeric($keys[0]) || $keys[0] === 0 || $keys[0] === '0');
+                
+                if ($isNumericArray) {
+                    $firstItem = $result['data']['raw_output'][0] ?? null;
+                    if (is_array($firstItem) && (isset($firstItem['question']) || isset($firstItem['front']) || isset($firstItem['answer']) || isset($firstItem['back']))) {
+                        $flashcards = $result['data']['raw_output'];
+                        Log::info('FlashcardModule: Found flashcards in data.raw_output (direct array - Priority 4)', [
+                            'count' => count($flashcards),
+                            'first_item' => $firstItem
+                        ]);
+                    }
+                }
+            }
+            // Check data.raw_output as direct array (AI Manager array format: [...])
+            elseif (isset($result['data']['raw_output']) && is_array($result['data']['raw_output']) && !empty($result['data']['raw_output'])) {
+                // Check if it's a numeric array (indexed array, likely flashcards)
+                $keys = array_keys($result['data']['raw_output']);
+                $isNumericArray = !empty($keys) && (is_numeric($keys[0]) || $keys[0] === 0 || $keys[0] === '0');
+                
+                if ($isNumericArray) {
+                    $firstItem = $result['data']['raw_output'][0] ?? null;
+                    // If first item has question/answer or front/back, it's flashcards
+                    if (is_array($firstItem) && (isset($firstItem['question']) || isset($firstItem['front']) || isset($firstItem['answer']) || isset($firstItem['back']))) {
+                        $flashcards = $result['data']['raw_output'];
+                        Log::info('FlashcardModule: Found flashcards in data.raw_output (direct array format)', [
+                            'count' => count($flashcards),
+                            'first_item' => $firstItem
+                        ]);
+                    }
+                }
+            }
+            elseif (isset($result['data']['flashcards']) && is_array($result['data']['flashcards'])) {
+                $flashcards = $result['data']['flashcards'];
+            }
+            elseif (isset($result['data']['raw_output']['flashcards']) && is_array($result['data']['raw_output']['flashcards'])) {
+                $flashcards = $result['data']['raw_output']['flashcards'];
+            }
 
             // If flashcards is already an array, validate and return
             if (is_array($flashcards) && !empty($flashcards)) {
+                Log::info('FlashcardModule: Found flashcards array', [
+                    'count' => count($flashcards),
+                    'first_card' => $flashcards[0] ?? null
+                ]);
                 $validated = $this->validateFlashcards($flashcards);
                 if (!empty($validated)) {
                     Log::info('FlashcardModule: Successfully parsed flashcards from array', [
                         'count' => count($validated)
                     ]);
                     return $validated;
+                } else {
+                    Log::warning('FlashcardModule: validateFlashcards returned empty array', [
+                        'input_count' => count($flashcards),
+                        'input_structure' => $flashcards[0] ?? null
+                    ]);
                 }
+            } else {
+                Log::warning('FlashcardModule: No flashcards array found', [
+                    'is_array' => is_array($flashcards),
+                    'empty' => empty($flashcards),
+                    'type' => gettype($flashcards)
+                ]);
             }
 
             // Try to parse from insights, generated_content, or data.raw_output
+            // The AI Manager returns data in various nested structures
             $content = $result['insights'] ?? 
                       $result['generated_content'] ?? 
+                      $result['data']['insights'] ??
+                      $result['data']['generated_content'] ??
                       $result['data']['raw_output'] ?? 
-                      $result['data']['generated_content'] ?? 
+                      (is_string($result['data']['raw_output'] ?? null) ? $result['data']['raw_output'] : '') ??
+                      (isset($result['data']['raw_output']['data']) ? json_encode($result['data']['raw_output']['data']) : '') ??
                       '';
 
             if (empty($content)) {
@@ -488,32 +683,80 @@ class FlashcardModule
     {
         $validFlashcards = [];
 
-        foreach ($flashcards as $card) {
-            // Handle "question" and "answer" format
+        Log::info('FlashcardModule: validateFlashcards input', [
+            'input_count' => count($flashcards),
+            'first_card' => $flashcards[0] ?? null,
+            'first_card_type' => gettype($flashcards[0] ?? null),
+            'first_card_keys' => isset($flashcards[0]) && is_array($flashcards[0]) ? array_keys($flashcards[0]) : null
+        ]);
+
+        foreach ($flashcards as $index => $card) {
+            if (!is_array($card)) {
+                Log::warning('FlashcardModule: validateFlashcards - Card is not array', [
+                    'index' => $index,
+                    'card_type' => gettype($card),
+                    'card_value' => $card
+                ]);
+                continue;
+            }
+            
+            // Handle "question" and "answer" format (from /api/process-text)
             if (isset($card['question']) && isset($card['answer'])) {
                 $question = trim($card['question']);
                 $answer = trim($card['answer']);
                 
                 if (!empty($question) && !empty($answer)) {
                     $validFlashcards[] = [
+                        'front' => $question,  // Normalize to front/back
+                        'back' => $answer,    // Normalize to front/back
+                        'question' => $question,  // Keep original for compatibility
+                        'answer' => $answer        // Keep original for compatibility
+                    ];
+                } else {
+                    Log::warning('FlashcardModule: validateFlashcards - Empty question/answer', [
+                        'index' => $index,
                         'question' => $question,
                         'answer' => $answer
-                    ];
+                    ]);
                 }
             }
-            // Handle "front" and "back" format (AI Manager format)
+            // Handle "front" and "back" format (from /api/custom-prompt)
             elseif (isset($card['front']) && isset($card['back'])) {
-                $question = trim($card['front']);
-                $answer = trim($card['back']);
+                $front = trim($card['front']);
+                $back = trim($card['back']);
                 
-                if (!empty($question) && !empty($answer)) {
+                if (!empty($front) && !empty($back)) {
                     $validFlashcards[] = [
-                        'question' => $question,
-                        'answer' => $answer
+                        'front' => $front,
+                        'back' => $back,
+                        'question' => $front,  // Add question/answer for compatibility
+                        'answer' => $back
                     ];
+                } else {
+                    Log::warning('FlashcardModule: validateFlashcards - Empty front/back', [
+                        'index' => $index,
+                        'front' => $front,
+                        'back' => $back
+                    ]);
                 }
+            } else {
+                Log::warning('FlashcardModule: validateFlashcards - Card missing required fields', [
+                    'index' => $index,
+                    'card_keys' => array_keys($card),
+                    'has_question' => isset($card['question']),
+                    'has_answer' => isset($card['answer']),
+                    'has_front' => isset($card['front']),
+                    'has_back' => isset($card['back']),
+                    'card' => $card
+                ]);
             }
         }
+        
+        Log::info('FlashcardModule: validateFlashcards result', [
+            'input_count' => count($flashcards),
+            'valid_count' => count($validFlashcards),
+            'first_valid' => $validFlashcards[0] ?? null
+        ]);
 
         return $validFlashcards;
     }
@@ -604,25 +847,32 @@ class FlashcardModule
             ];
         }
 
-        $wordCount = str_word_count($content);
-
-        if ($wordCount < 5) {
+        // Minimum 2 characters (allows single-word topics like "Python", "Java", etc.)
+        if (strlen(trim($content)) < 2) {
             return [
                 'valid' => false,
-                'error' => 'Content is too short. Please provide more detailed content (at least 5 words).'
+                'error' => 'Content is too short. Please provide at least a topic or title.'
             ];
         }
+
+        $wordCount = str_word_count($content);
+
+        // Note: We allow short content (even single words) because:
+        // - Content is treated as a TOPIC/TITLE, not full content
+        // - AI generates flashcards ABOUT the topic, not FROM the content
+        // - Users can provide just "Python" and get comprehensive flashcards about Python
 
         if ($wordCount > 50000) {
             return [
                 'valid' => false,
-                'error' => 'Content is too long. Please provide more focused content (max 50,000 words).'
+                'error' => 'Content is too long. Maximum 50,000 words allowed.'
             ];
         }
 
         return [
             'valid' => true,
-            'word_count' => $wordCount
+            'word_count' => $wordCount,
+            'note' => 'Content treated as topic - AI will generate comprehensive flashcards about this topic'
         ];
     }
 }

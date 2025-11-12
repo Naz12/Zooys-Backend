@@ -318,6 +318,9 @@ class UniversalJobService
             case 'presentations':
                 return $this->processPresentationsJobWithStages($job['id'], $input, $options);
             
+            case 'diagram':
+                return $this->processDiagramJobWithStages($job['id'], $input, $options, $userId);
+            
             case 'document_chat':
                 return $this->processDocumentChatJobWithStages($job['id'], $input, $options);
             
@@ -2486,6 +2489,126 @@ class UniversalJobService
             }
         } catch (\Exception $e) {
             $this->failJob($jobId, "Presentation generation failed: " . $e->getMessage());
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Process diagram job with stages
+     */
+    private function processDiagramJobWithStages($jobId, $input, $options, $userId = null)
+    {
+        try {
+            $aiDiagramService = app(\App\Services\AIDiagramService::class);
+            
+            // Stage 1: Generate diagram job
+            $this->updateJob($jobId, [
+                'stage' => 'generating_diagram',
+                'progress' => 20
+            ]);
+            $this->addLog($jobId, "Generating diagram", 'info', [
+                'diagram_type' => $input['diagram_type'] ?? 'unknown',
+                'prompt' => substr($input['prompt'] ?? '', 0, 100)
+            ]);
+
+            // Generate diagram (creates job on microservice)
+            $result = $aiDiagramService->generateDiagram($input, $userId);
+
+            if (!$result['success']) {
+                $this->failJob($jobId, "Diagram generation failed: " . $result['error']);
+                return ['success' => false, 'error' => $result['error']];
+            }
+
+            $aiResultId = $result['ai_result_id'];
+            $microserviceJobId = $result['microservice_job_id'];
+
+            // Stage 2: Poll microservice for completion
+            $this->updateJob($jobId, [
+                'stage' => 'polling_microservice',
+                'progress' => 40
+            ]);
+            $this->addLog($jobId, "Polling microservice for diagram completion", 'info', [
+                'microservice_job_id' => $microserviceJobId
+            ]);
+
+            // Poll microservice until completed
+            $maxAttempts = 60; // 2 minutes max (60 * 2 seconds)
+            $intervalSeconds = 2;
+            $status = 'queued';
+
+            for ($attempt = 0; $attempt < $maxAttempts; $attempt++) {
+                $statusResult = $aiDiagramService->checkJobStatus($microserviceJobId);
+
+                if (!$statusResult['success']) {
+                    $this->failJob($jobId, "Failed to check microservice status: " . $statusResult['error']);
+                    return ['success' => false, 'error' => $statusResult['error']];
+                }
+
+                $status = $statusResult['status'];
+
+                $this->updateJob($jobId, [
+                    'progress' => 40 + (($attempt / $maxAttempts) * 40), // 40-80%
+                    'stage' => 'polling_microservice'
+                ]);
+
+                if ($status === 'completed') {
+                    break;
+                } elseif ($status === 'failed') {
+                    $this->failJob($jobId, "Microservice job failed: " . ($statusResult['error'] ?? 'Unknown error'));
+                    return ['success' => false, 'error' => $statusResult['error'] ?? 'Job failed'];
+                }
+
+                sleep($intervalSeconds);
+            }
+
+            if ($status !== 'completed') {
+                $this->failJob($jobId, "Diagram generation timeout after " . ($maxAttempts * $intervalSeconds) . " seconds");
+                return ['success' => false, 'error' => 'Job processing timeout'];
+            }
+
+            // Stage 3: Download image
+            $this->updateJob($jobId, [
+                'stage' => 'downloading_image',
+                'progress' => 85
+            ]);
+            $this->addLog($jobId, "Downloading diagram image from microservice", 'info');
+
+            $resultData = $aiDiagramService->getJobResult($microserviceJobId, $aiResultId);
+
+            if (!$resultData['success']) {
+                $this->failJob($jobId, "Failed to download diagram: " . $resultData['error']);
+                return ['success' => false, 'error' => $resultData['error']];
+            }
+
+            // Stage 4: Finalize
+            $this->updateJob($jobId, [
+                'stage' => 'finalizing',
+                'progress' => 95
+            ]);
+            $this->addLog($jobId, "Diagram generated and downloaded successfully", 'info', [
+                'image_url' => $resultData['image_url'] ?? null
+            ]);
+
+            return [
+                'success' => true,
+                'data' => [
+                    'ai_result_id' => $aiResultId,
+                    'image_url' => $resultData['image_url'],
+                    'image_path' => $resultData['image_path'],
+                    'image_filename' => $resultData['image_filename'],
+                    'diagram_type' => $input['diagram_type'],
+                    'prompt' => $input['prompt']
+                ],
+                'metadata' => [
+                    'diagram_type' => $input['diagram_type'],
+                    'language' => $input['language'] ?? 'en',
+                    'microservice_job_id' => $microserviceJobId,
+                    'processing_stages' => ['generating_diagram', 'polling_microservice', 'downloading_image', 'finalizing']
+                ]
+            ];
+
+        } catch (\Exception $e) {
+            $this->failJob($jobId, "Diagram generation failed: " . $e->getMessage());
             return ['success' => false, 'error' => $e->getMessage()];
         }
     }
