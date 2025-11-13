@@ -796,14 +796,18 @@ Format the response as a JSON object with a 'content' field containing an array 
             $length = $inputData['length'] ?? 'Medium';
             $model = $inputData['model'] ?? null;
 
-            // Prepare request data for microservice
+            // Prepare request data for microservice (API v3.1.0)
             $requestData = [
                 'content' => $content,
                 'language' => $language,
                 'tone' => $tone,
-                'length' => $length,
-                'model' => $model
+                'length' => $length
             ];
+            
+            // Only include model if provided (defaults to deepseek-chat in microservice)
+            if ($model) {
+                $requestData['model'] = $model;
+            }
 
             Log::info('Calling microservice for outline generation', [
                 'url' => $this->microserviceUrl . '/generate-outline',
@@ -814,16 +818,39 @@ Format the response as a JSON object with a 'content' field containing an array 
             // Call microservice
             $response = $this->callMicroservice($this->microserviceUrl . '/generate-outline', $requestData);
 
+            // Validate response is an array
+            if (!is_array($response)) {
+                Log::error('Microservice returned invalid response type', [
+                    'response_type' => gettype($response),
+                    'response' => $response
+                ]);
+                return [
+                    'success' => false,
+                    'error' => 'Invalid response from microservice'
+                ];
+            }
+
             Log::info('Microservice response received', [
                 'success' => $response['success'] ?? false,
-                'response_keys' => array_keys($response),
+                'response_keys' => is_array($response) ? array_keys($response) : [],
                 'error' => $response['error'] ?? null
             ]);
 
-            if (!$response['success']) {
+            if (!isset($response['success']) || !$response['success']) {
                 return [
                     'success' => false,
                     'error' => $response['error'] ?? 'Microservice call failed'
+                ];
+            }
+
+            // Check if data exists
+            if (!isset($response['data'])) {
+                Log::error('Microservice response missing data', [
+                    'response' => $response
+                ]);
+                return [
+                    'success' => false,
+                    'error' => 'Microservice response missing data'
                 ];
             }
 
@@ -853,13 +880,15 @@ Format the response as a JSON object with a 'content' field containing an array 
     public function callMicroserviceForContent($outline, $language = 'English', $tone = 'Professional', $detailLevel = 'detailed')
     {
         try {
-            // Prepare request data for microservice
+            // Prepare request data for microservice (API v3.1.0)
             $requestData = [
                 'outline' => $outline,
                 'language' => $language,
                 'tone' => $tone,
                 'detail_level' => $detailLevel
             ];
+            
+            // Model parameter is optional and defaults to deepseek-chat in microservice
 
             // Call microservice
             $response = $this->callMicroservice($this->microserviceUrl . '/generate-content', $requestData);
@@ -964,10 +993,56 @@ Format the response as a JSON object with a 'content' field containing an array 
     }
 
     /**
-     * Get available templates
+     * Get available templates from microservice
      */
     public function getAvailableTemplates()
     {
+        try {
+            // Try to fetch templates from microservice
+            $headers = [
+                'Accept' => 'application/json'
+            ];
+            
+            if ($this->microserviceApiKey) {
+                $headers['X-API-Key'] = $this->microserviceApiKey;
+            }
+
+            $response = Http::timeout(10)
+                ->withHeaders($headers)
+                ->get($this->microserviceUrl . '/templates');
+
+            if ($response->successful()) {
+                $responseData = $response->json();
+                
+                // Handle new API v3.1.0 response structure
+                if (isset($responseData['success']) && isset($responseData['templates'])) {
+                    $templates = [];
+                    foreach ($responseData['templates'] as $template) {
+                        $templates[$template['id']] = [
+                            'name' => $template['name'],
+                            'description' => $template['description'],
+                            'color_scheme' => $this->extractColorScheme($template['colors'] ?? []),
+                            'category' => $this->inferCategory($template['id']),
+                            'colors' => $template['colors'] ?? [],
+                            'preview' => $template['preview'] ?? null
+                        ];
+                    }
+                    return $templates;
+                }
+            }
+
+            // Fallback to hardcoded templates if microservice is unavailable
+            Log::warning('Failed to fetch templates from microservice, using fallback', [
+                'http_code' => $response->status() ?? 'unknown'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::warning('Error fetching templates from microservice, using fallback', [
+                'error' => $e->getMessage()
+            ]);
+        }
+
+        // Fallback templates
         return [
             'corporate_blue' => [
                 'name' => 'Corporate Blue',
@@ -992,32 +1067,53 @@ Format the response as a JSON object with a 'content' field containing an array 
                 'description' => 'Simple gray theme for focused content',
                 'color_scheme' => 'gray',
                 'category' => 'minimalist'
-            ],
-            'academic_formal' => [
-                'name' => 'Academic Formal',
-                'description' => 'Formal theme for educational presentations',
-                'color_scheme' => 'dark',
-                'category' => 'academic'
-            ],
-            'tech_modern' => [
-                'name' => 'Tech Modern',
-                'description' => 'Modern tech theme with teal and green accents',
-                'color_scheme' => 'teal',
-                'category' => 'tech'
-            ],
-            'elegant_purple' => [
-                'name' => 'Elegant Purple',
-                'description' => 'Sophisticated purple theme for elegant presentations',
-                'color_scheme' => 'purple',
-                'category' => 'elegant'
-            ],
-            'professional_green' => [
-                'name' => 'Professional Green',
-                'description' => 'Professional green theme for corporate presentations',
-                'color_scheme' => 'green',
-                'category' => 'professional'
             ]
         ];
+    }
+
+    /**
+     * Extract color scheme from color array
+     */
+    private function extractColorScheme($colors)
+    {
+        if (empty($colors)) {
+            return 'blue';
+        }
+
+        // Try to infer color scheme from first color
+        $firstColor = strtolower($colors[0] ?? '');
+        
+        if (strpos($firstColor, 'blue') !== false || strpos($firstColor, '003366') !== false || strpos($firstColor, '0066cc') !== false) {
+            return 'blue';
+        } elseif (strpos($firstColor, 'white') !== false || strpos($firstColor, 'ffffff') !== false) {
+            return 'white';
+        } elseif (strpos($firstColor, 'ff6b6b') !== false || strpos($firstColor, '4ecdc4') !== false) {
+            return 'colorful';
+        } elseif (strpos($firstColor, '2c3e50') !== false || strpos($firstColor, 'gray') !== false || strpos($firstColor, 'grey') !== false) {
+            return 'gray';
+        }
+
+        return 'blue'; // Default
+    }
+
+    /**
+     * Infer category from template ID
+     */
+    private function inferCategory($templateId)
+    {
+        $id = strtolower($templateId);
+        
+        if (strpos($id, 'corporate') !== false || strpos($id, 'business') !== false) {
+            return 'business';
+        } elseif (strpos($id, 'modern') !== false) {
+            return 'modern';
+        } elseif (strpos($id, 'creative') !== false || strpos($id, 'colorful') !== false) {
+            return 'creative';
+        } elseif (strpos($id, 'minimalist') !== false) {
+            return 'minimalist';
+        }
+
+        return 'business'; // Default
     }
 
     /**
@@ -1096,8 +1192,13 @@ Format the response as a JSON object with a 'content' field containing an array 
 
     /**
      * Call FastAPI microservice
+     * 
+     * @param string $url The microservice endpoint URL
+     * @param array $data Request data
+     * @param bool $async If true, return job_id immediately. If false, poll until completion (default: false for backward compatibility)
+     * @return array Response data
      */
-    private function callMicroservice($url, $data)
+    private function callMicroservice($url, $data, $async = false)
     {
         try {
             // Prepare headers with API key
@@ -1115,6 +1216,18 @@ Format the response as a JSON object with a 'content' field containing an array 
                 ->withHeaders($headers)
                 ->post($url, $data);
 
+            // Check for connection errors
+            if ($response->failed() && $response->status() === 0) {
+                Log::error('Microservice connection failed', [
+                    'url' => $url,
+                    'error' => 'Could not connect to microservice'
+                ]);
+                return [
+                    'success' => false,
+                    'error' => 'Could not connect to presentation microservice. Please ensure the service is running.'
+                ];
+            }
+
             if (!$response->successful()) {
                 $errorBody = $response->body();
                 $errorMessage = 'Microservice request failed: ' . $response->status();
@@ -1122,17 +1235,32 @@ Format the response as a JSON object with a 'content' field containing an array 
                 // Try to extract error message from response body
                 if ($errorBody) {
                     $errorData = json_decode($errorBody, true);
-                    if (isset($errorData['error']['message'])) {
-                        $errorMessage = $errorData['error']['message'];
-                    } elseif (isset($errorData['detail'])) {
-                        $errorMessage = $errorData['detail'];
+                    
+                    // Log the raw error for debugging
+                    Log::info('Microservice error response', [
+                        'http_code' => $response->status(),
+                        'raw_body' => $errorBody,
+                        'parsed_error' => $errorData
+                    ]);
+                    
+                    if (is_array($errorData)) {
+                        if (isset($errorData['error']['message'])) {
+                            $errorMessage = $errorData['error']['message'];
+                        } elseif (isset($errorData['detail'])) {
+                            $errorMessage = $errorData['detail'];
+                        } elseif (isset($errorData['error'])) {
+                            $errorMessage = is_string($errorData['error']) ? $errorData['error'] : ($errorData['error']['message'] ?? $errorMessage);
+                        } elseif (isset($errorData['message'])) {
+                            $errorMessage = $errorData['message'];
+                        }
                     }
                 }
                 
                 Log::error('Microservice HTTP error', [
                     'http_code' => $response->status(),
                     'error' => $errorMessage,
-                    'url' => $url
+                    'url' => $url,
+                    'error_body' => $errorBody
                 ]);
                 
                 return [
@@ -1143,25 +1271,66 @@ Format the response as a JSON object with a 'content' field containing an array 
 
             $responseData = $response->json();
 
-            // Check if this is an async job response
-            if (isset($responseData['job_id']) && isset($responseData['status'])) {
-                // Poll for job completion
-                return $this->pollJobResult($responseData['job_id']);
-            }
-
-            // Handle direct response (shouldn't happen with new API, but keep for compatibility)
-            return $responseData;
-
-        } catch (\Exception $e) {
-            Log::error('Microservice call exception', [
-                'error' => $e->getMessage(),
+            // Validate response data is an array
+            if (!is_array($responseData)) {
+                Log::error('Microservice returned invalid JSON response', [
+                    'response_body' => $response->body(),
                     'url' => $url
                 ]);
                 return [
                     'success' => false,
-                'error' => 'Microservice call failed: ' . $e->getMessage()
+                    'error' => 'Invalid JSON response from microservice'
                 ];
             }
+
+            // Check if this is an async job response (new API v3.1.0 format)
+            if (isset($responseData['job_id']) && isset($responseData['status'])) {
+                if ($async) {
+                    // Return job_id immediately for async handling
+                    return [
+                        'success' => true,
+                        'job_id' => $responseData['job_id'],
+                        'status' => $responseData['status'],
+                        'message' => $responseData['message'] ?? 'Job submitted successfully'
+                    ];
+                } else {
+                    // Poll for job completion (backward compatibility)
+                    return $this->pollJobResult($responseData['job_id']);
+                }
+            }
+
+            // Handle direct response (legacy format, shouldn't happen with new API)
+            if (isset($responseData['success'])) {
+                return $responseData;
+            }
+
+            // Wrap response in success format if needed
+            return [
+                'success' => true,
+                'data' => $responseData
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Microservice call exception', [
+                'error' => $e->getMessage(),
+                'url' => $url,
+                'trace' => $e->getTraceAsString()
+            ]);
+            return [
+                'success' => false,
+                'error' => 'Microservice call failed: ' . $e->getMessage()
+            ];
+        } catch (\Throwable $e) {
+            Log::error('Microservice call fatal error', [
+                'error' => $e->getMessage(),
+                'url' => $url,
+                'trace' => $e->getTraceAsString()
+            ]);
+            return [
+                'success' => false,
+                'error' => 'Microservice call failed: ' . $e->getMessage()
+            ];
+        }
     }
 
     /**
@@ -1201,8 +1370,28 @@ Format the response as a JSON object with a 'content' field containing an array 
             }
 
             $statusData = $statusResponse->json();
-            $status = $statusData['data']['status'] ?? $statusData['status'] ?? 'unknown';
-            $progress = $statusData['data']['progress'] ?? $statusData['progress'] ?? null;
+            
+            // Validate status data is an array
+            if (!is_array($statusData)) {
+                Log::error('Invalid job status response', [
+                    'job_id' => $jobId,
+                    'response_body' => $statusResponse->body()
+                ]);
+                return [
+                    'success' => false,
+                    'error' => 'Invalid job status response from microservice'
+                ];
+            }
+            
+            // Handle new API v3.1.0 response structure
+            if (isset($statusData['success']) && isset($statusData['data']) && is_array($statusData['data'])) {
+                $status = $statusData['data']['status'] ?? 'unknown';
+                $progress = $statusData['data']['progress'] ?? null;
+            } else {
+                // Legacy format support
+                $status = $statusData['status'] ?? 'unknown';
+                $progress = $statusData['progress'] ?? null;
+            }
 
             Log::info('Job status check', [
                 'job_id' => $jobId,
@@ -1226,16 +1415,37 @@ Format the response as a JSON object with a 'content' field containing an array 
 
                 $resultData = $resultResponse->json();
                 
-                // Extract data from nested structure
-                $data = $resultData['data']['data'] ?? $resultData['data'] ?? $resultData;
+                // Handle new API v3.1.0 response structure
+                if (isset($resultData['success']) && isset($resultData['data'])) {
+                    // Check if data is nested (data.data) or direct (data)
+                    if (isset($resultData['data']['data'])) {
+                        $data = $resultData['data']['data'];
+                        $metadata = $resultData['data']['metadata'] ?? [];
+                    } else {
+                        $data = $resultData['data'];
+                        $metadata = $resultData['metadata'] ?? [];
+                    }
+                } else {
+                    // Legacy format support
+                    $data = $resultData['data'] ?? $resultData;
+                    $metadata = $resultData['metadata'] ?? [];
+                }
                 
                 return [
                     'success' => true,
                     'data' => $data,
-                    'metadata' => $resultData['data']['metadata'] ?? $resultData['metadata'] ?? []
+                    'metadata' => $metadata
                 ];
             } elseif ($status === 'failed') {
-                $error = $statusData['data']['error'] ?? $statusData['error'] ?? 'Job processing failed';
+                // Handle new API v3.1.0 error structure
+                if (isset($statusData['data']['error'])) {
+                    $error = is_string($statusData['data']['error']) 
+                        ? $statusData['data']['error'] 
+                        : ($statusData['data']['error']['message'] ?? 'Job processing failed');
+                } else {
+                    $error = $statusData['error'] ?? 'Job processing failed';
+                }
+                
                 Log::error('Job failed', [
                     'job_id' => $jobId,
                     'error' => $error
@@ -1248,8 +1458,8 @@ Format the response as a JSON object with a 'content' field containing an array 
                 return [
                     'success' => false,
                     'error' => 'Job was cancelled'
-            ];
-        }
+                ];
+            }
 
             // Wait before next attempt
             sleep($intervalSeconds);
@@ -1327,7 +1537,7 @@ Format the response as a JSON object with a 'content' field containing an array 
                 }
             }
 
-            // Prepare data for FastAPI microservice
+            // Prepare data for FastAPI microservice (API v3.1.0)
             $requestData = [
                 'presentation_data' => [
                     'title' => $aiResult->result_data['title'] ?? 'Presentation',
@@ -1337,7 +1547,8 @@ Format the response as a JSON object with a 'content' field containing an array 
                 'ai_result_id' => $aiResultId,
                 'template' => $templateData['template'] ?? 'corporate_blue',
                 'color_scheme' => $templateData['color_scheme'] ?? 'blue',
-                'font_style' => $templateData['font_style'] ?? 'modern'
+                'font_style' => $templateData['font_style'] ?? 'modern',
+                'generate_missing_content' => true // API v3.1.0 parameter
             ];
             
             // Log the data being sent for debugging
@@ -1509,7 +1720,7 @@ Format the response as a JSON object with a 'content' field containing an array 
             // Always use the most up-to-date content from the database
             $resultData = $aiResult->result_data;
             
-            // Prepare data for FastAPI microservice
+            // Prepare data for FastAPI microservice (API v3.1.0)
             $requestData = [
                 'presentation_data' => [
                     'title' => $resultData['title'] ?? 'Presentation',
@@ -1519,7 +1730,8 @@ Format the response as a JSON object with a 'content' field containing an array 
                 'ai_result_id' => $aiResultId,
                 'template' => $templateData['template'] ?? 'corporate_blue',
                 'color_scheme' => $templateData['color_scheme'] ?? 'blue',
-                'font_style' => $templateData['font_style'] ?? 'modern'
+                'font_style' => $templateData['font_style'] ?? 'modern',
+                'generate_missing_content' => true // API v3.1.0 parameter
             ];
             
             Log::info('Data being sent to microservice', [
@@ -1610,5 +1822,213 @@ Format the response as a JSON object with a 'content' field containing an array 
         } catch (\Exception $e) {
             return false;
         }
+    }
+
+    /**
+     * Get job status from microservice (API v3.1.0)
+     * 
+     * @param string $jobId Job ID
+     * @return array Job status information
+     */
+    public function getJobStatus($jobId)
+    {
+        try {
+            $headers = [
+                'Accept' => 'application/json'
+            ];
+            
+            if ($this->microserviceApiKey) {
+                $headers['X-API-Key'] = $this->microserviceApiKey;
+            }
+
+            $response = Http::timeout(10)
+                ->withHeaders($headers)
+                ->get($this->microserviceUrl . '/jobs/' . $jobId . '/status');
+
+            if (!$response->successful()) {
+                return [
+                    'success' => false,
+                    'error' => 'Failed to get job status: ' . $response->status()
+                ];
+            }
+
+            $responseData = $response->json();
+            
+            // Handle new API v3.1.0 response structure
+            if (isset($responseData['success']) && isset($responseData['data'])) {
+                return [
+                    'success' => true,
+                    'data' => $responseData['data']
+                ];
+            }
+
+            // Legacy format support
+            return [
+                'success' => true,
+                'data' => $responseData
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Get job status failed', [
+                'error' => $e->getMessage(),
+                'job_id' => $jobId
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Failed to get job status: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Get job result from microservice (API v3.1.0)
+     * 
+     * @param string $jobId Job ID
+     * @return array Job result data
+     */
+    public function getJobResult($jobId)
+    {
+        try {
+            $headers = [
+                'Accept' => 'application/json'
+            ];
+            
+            if ($this->microserviceApiKey) {
+                $headers['X-API-Key'] = $this->microserviceApiKey;
+            }
+
+            $response = Http::timeout(30)
+                ->withHeaders($headers)
+                ->get($this->microserviceUrl . '/jobs/' . $jobId . '/result');
+
+            if (!$response->successful()) {
+                $errorBody = $response->body();
+                $errorData = json_decode($errorBody, true);
+                
+                $errorMessage = 'Failed to get job result: ' . $response->status();
+                if (isset($errorData['error']['message'])) {
+                    $errorMessage = $errorData['error']['message'];
+                } elseif (isset($errorData['error'])) {
+                    $errorMessage = is_string($errorData['error']) 
+                        ? $errorData['error'] 
+                        : ($errorData['error']['message'] ?? $errorMessage);
+                }
+
+                return [
+                    'success' => false,
+                    'error' => $errorMessage
+                ];
+            }
+
+            $responseData = $response->json();
+            
+            // Handle new API v3.1.0 response structure
+            if (isset($responseData['success'])) {
+                if ($responseData['success']) {
+                    // Extract nested data structure
+                    $data = $responseData['data']['data'] ?? $responseData['data'] ?? null;
+                    $metadata = $responseData['data']['metadata'] ?? $responseData['metadata'] ?? [];
+                    
+                    return [
+                        'success' => true,
+                        'data' => $data,
+                        'metadata' => $metadata
+                    ];
+                } else {
+                    // Error response
+                    $error = $responseData['error']['message'] ?? $responseData['error'] ?? 'Unknown error';
+                    return [
+                        'success' => false,
+                        'error' => $error
+                    ];
+                }
+            }
+
+            // Legacy format support
+            return [
+                'success' => true,
+                'data' => $responseData['data'] ?? $responseData
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Get job result failed', [
+                'error' => $e->getMessage(),
+                'job_id' => $jobId
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Failed to get job result: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Cancel a job (API v3.1.0)
+     * 
+     * @param string $jobId Job ID
+     * @return array Cancellation result
+     */
+    public function cancelJob($jobId)
+    {
+        try {
+            $headers = [
+                'Accept' => 'application/json'
+            ];
+            
+            if ($this->microserviceApiKey) {
+                $headers['X-API-Key'] = $this->microserviceApiKey;
+            }
+
+            $response = Http::timeout(10)
+                ->withHeaders($headers)
+                ->post($this->microserviceUrl . '/jobs/' . $jobId . '/cancel');
+
+            if (!$response->successful()) {
+                return [
+                    'success' => false,
+                    'error' => 'Failed to cancel job: ' . $response->status()
+                ];
+            }
+
+            $responseData = $response->json();
+            
+            // Handle new API v3.1.0 response structure
+            if (isset($responseData['success']) && isset($responseData['data'])) {
+                return [
+                    'success' => true,
+                    'data' => $responseData['data']
+                ];
+            }
+
+            return [
+                'success' => true,
+                'data' => $responseData
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Cancel job failed', [
+                'error' => $e->getMessage(),
+                'job_id' => $jobId
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Failed to cancel job: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Call microservice (public wrapper for external use)
+     * 
+     * @param string $url The microservice endpoint URL
+     * @param array $data Request data
+     * @return array Response data
+     */
+    public function callMicroservicePublic($url, $data)
+    {
+        return $this->callMicroservice($url, $data, false);
     }
 }

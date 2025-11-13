@@ -35,7 +35,7 @@ class PresentationController extends Controller
                 'language' => 'string|in:English,Spanish,French,German,Italian,Portuguese,Chinese,Japanese',
                 'tone' => 'string|in:Professional,Casual,Academic,Creative,Formal',
                 'length' => 'string|in:Short,Medium,Long',
-                'model' => 'string|in:Basic Model,Advanced Model,Premium Model,gpt-3.5-turbo,gpt-4',
+                'model' => 'string|in:Basic Model,Advanced Model,Premium Model,gpt-3.5-turbo,gpt-4,gpt-4o,deepseek-chat,ollama:mistral,ollama:llama3,ollama:phi3:mini',
                 'file_id' => 'required_if:input_type,file|string|exists:file_uploads,id',
                 'url' => 'required_if:input_type,url|url',
                 'youtube_url' => 'required_if:input_type,youtube|url'
@@ -120,7 +120,7 @@ class PresentationController extends Controller
                 ], 422);
             }
 
-            $userId = $request->user()->id;
+            $userId = auth()->id() ?? 5; // Use default user ID for public access
             $language = $request->input('language', 'English');
             $tone = $request->input('tone', 'Professional');
             $detailLevel = $request->input('detail_level', 'detailed');
@@ -151,7 +151,7 @@ class PresentationController extends Controller
             Log::error('Content generation failed', [
                 'error' => $e->getMessage(),
                 'ai_result_id' => $aiResultId,
-                'user_id' => $request->user()->id ?? null
+                'user_id' => auth()->id() ?? null
             ]);
 
             return response()->json([
@@ -730,7 +730,7 @@ class PresentationController extends Controller
 
             // Call microservice to get progress
             $microserviceUrl = config('services.presentation_microservice.url', 'http://localhost:8001');
-            $response = $this->aiPresentationService->callMicroservice(
+            $response = $this->aiPresentationService->callMicroservicePublic(
                 $microserviceUrl . '/progress/' . $operationId,
                 []
             );
