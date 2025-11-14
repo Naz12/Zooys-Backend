@@ -12,11 +12,33 @@ class UniversalJobService
     private $aiResultService;
 
     public function __construct(
-        \App\Services\Modules\UniversalFileManagementModule $universalFileModule,
         AIResultService $aiResultService
     ) {
-        $this->universalFileModule = $universalFileModule;
+        // Removed UniversalFileManagementModule from constructor to break circular dependency
+        // It will be resolved manually only when needed via getUniversalFileModule()
         $this->aiResultService = $aiResultService;
+    }
+
+    /**
+     * Get UniversalFileManagementModule with lazy loading
+     * Resolves the module only when needed, breaking circular dependency at startup
+     * Registers current instance in container to break circular dependency during resolution
+     */
+    private function getUniversalFileModule()
+    {
+        if ($this->universalFileModule === null) {
+            // Register this instance in the container before resolving dependencies
+            // This breaks the circular dependency: when UniversalFileManagementModule
+            // tries to resolve AIPresentationService, which tries to resolve UniversalJobService,
+            // Laravel will return this already-constructed instance instead of creating a new one
+            $container = app();
+            $container->instance(\App\Services\UniversalJobService::class, $this);
+            
+            // Now resolve UniversalFileManagementModule - it can safely resolve AIPresentationService
+            // which can resolve UniversalJobService (returns the instance we just registered)
+            $this->universalFileModule = $container->make(\App\Services\Modules\UniversalFileManagementModule::class);
+        }
+        return $this->universalFileModule;
     }
 
     /**
@@ -318,6 +340,12 @@ class UniversalJobService
             case 'presentations':
                 return $this->processPresentationsJobWithStages($job['id'], $input, $options);
             
+            case 'presentation_outline':
+            case 'presentation_content':
+            case 'presentation_export':
+                // Use closure to defer resolution and break circular dependency
+                return $this->processPresentationJob($job, $toolType);
+            
             case 'diagram':
                 return $this->processDiagramJobWithStages($job['id'], $input, $options, $userId);
             
@@ -445,7 +473,7 @@ class UniversalJobService
      */
     private function processTextSummarization($text, $options)
     {
-        $result = $this->universalFileModule->getAIProcessingModule()->summarize($text, $options);
+        $result = $this->getUniversalFileModule()->getAIProcessingModule()->summarize($text, $options);
         
         return [
             'success' => true,
@@ -527,7 +555,7 @@ class UniversalJobService
             return ['success' => false, 'error' => 'No content found on the webpage'];
         }
 
-        $result = $this->universalFileModule->getAIProcessingModule()->summarize($content, $options);
+        $result = $this->getUniversalFileModule()->getAIProcessingModule()->summarize($content, $options);
         
         return [
             'success' => true,
@@ -546,7 +574,7 @@ class UniversalJobService
      */
     private function processFileSummarization($fileId, $options)
     {
-        $result = $this->universalFileModule->processFile($fileId, 'summarize', $options);
+        $result = $this->getUniversalFileModule()->processFile($fileId, 'summarize', $options);
         
         if (!$result['success']) {
             return ['success' => false, 'error' => $result['error']];
@@ -571,7 +599,7 @@ class UniversalJobService
         try {
             if (isset($input['file_id'])) {
                 // Image-based math problem
-                $result = $this->universalFileModule->processFile($input['file_id'], 'math', $options);
+                $result = $this->getUniversalFileModule()->processFile($input['file_id'], 'math', $options);
                 
                 if (!$result['success']) {
                     return ['success' => false, 'error' => $result['error']];
@@ -594,7 +622,7 @@ class UniversalJobService
                     'subject_area' => $options['subject_area'] ?? 'general',
                     'difficulty_level' => $options['difficulty_level'] ?? 'intermediate'
                 ];
-                $result = $this->universalFileModule->aiMathService->solveMathProblem($problemData, $input['user_id'] ?? 1);
+                $result = $this->getUniversalFileModule()->aiMathService->solveMathProblem($problemData, $input['user_id'] ?? 1);
                 
                 return [
                     'success' => true,
@@ -619,7 +647,7 @@ class UniversalJobService
         try {
             if (isset($input['file_id'])) {
                 // File-based flashcard generation
-                $result = $this->universalFileModule->processFile($input['file_id'], 'flashcards', $options);
+                $result = $this->getUniversalFileModule()->processFile($input['file_id'], 'flashcards', $options);
                 
                 if (!$result['success']) {
                     return ['success' => false, 'error' => $result['error']];
@@ -637,7 +665,7 @@ class UniversalJobService
             } else {
                 // Text-based flashcard generation
                 $count = $options['count'] ?? 5;
-                $result = $this->universalFileModule->flashcardService->generateFlashcards($input['text'], $count, $options);
+                $result = $this->getUniversalFileModule()->flashcardService->generateFlashcards($input['text'], $count, $options);
                 
                 return [
                     'success' => true,
@@ -662,7 +690,7 @@ class UniversalJobService
         try {
             if (isset($input['file_id'])) {
                 // File-based presentation generation
-                $result = $this->universalFileModule->processFile($input['file_id'], 'presentations', $options);
+                $result = $this->getUniversalFileModule()->processFile($input['file_id'], 'presentations', $options);
                 
                 if (!$result['success']) {
                     return ['success' => false, 'error' => $result['error']];
@@ -682,7 +710,7 @@ class UniversalJobService
                 // For text-based presentations, we don't need to create an AI result
                 // Just process the outline generation directly
                 
-                $result = $this->universalFileModule->presentationService->generateOutline([
+                $result = $this->getUniversalFileModule()->presentationService->generateOutline([
                     'text' => $input['text'],
                     'title' => $options['title'] ?? 'Generated Presentation',
                     'slides_count' => $options['slides_count'] ?? 5
@@ -720,7 +748,7 @@ class UniversalJobService
                 return ['success' => false, 'error' => 'File not found'];
             }
             
-            $result = $this->universalFileModule->extractContent($file, $options);
+            $result = $this->getUniversalFileModule()->extractContent($file, $options);
             
             if (!$result['success']) {
                 return ['success' => false, 'error' => $result['error']];
@@ -817,7 +845,7 @@ class UniversalJobService
                 'text_length' => strlen($text)
             ]);
 
-            $result = $this->universalFileModule->getAIProcessingModule()->summarize($text, array_merge($options, ['model' => $model]));
+            $result = $this->getUniversalFileModule()->getAIProcessingModule()->summarize($text, array_merge($options, ['model' => $model]));
             
             // Stage 4: Finalizing
             $this->updateJob($jobId, [
@@ -1019,7 +1047,7 @@ class UniversalJobService
                 'model' => $model
             ]);
             
-            $summaryResult = $this->universalFileModule->getAIProcessingModule()->summarize($transcript, [
+            $summaryResult = $this->getUniversalFileModule()->getAIProcessingModule()->summarize($transcript, [
                 'model' => $model
                 // Note: Removed 'language' and 'format' as AI Manager API only accepts text, task, model
             ]);
@@ -1404,7 +1432,7 @@ class UniversalJobService
                 'model' => $model
             ]);
 
-            $summaryResult = $this->universalFileModule->getAIProcessingModule()->summarize($transcript, [
+            $summaryResult = $this->getUniversalFileModule()->getAIProcessingModule()->summarize($transcript, [
                 'model' => $model,
                 'language' => $options['language'] ?? 'en',
                 'format' => $options['format'] ?? 'detailed'
@@ -2043,7 +2071,7 @@ class UniversalJobService
                 ]);
                 $this->addLog($jobId, "Processing math problem image", 'info');
 
-                $result = $this->universalFileModule->processFile($input['file_id'], 'math', $options);
+                $result = $this->getUniversalFileModule()->processFile($input['file_id'], 'math', $options);
                 
                 if (!$result['success']) {
                     $this->failJob($jobId, "Math processing failed: " . $result['error']);
@@ -2080,7 +2108,7 @@ class UniversalJobService
                     'subject_area' => $options['subject_area'] ?? 'general',
                     'difficulty_level' => $options['difficulty_level'] ?? 'intermediate'
                 ];
-                $result = $this->universalFileModule->aiMathService->solveMathProblem($problemData, $input['user_id'] ?? 1);
+                $result = $this->getUniversalFileModule()->aiMathService->solveMathProblem($problemData, $input['user_id'] ?? 1);
                 
                 $this->updateJob($jobId, [
                     'stage' => 'finalizing',
@@ -2141,7 +2169,7 @@ class UniversalJobService
                 ]);
                 $this->addLog($jobId, "Validating file for flashcard generation", 'info');
 
-                $fileResult = $this->universalFileModule->getFile($fileId);
+                $fileResult = $this->getUniversalFileModule()->getFile($fileId);
                 
                 if (!$fileResult['success']) {
                     $this->failJob($jobId, "File not found: " . ($fileResult['error'] ?? 'Unknown error'));
@@ -2429,7 +2457,7 @@ class UniversalJobService
                 ]);
                 $this->addLog($jobId, "Processing file for presentation generation", 'info');
 
-                $result = $this->universalFileModule->processFile($input['file_id'], 'presentations', $options);
+                $result = $this->getUniversalFileModule()->processFile($input['file_id'], 'presentations', $options);
                 
                 if (!$result['success']) {
                     $this->failJob($jobId, "Presentation generation failed: " . $result['error']);
@@ -2462,7 +2490,7 @@ class UniversalJobService
                 ]);
                 $this->addLog($jobId, "Generating presentation outline from text", 'info');
 
-                $result = $this->universalFileModule->presentationService->generateOutline([
+                $result = $this->getUniversalFileModule()->presentationService->generateOutline([
                     'text' => $input['text'],
                     'title' => $options['title'] ?? 'Generated Presentation',
                     'slides_count' => $options['slides_count'] ?? 5
@@ -2652,7 +2680,7 @@ class UniversalJobService
             ]);
             $this->addLog($jobId, "Extracting content from document", 'info');
 
-            $result = $this->universalFileModule->extractContent($file, $options);
+            $result = $this->getUniversalFileModule()->extractContent($file, $options);
             
             if (!$result['success']) {
                 $this->failJob($jobId, "Content extraction failed: " . $result['error']);
@@ -3447,6 +3475,66 @@ class UniversalJobService
                     'line' => $e->getLine()
                 ]
             ];
+        }
+    }
+
+    /**
+     * Process presentation job (outline, content, or export)
+     * Manually constructs AIPresentationService to avoid circular dependency
+     */
+    private function processPresentationJob($job, $toolType)
+    {
+        try {
+            // Manually construct dependencies to avoid circular dependency
+            // These services don't depend on UniversalFileManagementModule
+            $aiManagerService = new \App\Services\AIManagerService();
+            $aiProcessingModule = new \App\Services\Modules\AIProcessingModule($aiManagerService);
+            $aiResultService = new \App\Services\AIResultService();
+            
+            // ContentExtractionService dependencies
+            // Build from bottom up to avoid circular dependencies
+            $youtubeTranscriberService = new \App\Services\YouTubeTranscriberService();
+            $webScrapingService = new \App\Services\WebScrapingService();
+            $transcriberModule = new \App\Services\Modules\TranscriberModule(
+                $youtubeTranscriberService,
+                $webScrapingService
+            );
+            $youtubeService = new \App\Services\YouTubeService($transcriberModule);
+            $documentConverterService = new \App\Services\DocumentConverterService();
+            $contentExtractionService = new \App\Services\Modules\ContentExtractionService(
+                $youtubeService,
+                $documentConverterService,
+                $webScrapingService
+            );
+            
+            // Manually construct AIPresentationService with $this to break cycle
+            $presentationService = new \App\Services\AIPresentationService(
+                $aiProcessingModule,
+                $aiResultService,
+                $contentExtractionService,
+                $this // Pass current instance to break cycle
+            );
+            
+            // Call appropriate method based on tool type
+            switch ($toolType) {
+                case 'presentation_outline':
+                    return $presentationService->processOutlineJob($job['id'], $job);
+                case 'presentation_content':
+                    return $presentationService->processContentJob($job['id'], $job);
+                case 'presentation_export':
+                    return $presentationService->processExportJob($job['id'], $job);
+                default:
+                    throw new \Exception("Unknown presentation tool type: {$toolType}");
+            }
+        } catch (\Exception $e) {
+            Log::error('Presentation job processing failed', [
+                'error' => $e->getMessage(),
+                'job_id' => $job['id'] ?? null,
+                'tool_type' => $toolType
+            ]);
+            
+            $this->failJob($job['id'] ?? 'unknown', 'Presentation job failed: ' . $e->getMessage());
+            return ['success' => false, 'error' => $e->getMessage()];
         }
     }
 

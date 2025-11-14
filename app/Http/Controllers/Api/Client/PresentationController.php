@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Client;
 use App\Http\Controllers\Controller;
 use App\Services\AIPresentationService;
 use App\Services\Modules\UniversalFileManagementModule;
+use App\Services\UniversalJobService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
@@ -14,13 +15,16 @@ class PresentationController extends Controller
 {
     private $aiPresentationService;
     private $universalFileModule;
+    private $universalJobService;
 
     public function __construct(
         AIPresentationService $aiPresentationService,
-        UniversalFileManagementModule $universalFileModule
+        UniversalFileManagementModule $universalFileModule,
+        UniversalJobService $universalJobService
     ) {
         $this->aiPresentationService = $aiPresentationService;
         $this->universalFileModule = $universalFileModule;
+        $this->universalJobService = $universalJobService;
     }
 
     /**
@@ -71,7 +75,7 @@ class PresentationController extends Controller
                 $inputData['file_type'] = $fileResult['file']['file_type'];
             }
 
-            // Generate presentation outline
+            // Generate presentation outline (async - returns job_id)
             $result = $this->aiPresentationService->generateOutline($inputData, $userId);
 
             if (!$result['success']) {
@@ -83,7 +87,8 @@ class PresentationController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data' => $result['data']
+                'job_id' => $result['job_id'],
+                'message' => $result['message'] ?? 'Outline generation job created successfully'
             ]);
 
         } catch (\Exception $e) {
@@ -102,11 +107,15 @@ class PresentationController extends Controller
 
     /**
      * Generate full presentation content from outline
+     * Accepts outline from frontend (edited or original)
      */
-    public function generateContent(Request $request, $aiResultId): JsonResponse
+    public function generateContent(Request $request): JsonResponse
     {
         try {
             $validator = Validator::make($request->all(), [
+                'outline' => 'required|array',
+                'outline.title' => 'required|string|max:255',
+                'outline.slides' => 'required|array|min:1',
                 'language' => 'string|in:English,Spanish,French,German,Italian,Portuguese,Chinese,Japanese',
                 'tone' => 'string|in:Professional,Casual,Academic,Creative,Formal',
                 'detail_level' => 'string|in:brief,detailed,comprehensive'
@@ -121,42 +130,42 @@ class PresentationController extends Controller
             }
 
             $userId = auth()->id() ?? 5; // Use default user ID for public access
+            $outline = $request->input('outline');
             $language = $request->input('language', 'English');
             $tone = $request->input('tone', 'Professional');
             $detailLevel = $request->input('detail_level', 'detailed');
 
-            // Generate full content using microservice
+            // Generate full content using microservice (async - returns job_id)
             $result = $this->aiPresentationService->generateFullContent(
-                $aiResultId,
+                $outline,
                 $userId,
                 $language,
                 $tone,
                 $detailLevel
             );
 
-            if ($result['success']) {
-                return response()->json([
-                    'success' => true,
-                    'data' => $result['data'],
-                    'message' => $result['message']
-                ]);
-            } else {
+            if (!$result['success']) {
                 return response()->json([
                     'success' => false,
                     'error' => $result['error']
-                ], 500);
+                ], 400);
             }
+
+            return response()->json([
+                'success' => true,
+                'job_id' => $result['job_id'],
+                'message' => $result['message'] ?? 'Content generation job created successfully'
+            ]);
 
         } catch (\Exception $e) {
             Log::error('Content generation failed', [
                 'error' => $e->getMessage(),
-                'ai_result_id' => $aiResultId,
                 'user_id' => auth()->id() ?? null
             ]);
 
             return response()->json([
                 'success' => false,
-                'error' => 'Failed to generate content: ' . $e->getMessage()
+                'error' => 'Failed to generate content: ' . $e->getMessage() . '. Please try again with the same data.'
             ], 500);
         }
     }
@@ -224,21 +233,33 @@ class PresentationController extends Controller
         try {
             $templates = $this->aiPresentationService->getAvailableTemplates();
 
+            // Check if templates are empty or null
+            if (empty($templates) || !is_array($templates)) {
+                Log::warning('No templates available from service', [
+                    'templates_type' => gettype($templates),
+                    'templates_count' => is_array($templates) ? count($templates) : 0
+                ]);
+                
+                return response()->json([
+                    'success' => false,
+                    'error' => 'No templates available. Please try again later.'
+                ], 503);
+            }
+
             return response()->json([
                 'success' => true,
-                'data' => [
-                    'templates' => $templates
-                ]
+                'templates' => $templates
             ]);
 
         } catch (\Exception $e) {
             Log::error('Failed to get presentation templates', [
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
             ]);
 
             return response()->json([
                 'success' => false,
-                'error' => 'Failed to get templates'
+                'error' => 'Failed to get templates: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -597,120 +618,188 @@ class PresentationController extends Controller
     }
 
     /**
-     * Export presentation to PowerPoint (on-demand)
+     * Export presentation to PowerPoint using Universal Job Scheduler
+     * Accepts content + style from frontend
      */
-    public function exportPresentation(Request $request, $aiResultId)
+    public function exportPresentation(Request $request): JsonResponse
     {
-        $userId = auth()->id() ?? 1; // Use default user ID for public access
-
-        // Get the AI result to check last updated timestamp
-        $aiResult = \App\Models\AIResult::where('id', $aiResultId)
-            ->where('tool_type', 'presentation')
-            ->first();
-        
-        if (!$aiResult) {
-            return response()->json([
-                'success' => false,
-                'error' => 'Presentation not found'
-            ], 404)->header('Access-Control-Allow-Origin', '*')
-              ->header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-              ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-        }
-        
-        // Create cache keys that include the last updated timestamp
-        $lastUpdated = $aiResult->updated_at->timestamp;
-        $lockKey = "export_generation_{$aiResultId}_{$userId}_{$lastUpdated}";
-        $cacheKey = "export_result_{$aiResultId}_{$userId}_{$lastUpdated}";
-        
-        // Check if already processing
-        if (\Illuminate\Support\Facades\Cache::has($lockKey)) {
-            Log::info('Export generation already in progress', [
-                'ai_result_id' => $aiResultId,
-                'user_id' => $userId,
-                'lock_key' => $lockKey
-            ]);
-            
-            return response()->json([
-                'success' => false,
-                'error' => 'Export generation already in progress',
-                'status' => 'processing'
-            ], 409)->header('Access-Control-Allow-Origin', '*')
-              ->header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-              ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-        }
-        
-        // Check if result already exists and is recent (within 10 minutes)
-        if (\Illuminate\Support\Facades\Cache::has($cacheKey)) {
-            $cachedResult = \Illuminate\Support\Facades\Cache::get($cacheKey);
-            Log::info('Returning cached export result', [
-                'ai_result_id' => $aiResultId,
-                'user_id' => $userId,
-                'cached_at' => $cachedResult['cached_at'] ?? 'unknown',
-                'last_updated' => $lastUpdated
-            ]);
-            
-            return response()->json([
-                'success' => true,
-                'data' => $cachedResult['data'],
-                'message' => $cachedResult['message'] ?? 'Presentation exported successfully (cached)',
-                'cached' => true,
-                'cached_at' => $cachedResult['cached_at']
-            ])->header('Access-Control-Allow-Origin', '*')
-              ->header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-              ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-        }
-
-        $validator = Validator::make($request->all(), [
-            'presentation_data' => 'required|array',
-            'template' => 'string',
-            'color_scheme' => 'string',
-            'font_style' => 'string'
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'error' => 'Invalid export data',
-                'details' => $validator->errors()
-            ], 400)->header('Access-Control-Allow-Origin', '*')
-              ->header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-              ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-        }
-
-        $templateData = null;
-        if ($request->has(['template', 'color_scheme', 'font_style'])) {
-            $templateData = [
-                'template' => $request->template,
-                'color_scheme' => $request->color_scheme,
-                'font_style' => $request->font_style
-            ];
-        }
-
-        // Set processing lock (expires in 15 minutes)
-        \Illuminate\Support\Facades\Cache::put($lockKey, true, 900);
-        
         try {
-            $result = $this->aiPresentationService->exportPresentationToPowerPoint(
-                $aiResultId,
-                $request->presentation_data,
+            // Accept both 'content' (from content generation) and 'presentation_data' (legacy format)
+            $presentationData = $request->input('presentation_data') ?? $request->input('content');
+            
+            if (!$presentationData) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Missing presentation data. Provide either "presentation_data" or "content" field.'
+                ], 422);
+            }
+
+            // Transform content format if needed (convert string content to array)
+            $presentationData = $this->transformPresentationData($presentationData);
+
+            $validator = Validator::make(['presentation_data' => $presentationData], [
+                'presentation_data' => 'required|array',
+                'presentation_data.title' => 'required|string|max:255',
+                'presentation_data.slides' => 'required|array|min:1',
+                'template' => 'string',
+                'color_scheme' => 'string',
+                'font_style' => 'string'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Invalid export data',
+                    'details' => $validator->errors()
+                ], 422);
+            }
+
+            $userId = auth()->id() ?? 5;
+            
+            $templateData = null;
+            if ($request->has(['template', 'color_scheme', 'font_style'])) {
+                $templateData = [
+                    'template' => $request->input('template'),
+                    'color_scheme' => $request->input('color_scheme'),
+                    'font_style' => $request->input('font_style')
+                ];
+            }
+
+            $result = $this->aiPresentationService->exportPresentation(
+                $presentationData,
                 $userId,
                 $templateData
             );
-            
-            // Cache successful result for 10 minutes
+
             if ($result['success']) {
-                \Illuminate\Support\Facades\Cache::put($cacheKey, [
-                    'data' => $result['data'],
-                    'message' => $result['message'] ?? 'Presentation exported successfully',
-                    'cached_at' => now()->toISOString()
-                ], 600);
+                return response()->json([
+                    'success' => true,
+                    'job_id' => $result['job_id'],
+                    'message' => $result['message']
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'error' => $result['error']
+                ], 500);
             }
-            
-            return $result;
-        } finally {
-            // Always remove the lock
-            \Illuminate\Support\Facades\Cache::forget($lockKey);
+
+        } catch (\Exception $e) {
+            Log::error('Export failed', [
+                'error' => $e->getMessage(),
+                'user_id' => auth()->id() ?? null
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Export failed: ' . $e->getMessage() . '. Please try again with the same data.'
+            ], 500);
         }
+    }
+
+    /**
+     * Transform presentation data to ensure compatibility
+     * Converts content generation output format to export format
+     */
+    private function transformPresentationData($data)
+    {
+        if (!is_array($data) || !isset($data['slides']) || !is_array($data['slides'])) {
+            return $data;
+        }
+
+        // Transform each slide's content field from string to array if needed
+        foreach ($data['slides'] as &$slide) {
+            if (!isset($slide['content'])) {
+                // If content is missing, create empty array
+                $slide['content'] = [];
+                continue;
+            }
+
+            // If content is already an array, keep it as-is
+            if (is_array($slide['content'])) {
+                continue;
+            }
+
+            // If content is a string, convert to array of bullet points
+            if (is_string($slide['content'])) {
+                $slide['content'] = $this->convertStringContentToArray($slide['content']);
+            }
+        }
+
+        return $data;
+    }
+
+    /**
+     * Convert string content to array of bullet points
+     * Handles various formats: newlines, bullet markers, paragraphs
+     */
+    private function convertStringContentToArray($content)
+    {
+        if (empty($content)) {
+            return [];
+        }
+
+        $lines = [];
+        
+        // Split by double newlines (paragraphs)
+        $paragraphs = preg_split('/\n\s*\n/', $content);
+        
+        foreach ($paragraphs as $paragraph) {
+            $paragraph = trim($paragraph);
+            if (empty($paragraph)) {
+                continue;
+            }
+
+            // Check if paragraph contains bullet markers
+            if (preg_match('/^[•\-\*]\s+/', $paragraph) || preg_match('/^\d+\.\s+/', $paragraph)) {
+                // Already has bullet markers, split by newlines
+                $bulletLines = preg_split('/\n/', $paragraph);
+                foreach ($bulletLines as $line) {
+                    $line = trim($line);
+                    if (!empty($line)) {
+                        // Remove bullet markers if present
+                        $line = preg_replace('/^[•\-\*]\s+/', '', $line);
+                        $line = preg_replace('/^\d+\.\s+/', '', $line);
+                        $lines[] = $line;
+                    }
+                }
+            } else {
+                // No bullet markers, try to split by single newlines
+                $singleLines = preg_split('/\n/', $paragraph);
+                if (count($singleLines) > 1) {
+                    // Multiple lines, treat each as a bullet point
+                    foreach ($singleLines as $line) {
+                        $line = trim($line);
+                        if (!empty($line)) {
+                            $lines[] = $line;
+                        }
+                    }
+                } else {
+                    // Single paragraph, try to split by sentences if too long
+                    $paragraph = trim($paragraph);
+                    if (strlen($paragraph) > 200) {
+                        // Long paragraph, split by sentences
+                        $sentences = preg_split('/(?<=[.!?])\s+/', $paragraph);
+                        foreach ($sentences as $sentence) {
+                            $sentence = trim($sentence);
+                            if (!empty($sentence)) {
+                                $lines[] = $sentence;
+                            }
+                        }
+                    } else {
+                        // Short paragraph, use as single bullet point
+                        $lines[] = $paragraph;
+                    }
+                }
+            }
+        }
+
+        // If no lines were created, use the original content as a single item
+        if (empty($lines)) {
+            $lines[] = $content;
+        }
+
+        return $lines;
     }
 
     /**
@@ -776,5 +865,417 @@ class PresentationController extends Controller
                 'status' => $isAvailable ? 'online' : 'offline'
             ]
         ]);
+    }
+
+    /**
+     * Get all presentation files for the authenticated user
+     */
+    public function getPresentationFiles(Request $request): JsonResponse
+    {
+        try {
+            $userId = auth()->id() ?? 5;
+            $perPage = $request->get('per_page', 15);
+            $search = $request->get('search');
+
+            $result = $this->aiPresentationService->getUserPresentationFiles($userId, $perPage, $search);
+
+            return response()->json($result);
+
+        } catch (\Exception $e) {
+            Log::error('Get presentation files failed', [
+                'error' => $e->getMessage(),
+                'user_id' => auth()->id() ?? null
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to get presentation files'
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete a presentation file
+     */
+    public function deletePresentationFile($fileId): JsonResponse
+    {
+        try {
+            $userId = auth()->id() ?? 5;
+
+            $result = $this->aiPresentationService->deletePresentationFile($fileId, $userId);
+
+            if ($result['success']) {
+                return response()->json($result);
+            } else {
+                return response()->json($result, 404);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Delete presentation file failed', [
+                'error' => $e->getMessage(),
+                'file_id' => $fileId,
+                'user_id' => auth()->id() ?? null
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to delete file'
+            ], 500);
+        }
+    }
+
+    /**
+     * Get editable content for a presentation file
+     */
+    public function getFileContent($fileId): JsonResponse
+    {
+        try {
+            $userId = auth()->id() ?? 5;
+
+            $result = $this->aiPresentationService->getPresentationFileContent($fileId, $userId);
+
+            if ($result['success']) {
+                return response()->json($result);
+            } else {
+                // Use 400 for missing content data (file exists but no content), 404 for file not found
+                $statusCode = strpos($result['error'], 'not found') !== false ? 404 : 400;
+                return response()->json($result, $statusCode);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Get presentation file content failed', [
+                'error' => $e->getMessage(),
+                'file_id' => $fileId,
+                'user_id' => auth()->id() ?? null
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to get file content'
+            ], 500);
+        }
+    }
+
+    /**
+     * Download a presentation file (protected - user authentication required)
+     */
+    public function downloadPresentationFile($fileId)
+    {
+        try {
+            $userId = auth()->id() ?? 5;
+
+            $result = $this->aiPresentationService->getPresentationFileForDownload($fileId, $userId);
+
+            if (!$result['success']) {
+                return response()->json([
+                    'success' => false,
+                    'error' => $result['error']
+                ], 404);
+            }
+
+            $file = $result['file'];
+            $filePath = $result['file_path'];
+
+            return response()->download($filePath, $file->filename, [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                'Content-Disposition' => 'attachment; filename="' . $file->filename . '"',
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Download presentation file failed', [
+                'error' => $e->getMessage(),
+                'file_id' => $fileId,
+                'user_id' => auth()->id() ?? null
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Download failed'
+            ], 500);
+        }
+    }
+
+    /**
+     * Get job status for presentation operations (outline, content, or export)
+     * GET /api/presentations/status?job_id={jobId}
+     */
+    public function getJobStatus(Request $request): JsonResponse
+    {
+        try {
+            $jobId = $request->query('job_id');
+            
+            if (!$jobId) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'job_id parameter is required'
+                ], 400);
+            }
+
+            $job = $this->universalJobService->getJob($jobId);
+            
+            if (!$job) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Job not found'
+                ], 404);
+            }
+
+            // Verify job is for presentations tool (outline, content, or export)
+            $validToolTypes = ['presentation_outline', 'presentation_content', 'presentation_export'];
+            $jobToolType = $job['tool_type'] ?? '';
+            
+            if (!in_array($jobToolType, $validToolTypes)) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Invalid job type. Must be one of: ' . implode(', ', $validToolTypes)
+                ], 400);
+            }
+
+            // Check if user owns this job (optional - can be public for polling)
+            $userId = auth()->id();
+            if ($userId && isset($job['user_id']) && $job['user_id'] !== $userId) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Unauthorized'
+                ], 403);
+            }
+
+            // Get stage information with user-friendly messages
+            $stage = $job['stage'] ?? 'initializing';
+            $stageInfo = $this->getStageInfo($jobToolType, $stage, $job['progress'] ?? 0);
+            
+            return response()->json([
+                'success' => true,
+                'job_id' => $job['id'],
+                'tool_type' => $jobToolType,
+                'status' => $job['status'] ?? 'unknown',
+                'progress' => $job['progress'] ?? 0,
+                'stage' => $stage,
+                'stage_message' => $stageInfo['message'],
+                'stage_description' => $stageInfo['description'],
+                'error' => $job['error'] ?? null,
+                'created_at' => $job['created_at'] ?? null,
+                'updated_at' => $job['updated_at'] ?? null,
+                'logs' => $job['logs'] ?? []
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Get presentation job status failed', [
+                'error' => $e->getMessage(),
+                'job_id' => $request->query('job_id'),
+                'user_id' => auth()->id() ?? null
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to get job status'
+            ], 500);
+        }
+    }
+
+    /**
+     * Get job result for presentation operations (outline, content, or export)
+     * GET /api/presentations/result?job_id={jobId}
+     */
+    public function getJobResult(Request $request): JsonResponse
+    {
+        try {
+            $jobId = $request->query('job_id');
+            
+            if (!$jobId) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'job_id parameter is required'
+                ], 400);
+            }
+
+            $job = $this->universalJobService->getJob($jobId);
+            
+            if (!$job) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Job not found'
+                ], 404);
+            }
+
+            // Verify job is for presentations tool (outline, content, or export)
+            $validToolTypes = ['presentation_outline', 'presentation_content', 'presentation_export'];
+            $jobToolType = $job['tool_type'] ?? '';
+            
+            if (!in_array($jobToolType, $validToolTypes)) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Invalid job type. Must be one of: ' . implode(', ', $validToolTypes)
+                ], 400);
+            }
+
+            // Check if user owns this job
+            $userId = auth()->id();
+            if ($userId && isset($job['user_id']) && $job['user_id'] !== $userId) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Unauthorized'
+                ], 403);
+            }
+
+            if (($job['status'] ?? '') !== 'completed') {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Job not completed yet',
+                    'status' => $job['status'] ?? 'unknown',
+                    'progress' => $job['progress'] ?? 0
+                ], 202);
+            }
+
+            return response()->json([
+                'success' => true,
+                'job_id' => $job['id'],
+                'tool_type' => $jobToolType,
+                'result' => $job['result'] ?? null,
+                'metadata' => $job['metadata'] ?? []
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Get presentation job result failed', [
+                'error' => $e->getMessage(),
+                'job_id' => $request->query('job_id'),
+                'user_id' => auth()->id() ?? null
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to get job result'
+            ], 500);
+        }
+    }
+
+    /**
+     * Get user-friendly stage information based on tool type and stage
+     */
+    private function getStageInfo($toolType, $stage, $progress)
+    {
+        $stages = [
+            'presentation_outline' => [
+                'initializing' => [
+                    'message' => 'Preparing to generate outline...',
+                    'description' => 'Setting up the outline generation process'
+                ],
+                'analyzing_content' => [
+                    'message' => 'Analyzing your input...',
+                    'description' => 'Processing the provided content to understand the topic'
+                ],
+                'processing_file' => [
+                    'message' => 'Reading and processing file...',
+                    'description' => 'Extracting content from the uploaded file'
+                ],
+                'processing_text' => [
+                    'message' => 'Processing text content...',
+                    'description' => 'Analyzing the text to identify key points'
+                ],
+                'generating_outline' => [
+                    'message' => 'Generating presentation outline...',
+                    'description' => 'Creating the structure and slides for your presentation'
+                ],
+                'ai_processing' => [
+                    'message' => 'AI is creating your outline...',
+                    'description' => 'Using AI to generate a comprehensive presentation outline'
+                ],
+                'finalizing' => [
+                    'message' => 'Finalizing outline...',
+                    'description' => 'Completing the outline and preparing it for you'
+                ],
+                'completed' => [
+                    'message' => 'Outline generated successfully!',
+                    'description' => 'Your presentation outline is ready'
+                ],
+                'failed' => [
+                    'message' => 'Outline generation failed',
+                    'description' => 'An error occurred while generating the outline'
+                ]
+            ],
+            'presentation_content' => [
+                'initializing' => [
+                    'message' => 'Preparing to generate content...',
+                    'description' => 'Setting up the content generation process'
+                ],
+                'validating' => [
+                    'message' => 'Validating outline structure...',
+                    'description' => 'Checking that your outline is properly formatted'
+                ],
+                'processing_outline' => [
+                    'message' => 'Processing outline...',
+                    'description' => 'Analyzing your presentation outline'
+                ],
+                'generating_content' => [
+                    'message' => 'Generating slide content...',
+                    'description' => 'Creating detailed content for each slide'
+                ],
+                'ai_processing' => [
+                    'message' => 'AI is writing your content...',
+                    'description' => 'Using AI to generate comprehensive content for all slides'
+                ],
+                'enhancing_content' => [
+                    'message' => 'Enhancing content quality...',
+                    'description' => 'Refining and improving the generated content'
+                ],
+                'finalizing' => [
+                    'message' => 'Finalizing content...',
+                    'description' => 'Completing the content generation process'
+                ],
+                'completed' => [
+                    'message' => 'Content generated successfully!',
+                    'description' => 'Your presentation content is ready'
+                ],
+                'failed' => [
+                    'message' => 'Content generation failed',
+                    'description' => 'An error occurred while generating the content'
+                ]
+            ],
+            'presentation_export' => [
+                'initializing' => [
+                    'message' => 'Preparing to export presentation...',
+                    'description' => 'Setting up the export process'
+                ],
+                'validating' => [
+                    'message' => 'Validating presentation data...',
+                    'description' => 'Checking that all presentation content is valid'
+                ],
+                'calling_microservice' => [
+                    'message' => 'Generating PowerPoint file...',
+                    'description' => 'Creating your PowerPoint presentation with the selected template'
+                ],
+                'generating_pptx' => [
+                    'message' => 'Building PowerPoint slides...',
+                    'description' => 'Assembling all slides into a PowerPoint file'
+                ],
+                'applying_template' => [
+                    'message' => 'Applying template and styling...',
+                    'description' => 'Adding your chosen template, colors, and fonts'
+                ],
+                'saving_file' => [
+                    'message' => 'Saving your presentation...',
+                    'description' => 'Storing the generated PowerPoint file'
+                ],
+                'finalizing' => [
+                    'message' => 'Finalizing export...',
+                    'description' => 'Completing the export process'
+                ],
+                'completed' => [
+                    'message' => 'Export completed successfully!',
+                    'description' => 'Your PowerPoint file is ready for download'
+                ],
+                'failed' => [
+                    'message' => 'Export failed',
+                    'description' => 'An error occurred while exporting the presentation'
+                ]
+            ]
+        ];
+
+        $defaultStage = [
+            'message' => 'Processing...',
+            'description' => 'Your request is being processed'
+        ];
+
+        return $stages[$toolType][$stage] ?? $defaultStage;
     }
 }

@@ -32,7 +32,7 @@ class UniversalFileManagementModule
         YouTubeService $youtubeService,
         AIMathService $aiMathService,
         FlashcardGenerationService $flashcardService,
-        AIPresentationService $presentationService,
+        ?AIPresentationService $presentationService = null,
         AIProcessingModule $aiProcessingModule,
         ContentExtractionService $contentExtractionService,
         TranscriberModule $transcriberModule
@@ -42,10 +42,34 @@ class UniversalFileManagementModule
         $this->youtubeService = $youtubeService;
         $this->aiMathService = $aiMathService;
         $this->flashcardService = $flashcardService;
+        // Lazy loading: Don't resolve AIPresentationService at construction
+        // This breaks the circular dependency chain at initialization
         $this->presentationService = $presentationService;
         $this->aiProcessingModule = $aiProcessingModule;
         $this->contentExtractionService = $contentExtractionService;
         $this->transcriberModule = $transcriberModule;
+    }
+
+    /**
+     * Get AIPresentationService with lazy loading
+     * Resolves the service only when needed, breaking circular dependency at startup
+     */
+    private function getPresentationService()
+    {
+        if ($this->presentationService === null) {
+            // Register current UniversalJobService instance in container before resolving
+            // This breaks the circular dependency: when AIPresentationService tries to resolve
+            // UniversalJobService, Laravel will return the already-registered instance
+            $container = app();
+            if ($container->bound(\App\Services\UniversalJobService::class)) {
+                // If UniversalJobService is already registered, use it
+                $this->presentationService = $container->make(\App\Services\AIPresentationService::class);
+            } else {
+                // Fallback: resolve normally (shouldn't happen if UniversalJobService is registered first)
+                $this->presentationService = $container->make(\App\Services\AIPresentationService::class);
+            }
+        }
+        return $this->presentationService;
     }
 
     /**
@@ -370,7 +394,7 @@ class UniversalFileManagementModule
     public function processForPresentation($content, $options = [])
     {
         $text = $content['text'];
-        $result = $this->presentationService->generatePresentation($text, $options);
+        $result = $this->getPresentationService()->generatePresentation($text, $options);
         
         return [
             'success' => true,

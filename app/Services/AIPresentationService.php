@@ -3,18 +3,22 @@
 namespace App\Services;
 
 use App\Models\AIResult;
+use App\Models\PresentationFile;
 use App\Services\Modules\AIProcessingModule;
 use App\Services\AIResultService;
 use App\Services\Modules\ContentExtractionService;
+use App\Services\UniversalJobService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 
 class AIPresentationService
 {
     private $aiProcessingModule;
     private $aiResultService;
     private $contentExtractionService;
+    private $universalJobService;
     private $microserviceUrl;
     private $microserviceApiKey;
     private $microserviceTimeout;
@@ -22,11 +26,13 @@ class AIPresentationService
     public function __construct(
         AIProcessingModule $aiProcessingModule,
         AIResultService $aiResultService,
-        ContentExtractionService $contentExtractionService
+        ContentExtractionService $contentExtractionService,
+        UniversalJobService $universalJobService
     ) {
         $this->aiProcessingModule = $aiProcessingModule;
         $this->aiResultService = $aiResultService;
         $this->contentExtractionService = $contentExtractionService;
+        $this->universalJobService = $universalJobService;
         $this->microserviceUrl = env('PRESENTATION_MICROSERVICE_URL', 'http://localhost:8001');
         $this->microserviceApiKey = env('PRESENTATION_MICROSERVICE_API_KEY');
         $this->microserviceTimeout = env('PRESENTATION_MICROSERVICE_TIMEOUT', 300);
@@ -34,6 +40,7 @@ class AIPresentationService
 
     /**
      * Generate presentation outline from user input
+     * Uses async job system - returns job_id for status polling
      */
     public function generateOutline($inputData, $userId)
     {
@@ -53,47 +60,24 @@ class AIPresentationService
                 ];
             }
 
-            // Generate presentation outline using microservice
-            $outline = $this->callMicroserviceForOutline($content['content'], $inputData);
-
-            if (!$outline['success']) {
-                return [
-                    'success' => false,
-                    'error' => $outline['error']
-                ];
-            }
-
-            // Save initial result
-            $aiResult = $this->aiResultService->saveResult(
-                $userId,
-                'presentation',
-                $outline['data']['title'],
-                'AI-generated presentation outline',
-                $inputData,
-                $outline['data'],
+            // Create job using Universal Job Scheduler
+            $job = $this->universalJobService->createJob(
+                'presentation_outline',
                 [
-                    'step' => 'outline_generated',
-                    'input_type' => $inputData['input_type'] ?? 'text',
-                    'language' => $inputData['language'] ?? 'English',
-                    'tone' => $inputData['tone'] ?? 'Professional',
-                    'length' => $inputData['length'] ?? 'Medium',
-                    'model' => $inputData['model'] ?? 'Basic Model'
-                ]
+                    'content' => $content['content'],
+                    'input_data' => $inputData
+                ],
+                [],
+                $userId
             );
 
-            if (!$aiResult['success']) {
-                return [
-                    'success' => false,
-                    'error' => 'Failed to save presentation outline: ' . $aiResult['error']
-                ];
-            }
+            // Queue the job for async processing
+            $this->universalJobService->queueJob($job['id']);
 
             return [
                 'success' => true,
-                'data' => [
-                    'outline' => $outline['data'],
-                    'ai_result_id' => $aiResult['ai_result']->id
-                ]
+                'job_id' => $job['id'],
+                'message' => 'Outline generation job created successfully. Use job_id to check status.'
             ];
 
         } catch (\Exception $e) {
@@ -105,7 +89,7 @@ class AIPresentationService
 
             return [
                 'success' => false,
-                'error' => 'Failed to generate presentation outline: ' . $e->getMessage()
+                'error' => 'Failed to create outline generation job: ' . $e->getMessage() . '. Please try again with the same data.'
             ];
         }
     }
@@ -920,76 +904,840 @@ Format the response as a JSON object with a 'content' field containing an array 
 
     /**
      * Generate full presentation content from outline
+     * Uses async job system - returns job_id for status polling
      */
-    public function generateFullContent($aiResultId, $userId, $language = 'English', $tone = 'Professional', $detailLevel = 'detailed')
+    public function generateFullContent($outline, $userId, $language = 'English', $tone = 'Professional', $detailLevel = 'detailed')
     {
         try {
             Log::info('Starting full content generation', [
-                'ai_result_id' => $aiResultId,
-                'user_id' => $userId
+                'user_id' => $userId,
+                'language' => $language,
+                'tone' => $tone
             ]);
 
-            // Get the AI result
-            $aiResult = AIResult::where('id', $aiResultId)
-                ->where('tool_type', 'presentation')
-                ->first();
-            
-            if (!$aiResult) {
+            // Validate outline structure
+            $validation = $this->validateOutlineStructure($outline);
+            if (!$validation['valid']) {
                 return [
                     'success' => false,
-                    'error' => 'Presentation not found'
+                    'error' => 'Invalid outline structure: ' . $validation['error']
                 ];
             }
 
-            // Get outline from result data
-            $outline = $aiResult->result_data;
-            if (!$outline || !isset($outline['slides'])) {
-                return [
-                    'success' => false,
-                    'error' => 'Invalid outline data'
-                ];
-            }
-
-            // Generate content using microservice
-            $contentResult = $this->callMicroserviceForContent($outline, $language, $tone, $detailLevel);
-
-            if (!$contentResult['success']) {
-                return [
-                    'success' => false,
-                    'error' => $contentResult['error']
-                ];
-            }
-
-            // Update AI result with full content
-            $aiResult->update([
-                'result_data' => $contentResult['data'],
-                'metadata' => array_merge($aiResult->metadata ?? [], [
-                    'content_generated_at' => now()->toISOString(),
-                    'content_generated_by' => 'microservice',
+            // Create job using Universal Job Scheduler
+            $job = $this->universalJobService->createJob(
+                'presentation_content',
+                [
+                    'outline' => $outline,
                     'language' => $language,
                     'tone' => $tone,
                     'detail_level' => $detailLevel
-                ])
-            ]);
+                ],
+                [],
+                $userId
+            );
+
+            // Queue the job for async processing
+            $this->universalJobService->queueJob($job['id']);
 
             return [
                 'success' => true,
-                'data' => $contentResult['data'],
-                'message' => 'Full content generated successfully'
+                'job_id' => $job['id'],
+                'message' => 'Content generation job created successfully. Use job_id to check status.'
             ];
 
         } catch (\Exception $e) {
             Log::error('Full content generation failed', [
                 'error' => $e->getMessage(),
-                'ai_result_id' => $aiResultId,
                 'user_id' => $userId
             ]);
 
             return [
                 'success' => false,
-                'error' => 'Failed to generate full content: ' . $e->getMessage()
+                'error' => 'Failed to create content generation job: ' . $e->getMessage() . '. Please try again with the same data.'
             ];
         }
+    }
+
+    /**
+     * Export presentation to PowerPoint using Universal Job Scheduler
+     * Accepts content + style from frontend, validates, processes async, saves file
+     */
+    public function exportPresentation($presentationData, $userId, $templateData = null)
+    {
+        try {
+            Log::info('Starting presentation export', [
+                'user_id' => $userId
+            ]);
+
+            // Validate content structure
+            $validation = $this->validateContentStructure($presentationData);
+            if (!$validation['valid']) {
+                return [
+                    'success' => false,
+                    'error' => 'Invalid content structure: ' . $validation['error']
+                ];
+            }
+
+            // Create job using Universal Job Scheduler
+            $job = $this->universalJobService->createJob(
+                'presentation_export',
+                [
+                    'presentation_data' => $presentationData,
+                    'template_data' => $templateData
+                ],
+                [],
+                $userId
+            );
+
+            // Queue the job for async processing
+            $this->universalJobService->queueJob($job['id']);
+
+            return [
+                'success' => true,
+                'job_id' => $job['id'],
+                'message' => 'Export job created successfully. Use job_id to check status.'
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Export job creation failed', [
+                'error' => $e->getMessage(),
+                'user_id' => $userId
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Failed to create export job: ' . $e->getMessage() . '. Please try again with the same data.'
+            ];
+        }
+    }
+
+    /**
+     * Process presentation outline generation job (called by Universal Job Scheduler)
+     */
+    public function processOutlineJob($jobId, $job)
+    {
+        try {
+            $this->universalJobService->updateJob($jobId, [
+                'stage' => 'extracting_content',
+                'progress' => 10
+            ]);
+
+            $content = $job['input']['content'];
+            $inputData = $job['input']['input_data'];
+            $userId = $job['user_id'];
+
+            $language = $inputData['language'] ?? 'English';
+            $tone = $inputData['tone'] ?? 'Professional';
+            $length = $inputData['length'] ?? 'Medium';
+            $model = $inputData['model'] ?? null;
+
+            $this->universalJobService->updateJob($jobId, [
+                'stage' => 'submitting_to_microservice',
+                'progress' => 20
+            ]);
+
+            // Prepare request data for microservice
+            $requestData = [
+                'content' => $content,
+                'language' => $language,
+                'tone' => $tone,
+                'length' => $length
+            ];
+            
+            if ($model) {
+                $requestData['model'] = $model;
+            }
+
+            // Submit job to microservice (async)
+            $microserviceResponse = $this->callMicroservice($this->microserviceUrl . '/generate-outline', $requestData, true);
+
+            if (!$microserviceResponse['success'] || !isset($microserviceResponse['job_id'])) {
+                $this->universalJobService->failJob($jobId, $microserviceResponse['error'] ?? 'Failed to submit job to microservice');
+                return ['success' => false, 'error' => $microserviceResponse['error'] ?? 'Failed to submit job to microservice'];
+            }
+
+            $microserviceJobId = $microserviceResponse['job_id'];
+
+            $this->universalJobService->updateJob($jobId, [
+                'stage' => 'polling_microservice',
+                'progress' => 30
+            ]);
+
+            // Poll microservice for completion
+            $maxAttempts = 120; // 4 minutes max (120 * 2 seconds)
+            $intervalSeconds = 2;
+
+            for ($attempt = 0; $attempt < $maxAttempts; $attempt++) {
+                // Memory cleanup
+                if ($attempt % 10 === 0 && function_exists('gc_collect_cycles')) {
+                    gc_collect_cycles();
+                }
+
+                $statusResponse = $this->getJobStatus($microserviceJobId);
+                
+                if (!$statusResponse['success']) {
+                    $this->universalJobService->failJob($jobId, 'Failed to get microservice job status: ' . ($statusResponse['error'] ?? 'Unknown error'));
+                    return ['success' => false, 'error' => $statusResponse['error'] ?? 'Failed to get job status'];
+                }
+
+                // Validate response structure
+                if (!isset($statusResponse['data']) || !is_array($statusResponse['data'])) {
+                    $this->universalJobService->failJob($jobId, 'Invalid microservice response structure');
+                    return ['success' => false, 'error' => 'Invalid microservice response structure'];
+                }
+
+                $statusData = $statusResponse['data'];
+                $status = $statusData['status'] ?? 'unknown';
+                $progress = $statusData['progress'] ?? 0;
+
+                // Break on invalid status after a few attempts
+                if ($status === 'unknown' && $attempt > 5) {
+                    $this->universalJobService->failJob($jobId, 'Microservice returned unknown status repeatedly');
+                    return ['success' => false, 'error' => 'Microservice returned unknown status'];
+                }
+
+                // Update progress based on microservice progress
+                $laravelProgress = 30 + (int)($progress * 0.6); // 30-90% range
+                $this->universalJobService->updateJob($jobId, [
+                    'stage' => 'generating_outline',
+                    'progress' => $laravelProgress
+                ]);
+
+                if ($status === 'completed') {
+                    // Get result from microservice
+                    $resultResponse = $this->getJobResult($microserviceJobId);
+                    
+                    if (!$resultResponse['success']) {
+                        $this->universalJobService->failJob($jobId, 'Failed to get microservice job result: ' . ($resultResponse['error'] ?? 'Unknown error'));
+                        return ['success' => false, 'error' => $resultResponse['error'] ?? 'Failed to get job result'];
+                    }
+
+                    $outlineData = $resultResponse['data']['data'] ?? $resultResponse['data'] ?? null;
+
+                    if (!$outlineData) {
+                        $this->universalJobService->failJob($jobId, 'Microservice result missing outline data');
+                        return ['success' => false, 'error' => 'Result missing outline data'];
+                    }
+
+                    $this->universalJobService->completeJob($jobId, [
+                        'outline' => $outlineData
+                    ], [
+                        'microservice_job_id' => $microserviceJobId,
+                        'language' => $language,
+                        'tone' => $tone,
+                        'length' => $length
+                    ]);
+
+                    return [
+                        'success' => true,
+                        'data' => ['outline' => $outlineData]
+                    ];
+                } elseif ($status === 'failed') {
+                    $errorMessage = $statusData['error'] ?? $statusData['message'] ?? 'Microservice job failed';
+                    $this->universalJobService->failJob($jobId, $errorMessage);
+                    return ['success' => false, 'error' => $errorMessage];
+                }
+
+                // Wait before next poll
+                sleep($intervalSeconds);
+            }
+
+            // Timeout
+            $this->universalJobService->failJob($jobId, 'Outline generation timed out after ' . ($maxAttempts * $intervalSeconds) . ' seconds');
+            return ['success' => false, 'error' => 'Job timed out'];
+
+        } catch (\Exception $e) {
+            Log::error('Outline job processing failed', [
+                'error' => $e->getMessage(),
+                'job_id' => $jobId
+            ]);
+
+            $this->universalJobService->failJob($jobId, 'Outline generation failed: ' . $e->getMessage());
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Process presentation content generation job (called by Universal Job Scheduler)
+     */
+    public function processContentJob($jobId, $job)
+    {
+        try {
+            $this->universalJobService->updateJob($jobId, [
+                'stage' => 'validating',
+                'progress' => 10
+            ]);
+
+            $outline = $job['input']['outline'];
+            $language = $job['input']['language'] ?? 'English';
+            $tone = $job['input']['tone'] ?? 'Professional';
+            $detailLevel = $job['input']['detail_level'] ?? 'detailed';
+            $userId = $job['user_id'];
+
+            // Validate outline structure
+            $validation = $this->validateOutlineStructure($outline);
+            if (!$validation['valid']) {
+                $this->universalJobService->failJob($jobId, 'Invalid outline structure: ' . $validation['error']);
+                return ['success' => false, 'error' => $validation['error']];
+            }
+
+            $this->universalJobService->updateJob($jobId, [
+                'stage' => 'submitting_to_microservice',
+                'progress' => 20
+            ]);
+
+            // Prepare request data for microservice
+            $requestData = [
+                'outline' => $outline,
+                'language' => $language,
+                'tone' => $tone,
+                'detail_level' => $detailLevel
+            ];
+
+            // Submit job to microservice (async)
+            $microserviceResponse = $this->callMicroservice($this->microserviceUrl . '/generate-content', $requestData, true);
+
+            if (!$microserviceResponse['success'] || !isset($microserviceResponse['job_id'])) {
+                $this->universalJobService->failJob($jobId, $microserviceResponse['error'] ?? 'Failed to submit job to microservice');
+                return ['success' => false, 'error' => $microserviceResponse['error'] ?? 'Failed to submit job to microservice'];
+            }
+
+            $microserviceJobId = $microserviceResponse['job_id'];
+
+            $this->universalJobService->updateJob($jobId, [
+                'stage' => 'polling_microservice',
+                'progress' => 30
+            ]);
+
+            // Poll microservice for completion
+            $maxAttempts = 120; // 4 minutes max
+            $intervalSeconds = 2;
+
+            for ($attempt = 0; $attempt < $maxAttempts; $attempt++) {
+                // Memory cleanup
+                if ($attempt % 10 === 0 && function_exists('gc_collect_cycles')) {
+                    gc_collect_cycles();
+                }
+
+                $statusResponse = $this->getJobStatus($microserviceJobId);
+                
+                if (!$statusResponse['success']) {
+                    $this->universalJobService->failJob($jobId, 'Failed to get microservice job status: ' . ($statusResponse['error'] ?? 'Unknown error'));
+                    return ['success' => false, 'error' => $statusResponse['error'] ?? 'Failed to get job status'];
+                }
+
+                // Validate response structure
+                if (!isset($statusResponse['data']) || !is_array($statusResponse['data'])) {
+                    $this->universalJobService->failJob($jobId, 'Invalid microservice response structure');
+                    return ['success' => false, 'error' => 'Invalid microservice response structure'];
+                }
+
+                $statusData = $statusResponse['data'];
+                $status = $statusData['status'] ?? 'unknown';
+                $progress = $statusData['progress'] ?? 0;
+
+                // Break on invalid status after a few attempts
+                if ($status === 'unknown' && $attempt > 5) {
+                    $this->universalJobService->failJob($jobId, 'Microservice returned unknown status repeatedly');
+                    return ['success' => false, 'error' => 'Microservice returned unknown status'];
+                }
+
+                // Update progress based on microservice progress
+                $laravelProgress = 30 + (int)($progress * 0.6); // 30-90% range
+                $this->universalJobService->updateJob($jobId, [
+                    'stage' => 'generating_content',
+                    'progress' => $laravelProgress
+                ]);
+
+                if ($status === 'completed') {
+                    // Get result from microservice
+                    $resultResponse = $this->getJobResult($microserviceJobId);
+                    
+                    if (!$resultResponse['success']) {
+                        $this->universalJobService->failJob($jobId, 'Failed to get microservice job result: ' . ($resultResponse['error'] ?? 'Unknown error'));
+                        return ['success' => false, 'error' => $resultResponse['error'] ?? 'Failed to get job result'];
+                    }
+
+                    $contentData = $resultResponse['data']['data'] ?? $resultResponse['data'] ?? null;
+
+                    if (!$contentData) {
+                        $this->universalJobService->failJob($jobId, 'Microservice result missing content data');
+                        return ['success' => false, 'error' => 'Result missing content data'];
+                    }
+
+                    $this->universalJobService->completeJob($jobId, [
+                        'content' => $contentData
+                    ], [
+                        'microservice_job_id' => $microserviceJobId,
+                        'language' => $language,
+                        'tone' => $tone,
+                        'detail_level' => $detailLevel
+                    ]);
+
+                    return [
+                        'success' => true,
+                        'data' => ['content' => $contentData]
+                    ];
+                } elseif ($status === 'failed') {
+                    $errorMessage = $statusData['error'] ?? $statusData['message'] ?? 'Microservice job failed';
+                    $this->universalJobService->failJob($jobId, $errorMessage);
+                    return ['success' => false, 'error' => $errorMessage];
+                }
+
+                // Wait before next poll
+                sleep($intervalSeconds);
+            }
+
+            // Timeout
+            $this->universalJobService->failJob($jobId, 'Content generation timed out after ' . ($maxAttempts * $intervalSeconds) . ' seconds');
+            return ['success' => false, 'error' => 'Job timed out'];
+
+        } catch (\Exception $e) {
+            Log::error('Content job processing failed', [
+                'error' => $e->getMessage(),
+                'job_id' => $jobId
+            ]);
+
+            $this->universalJobService->failJob($jobId, 'Content generation failed: ' . $e->getMessage());
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Process presentation export job (called by Universal Job Scheduler)
+     */
+    public function processExportJob($jobId, $job)
+    {
+        try {
+            $this->universalJobService->updateJob($jobId, [
+                'stage' => 'validating',
+                'progress' => 10
+            ]);
+
+            $presentationData = $job['input']['presentation_data'];
+            $templateData = $job['input']['template_data'] ?? null;
+            $userId = $job['user_id'];
+
+            // Transform content format if needed (convert string content to array)
+            $presentationData = $this->transformContentForExport($presentationData);
+
+            // Validate content structure
+            $validation = $this->validateContentStructure($presentationData);
+            if (!$validation['valid']) {
+                $errorMessage = is_array($validation['error']) ? json_encode($validation['error']) : (string)$validation['error'];
+                $this->universalJobService->failJob($jobId, 'Invalid content structure: ' . $errorMessage);
+                return ['success' => false, 'error' => $errorMessage];
+            }
+
+            $this->universalJobService->updateJob($jobId, [
+                'stage' => 'calling_microservice',
+                'progress' => 30
+            ]);
+
+            // Prepare data for microservice - content can be string or array
+            // The microservice accepts content as string in slides
+            $slides = [];
+            foreach ($presentationData['slides'] as $index => $slide) {
+                // Content can be string or array - microservice accepts both
+                $content = $slide['content'] ?? '';
+                
+                // If content is an array, convert to string (join with newlines)
+                if (is_array($content)) {
+                    $content = implode("\n", $content);
+                } elseif (!is_string($content)) {
+                    $content = (string)$content;
+                }
+                
+                $processedSlide = [
+                    'slide_number' => $slide['slide_number'] ?? ($index + 1),
+                    'header' => $slide['header'] ?? '',
+                    'subheaders' => is_array($slide['subheaders'] ?? null) ? $slide['subheaders'] : [],
+                    'slide_type' => $slide['slide_type'] ?? 'content',
+                    'content' => $content
+                ];
+                $slides[] = $processedSlide;
+            }
+
+            // Microservice expects 'content' root key, not 'presentation_data'
+            $requestData = [
+                'content' => [
+                    'title' => (string)($presentationData['title'] ?? 'Presentation'),
+                    'slides' => $slides
+                ],
+                'random_id' => (string)$jobId, // Use Zooys job ID as random_id
+                'user_id' => (int)$userId,
+                'template' => (string)($templateData['template'] ?? 'corporate_blue'),
+                'color_scheme' => (string)($templateData['color_scheme'] ?? 'blue'),
+                'font_style' => (string)($templateData['font_style'] ?? 'modern')
+            ];
+
+            // Validate all data types before sending
+            try {
+                // Test JSON encoding to catch any array-to-string issues
+                $testJson = json_encode($requestData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                if (json_last_error() !== JSON_ERROR_NONE) {
+                    throw new \Exception('JSON encoding failed: ' . json_last_error_msg());
+                }
+                
+                Log::info('Prepared export request data', [
+                    'slides_count' => count($slides),
+                    'first_slide_content_type' => gettype($slides[0]['content'] ?? null),
+                    'first_slide_content_is_array' => is_array($slides[0]['content'] ?? null),
+                    'json_encode_success' => true
+                ]);
+            } catch (\Exception $e) {
+                Log::error('Failed to prepare export request data', [
+                    'error' => $e->getMessage(),
+                    'slides_count' => count($slides)
+                ]);
+                $this->universalJobService->failJob($jobId, 'Failed to prepare export data: ' . $e->getMessage());
+                return ['success' => false, 'error' => $e->getMessage()];
+            }
+
+            // Submit job to microservice (async)
+            $microserviceResponse = $this->callMicroservice($this->microserviceUrl . '/export', $requestData, true);
+
+            if (!$microserviceResponse['success'] || !isset($microserviceResponse['job_id'])) {
+                $errorMsg = $microserviceResponse['error'] ?? 'Failed to submit job to microservice';
+                $errorMsg = is_array($errorMsg) ? json_encode($errorMsg) : (string)$errorMsg;
+                $this->universalJobService->failJob($jobId, $errorMsg);
+                return ['success' => false, 'error' => $errorMsg];
+            }
+
+            $microserviceJobId = $microserviceResponse['job_id'];
+
+            $this->universalJobService->updateJob($jobId, [
+                'stage' => 'polling_microservice',
+                'progress' => 40
+            ]);
+
+            // Poll microservice for completion
+            $maxAttempts = 180; // 6 minutes max (180 * 2 seconds) - export takes longer
+            $intervalSeconds = 2;
+
+            for ($attempt = 0; $attempt < $maxAttempts; $attempt++) {
+                // Memory cleanup
+                if ($attempt % 10 === 0 && function_exists('gc_collect_cycles')) {
+                    gc_collect_cycles();
+                }
+
+                $statusResponse = $this->getJobStatus($microserviceJobId);
+                
+                if (!$statusResponse['success']) {
+                    $this->universalJobService->failJob($jobId, 'Failed to get microservice job status: ' . ($statusResponse['error'] ?? 'Unknown error'));
+                    return ['success' => false, 'error' => $statusResponse['error'] ?? 'Failed to get job status'];
+                }
+
+                // Validate response structure
+                if (!isset($statusResponse['data']) || !is_array($statusResponse['data'])) {
+                    $this->universalJobService->failJob($jobId, 'Invalid microservice response structure');
+                    return ['success' => false, 'error' => 'Invalid microservice response structure'];
+                }
+
+                $statusData = $statusResponse['data'];
+                $status = $statusData['status'] ?? 'unknown';
+                $progress = $statusData['progress'] ?? 0;
+
+                // Break on invalid status after a few attempts
+                if ($status === 'unknown' && $attempt > 5) {
+                    $this->universalJobService->failJob($jobId, 'Microservice returned unknown status repeatedly');
+                    return ['success' => false, 'error' => 'Microservice returned unknown status'];
+                }
+
+                // Update progress based on microservice progress
+                $laravelProgress = 40 + (int)($progress * 0.4); // 40-80% range
+                $this->universalJobService->updateJob($jobId, [
+                    'stage' => 'generating_pptx',
+                    'progress' => $laravelProgress
+                ]);
+
+                if ($status === 'completed') {
+                    // Get result from microservice
+                    $resultResponse = $this->getJobResult($microserviceJobId);
+                    
+                    if (!$resultResponse['success']) {
+                        $this->universalJobService->failJob($jobId, 'Failed to get microservice job result: ' . ($resultResponse['error'] ?? 'Unknown error'));
+                        return ['success' => false, 'error' => $resultResponse['error'] ?? 'Failed to get job result'];
+                    }
+
+                    $exportData = $resultResponse['data']['data'] ?? $resultResponse['data'] ?? null;
+
+                    if (!$exportData || !isset($exportData['file_content'])) {
+                        $this->universalJobService->failJob($jobId, 'Microservice result missing file content');
+                        return ['success' => false, 'error' => 'Result missing file content'];
+                    }
+
+                    $this->universalJobService->updateJob($jobId, [
+                        'stage' => 'saving_file',
+                        'progress' => 85
+                    ]);
+
+                    // Save file
+                    $fileResult = $this->savePresentationFile(
+                        $userId,
+                        $presentationData['title'],
+                        $exportData,
+                        $templateData,
+                        $presentationData // Store original content data for editing
+                    );
+
+                    if (!$fileResult['success']) {
+                        $this->universalJobService->failJob($jobId, $fileResult['error']);
+                        return ['success' => false, 'error' => $fileResult['error']];
+                    }
+
+                    $this->universalJobService->completeJob($jobId, [
+                        'file_id' => $fileResult['file_id'],
+                        'filename' => $fileResult['filename'],
+                        'download_url' => $fileResult['download_url'],
+                        'file_size' => $fileResult['file_size'],
+                        'slides_count' => $fileResult['slides_count']
+                    ], [
+                        'microservice_job_id' => $microserviceJobId,
+                        'file_size' => $fileResult['file_size'],
+                        'slides_count' => $fileResult['slides_count']
+                    ]);
+
+                    return [
+                        'success' => true,
+                        'data' => $fileResult
+                    ];
+                } elseif ($status === 'failed') {
+                    $errorMessage = $statusData['error'] ?? $statusData['message'] ?? 'Microservice job failed';
+                    $this->universalJobService->failJob($jobId, $errorMessage);
+                    return ['success' => false, 'error' => $errorMessage];
+                }
+
+                // Wait before next poll
+                sleep($intervalSeconds);
+            }
+
+            // Timeout
+            $this->universalJobService->failJob($jobId, 'Export timed out after ' . ($maxAttempts * $intervalSeconds) . ' seconds');
+            return ['success' => false, 'error' => 'Job timed out'];
+
+        } catch (\Exception $e) {
+            Log::error('Export job processing failed', [
+                'error' => $e->getMessage(),
+                'job_id' => $jobId,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            $errorMessage = 'Export failed: ' . $e->getMessage();
+            $this->universalJobService->failJob($jobId, $errorMessage);
+            return ['success' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Save presentation file to storage and database
+     * @param int $userId
+     * @param string $title
+     * @param array $microserviceResponse
+     * @param array|null $templateData
+     * @param array|null $contentData The original content data for editing purposes
+     */
+    private function savePresentationFile($userId, $title, $microserviceResponse, $templateData = null, $contentData = null)
+    {
+        try {
+            // Decode base64 file content
+            $fileContent = base64_decode($microserviceResponse['file_content']);
+            $filename = $microserviceResponse['filename'] ?? 'presentation_' . Str::uuid() . '.pptx';
+            $fileSize = $microserviceResponse['file_size'] ?? strlen($fileContent);
+            $slidesCount = $microserviceResponse['metadata']['slides_count'] ?? 0;
+
+            // Create user-specific folder
+            $userFolder = 'presentations/' . $userId;
+            $filePath = $userFolder . '/' . $filename;
+
+            // Ensure directory exists
+            Storage::disk('public')->makeDirectory($userFolder);
+
+            // Save file
+            Storage::disk('public')->put($filePath, $fileContent);
+
+            // Create database record
+            $presentationFile = PresentationFile::create([
+                'user_id' => $userId,
+                'title' => $title,
+                'filename' => $filename,
+                'file_path' => $filePath,
+                'file_size' => $fileSize,
+                'template' => $templateData['template'] ?? null,
+                'color_scheme' => $templateData['color_scheme'] ?? null,
+                'font_style' => $templateData['font_style'] ?? null,
+                'slides_count' => $slidesCount,
+                'metadata' => [
+                    'exported_at' => now()->toISOString(),
+                    'exported_by' => 'fastapi_microservice'
+                ],
+                'content_data' => $contentData, // Store original content for editing
+                'expires_at' => now()->addMonth() // Auto-delete after 1 month
+            ]);
+
+            return [
+                'success' => true,
+                'file_id' => $presentationFile->id,
+                'filename' => $filename,
+                'download_url' => $presentationFile->file_url,
+                'file_size' => $fileSize,
+                'slides_count' => $slidesCount
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Save presentation file failed', [
+                'error' => $e->getMessage(),
+                'user_id' => $userId
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Failed to save file: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Get all presentation files for a user
+     */
+    public function getUserPresentationFiles($userId, $perPage = 15, $search = null)
+    {
+        $query = PresentationFile::where('user_id', $userId)
+            ->orderBy('created_at', 'desc');
+
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('title', 'like', "%{$search}%")
+                  ->orWhere('filename', 'like', "%{$search}%");
+            });
+        }
+
+        $files = $query->paginate($perPage);
+
+        return [
+            'success' => true,
+            'data' => [
+                'files' => $files->items(),
+                'pagination' => [
+                    'current_page' => $files->currentPage(),
+                    'last_page' => $files->lastPage(),
+                    'per_page' => $files->perPage(),
+                    'total' => $files->total()
+                ]
+            ]
+        ];
+    }
+
+    /**
+     * Delete a presentation file
+     */
+    public function deletePresentationFile($fileId, $userId)
+    {
+        try {
+            $file = PresentationFile::where('id', $fileId)
+                ->where('user_id', $userId)
+                ->first();
+
+            if (!$file) {
+                return [
+                    'success' => false,
+                    'error' => 'File not found'
+                ];
+            }
+
+            $file->delete(); // This will also delete the physical file via model boot
+
+            return [
+                'success' => true,
+                'message' => 'File deleted successfully'
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Delete presentation file failed', [
+                'error' => $e->getMessage(),
+                'file_id' => $fileId,
+                'user_id' => $userId
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'Failed to delete file: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Get editable content data for a presentation file
+     */
+    public function getPresentationFileContent($fileId, $userId)
+    {
+        $file = PresentationFile::where('id', $fileId)
+            ->where('user_id', $userId)
+            ->first();
+
+        if (!$file) {
+            return [
+                'success' => false,
+                'error' => 'File not found or access denied'
+            ];
+        }
+
+        if ($file->isExpired()) {
+            return [
+                'success' => false,
+                'error' => 'File has expired'
+            ];
+        }
+
+        if (!$file->content_data) {
+            return [
+                'success' => false,
+                'error' => 'Content data not available for this file. This file may have been created before the edit feature was added. Please re-export the presentation to enable editing.',
+                'file_exists' => true,
+                'can_re_export' => true
+            ];
+        }
+
+        return [
+            'success' => true,
+            'content' => $file->content_data,
+            'file_id' => $file->id,
+            'title' => $file->title,
+            'template' => $file->template,
+            'color_scheme' => $file->color_scheme,
+            'font_style' => $file->font_style
+        ];
+    }
+
+    /**
+     * Get presentation file for download (with authentication check)
+     */
+    public function getPresentationFileForDownload($fileId, $userId)
+    {
+        $file = PresentationFile::where('id', $fileId)
+            ->where('user_id', $userId)
+            ->first();
+
+        if (!$file) {
+            return [
+                'success' => false,
+                'error' => 'File not found or access denied'
+            ];
+        }
+
+        if ($file->isExpired()) {
+            return [
+                'success' => false,
+                'error' => 'File has expired'
+            ];
+        }
+
+        return [
+            'success' => true,
+            'file' => $file,
+            'file_path' => Storage::disk('public')->path($file->file_path)
+        ];
     }
 
     /**
@@ -1014,35 +1762,86 @@ Format the response as a JSON object with a 'content' field containing an array 
             if ($response->successful()) {
                 $responseData = $response->json();
                 
-                // Handle new API v3.1.0 response structure
-                if (isset($responseData['success']) && isset($responseData['templates'])) {
-                    $templates = [];
+                Log::info('Microservice templates response', [
+                    'status' => $response->status(),
+                    'response_keys' => is_array($responseData) ? array_keys($responseData) : [],
+                    'response_structure' => $responseData
+                ]);
+                
+                $templates = [];
+                
+                // Handle different response formats
+                // Format 1: { "success": true, "templates": [...] }
+                if (isset($responseData['success']) && isset($responseData['templates']) && is_array($responseData['templates'])) {
                     foreach ($responseData['templates'] as $template) {
-                        $templates[$template['id']] = [
-                            'name' => $template['name'],
-                            'description' => $template['description'],
-                            'color_scheme' => $this->extractColorScheme($template['colors'] ?? []),
-                            'category' => $this->inferCategory($template['id']),
-                            'colors' => $template['colors'] ?? [],
-                            'preview' => $template['preview'] ?? null
-                        ];
+                        if (isset($template['id'])) {
+                            $templates[$template['id']] = [
+                                'name' => $template['name'] ?? $template['id'],
+                                'description' => $template['description'] ?? 'Presentation template',
+                                'color_scheme' => $this->extractColorScheme($template['colors'] ?? []),
+                                'category' => $this->inferCategory($template['id']),
+                                'colors' => $template['colors'] ?? [],
+                                'preview' => $template['preview'] ?? null
+                            ];
+                        }
                     }
+                }
+                // Format 2: Direct array of templates
+                elseif (is_array($responseData) && isset($responseData[0]) && is_array($responseData[0])) {
+                    foreach ($responseData as $template) {
+                        $id = $template['id'] ?? $template['template_id'] ?? $template['name'] ?? null;
+                        if ($id) {
+                            $templates[$id] = [
+                                'name' => $template['name'] ?? $id,
+                                'description' => $template['description'] ?? 'Presentation template',
+                                'color_scheme' => $this->extractColorScheme($template['colors'] ?? $template['color_scheme'] ?? []),
+                                'category' => $this->inferCategory($id),
+                                'colors' => $template['colors'] ?? [],
+                                'preview' => $template['preview'] ?? null
+                            ];
+                        }
+                    }
+                }
+                // Format 3: Object with template IDs as keys
+                elseif (is_array($responseData) && !isset($responseData[0])) {
+                    foreach ($responseData as $id => $template) {
+                        if (is_array($template)) {
+                            $templates[$id] = [
+                                'name' => $template['name'] ?? $id,
+                                'description' => $template['description'] ?? 'Presentation template',
+                                'color_scheme' => $this->extractColorScheme($template['colors'] ?? $template['color_scheme'] ?? []),
+                                'category' => $this->inferCategory($id),
+                                'colors' => $template['colors'] ?? [],
+                                'preview' => $template['preview'] ?? null
+                            ];
+                        }
+                    }
+                }
+                
+                // Only return microservice templates if we got at least one
+                if (!empty($templates)) {
+                    Log::info('Successfully fetched templates from microservice', [
+                        'count' => count($templates),
+                        'template_ids' => array_keys($templates)
+                    ]);
                     return $templates;
                 }
             }
 
             // Fallback to hardcoded templates if microservice is unavailable
             Log::warning('Failed to fetch templates from microservice, using fallback', [
-                'http_code' => $response->status() ?? 'unknown'
+                'http_code' => $response->status() ?? 'unknown',
+                'response_body' => $response->body() ?? 'no body'
             ]);
 
         } catch (\Exception $e) {
             Log::warning('Error fetching templates from microservice, using fallback', [
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'url' => $this->microserviceUrl . '/templates'
             ]);
         }
 
-        // Fallback templates
+        // Always return fallback templates
         return [
             'corporate_blue' => [
                 'name' => 'Corporate Blue',
@@ -1212,9 +2011,35 @@ Format the response as a JSON object with a 'content' field containing an array 
             }
 
             // Make HTTP request using Laravel Http facade
-            $response = Http::timeout($this->microserviceTimeout)
-                ->withHeaders($headers)
-                ->post($url, $data);
+            // Ensure data is properly serializable
+            try {
+                $response = Http::timeout($this->microserviceTimeout)
+                    ->withHeaders($headers)
+                    ->post($url, $data);
+            } catch (\TypeError $e) {
+                // Handle type errors (array to string conversion)
+                Log::error('HTTP request type error', [
+                    'error' => $e->getMessage(),
+                    'url' => $url,
+                    'data_type' => gettype($data),
+                    'trace' => $e->getTraceAsString()
+                ]);
+                return [
+                    'success' => false,
+                    'error' => 'Invalid data format for microservice request: ' . $e->getMessage()
+                ];
+            } catch (\Exception $e) {
+                // Handle other exceptions
+                Log::error('HTTP request exception', [
+                    'error' => $e->getMessage(),
+                    'url' => $url,
+                    'trace' => $e->getTraceAsString()
+                ]);
+                return [
+                    'success' => false,
+                    'error' => 'Failed to send request to microservice: ' . $e->getMessage()
+                ];
+            }
 
             // Check for connection errors
             if ($response->failed() && $response->status() === 0) {
@@ -1230,7 +2055,8 @@ Format the response as a JSON object with a 'content' field containing an array 
 
             if (!$response->successful()) {
                 $errorBody = $response->body();
-                $errorMessage = 'Microservice request failed: ' . $response->status();
+                $statusCode = $response->status();
+                $errorMessage = 'Microservice request failed: ' . (string)$statusCode;
                 
                 // Try to extract error message from response body
                 if ($errorBody) {
@@ -1244,23 +2070,36 @@ Format the response as a JSON object with a 'content' field containing an array 
                     ]);
                     
                     if (is_array($errorData)) {
-                        if (isset($errorData['error']['message'])) {
+                        if (isset($errorData['error']['message']) && is_string($errorData['error']['message'])) {
                             $errorMessage = $errorData['error']['message'];
-                        } elseif (isset($errorData['detail'])) {
+                        } elseif (isset($errorData['detail']) && is_string($errorData['detail'])) {
                             $errorMessage = $errorData['detail'];
                         } elseif (isset($errorData['error'])) {
-                            $errorMessage = is_string($errorData['error']) ? $errorData['error'] : ($errorData['error']['message'] ?? $errorMessage);
-                        } elseif (isset($errorData['message'])) {
+                            if (is_string($errorData['error'])) {
+                                $errorMessage = $errorData['error'];
+                            } elseif (is_array($errorData['error']) && isset($errorData['error']['message']) && is_string($errorData['error']['message'])) {
+                                $errorMessage = $errorData['error']['message'];
+                            } else {
+                                // If error is an array or other non-string type, convert to JSON
+                                $errorMessage = 'Microservice error: ' . json_encode($errorData['error'], JSON_UNESCAPED_UNICODE);
+                            }
+                        } elseif (isset($errorData['message']) && is_string($errorData['message'])) {
                             $errorMessage = $errorData['message'];
+                        } else {
+                            // If we can't extract a string error, use JSON representation
+                            $errorMessage = 'Microservice error: ' . json_encode($errorData, JSON_UNESCAPED_UNICODE);
                         }
                     }
                 }
                 
+                // Ensure error message is always a string
+                $errorMessage = is_string($errorMessage) ? $errorMessage : json_encode($errorMessage, JSON_UNESCAPED_UNICODE);
+                
                 Log::error('Microservice HTTP error', [
-                    'http_code' => $response->status(),
+                    'http_code' => $statusCode,
                     'error' => $errorMessage,
                     'url' => $url,
-                    'error_body' => $errorBody
+                    'error_body' => is_string($errorBody) ? substr($errorBody, 0, 500) : json_encode($errorBody)
                 ]);
                 
                 return [
@@ -1854,19 +2693,26 @@ Format the response as a JSON object with a 'content' field containing an array 
 
             $responseData = $response->json();
             
+            // Clear response from memory immediately after use
+            unset($response);
+            
             // Handle new API v3.1.0 response structure
             if (isset($responseData['success']) && isset($responseData['data'])) {
-                return [
+                $result = [
                     'success' => true,
                     'data' => $responseData['data']
                 ];
+                unset($responseData);
+                return $result;
             }
 
             // Legacy format support
-            return [
+            $result = [
                 'success' => true,
                 'data' => $responseData
             ];
+            unset($responseData);
+            return $result;
 
         } catch (\Exception $e) {
             Log::error('Get job status failed', [
@@ -1923,6 +2769,9 @@ Format the response as a JSON object with a 'content' field containing an array 
 
             $responseData = $response->json();
             
+            // Clear response from memory immediately after use
+            unset($response);
+            
             // Handle new API v3.1.0 response structure
             if (isset($responseData['success'])) {
                 if ($responseData['success']) {
@@ -1930,14 +2779,17 @@ Format the response as a JSON object with a 'content' field containing an array 
                     $data = $responseData['data']['data'] ?? $responseData['data'] ?? null;
                     $metadata = $responseData['data']['metadata'] ?? $responseData['metadata'] ?? [];
                     
-                    return [
+                    $result = [
                         'success' => true,
                         'data' => $data,
                         'metadata' => $metadata
                     ];
+                    unset($responseData);
+                    return $result;
                 } else {
                     // Error response
                     $error = $responseData['error']['message'] ?? $responseData['error'] ?? 'Unknown error';
+                    unset($responseData);
                     return [
                         'success' => false,
                         'error' => $error
@@ -1946,10 +2798,12 @@ Format the response as a JSON object with a 'content' field containing an array 
             }
 
             // Legacy format support
-            return [
+            $result = [
                 'success' => true,
                 'data' => $responseData['data'] ?? $responseData
             ];
+            unset($responseData);
+            return $result;
 
         } catch (\Exception $e) {
             Log::error('Get job result failed', [
@@ -2018,6 +2872,187 @@ Format the response as a JSON object with a 'content' field containing an array 
                 'error' => 'Failed to cancel job: ' . $e->getMessage()
             ];
         }
+    }
+
+    /**
+     * Validate outline structure
+     */
+    private function validateOutlineStructure($outline)
+    {
+        if (!is_array($outline)) {
+            return ['valid' => false, 'error' => 'Outline must be an array'];
+        }
+
+        if (!isset($outline['title']) || empty($outline['title'])) {
+            return ['valid' => false, 'error' => 'Outline must have a title'];
+        }
+
+        if (!isset($outline['slides']) || !is_array($outline['slides'])) {
+            return ['valid' => false, 'error' => 'Outline must have a slides array'];
+        }
+
+        if (empty($outline['slides'])) {
+            return ['valid' => false, 'error' => 'Outline must have at least one slide'];
+        }
+
+        foreach ($outline['slides'] as $index => $slide) {
+            if (!is_array($slide)) {
+                return ['valid' => false, 'error' => "Slide at index {$index} must be an array"];
+            }
+
+            if (!isset($slide['header']) || empty($slide['header'])) {
+                return ['valid' => false, 'error' => "Slide at index {$index} must have a header"];
+            }
+
+            if (!isset($slide['subheaders']) || !is_array($slide['subheaders'])) {
+                return ['valid' => false, 'error' => "Slide at index {$index} must have a subheaders array"];
+            }
+        }
+
+        return ['valid' => true];
+    }
+
+    /**
+     * Transform content for export (convert string content to array)
+     * Ensures compatibility with microservice expectations
+     */
+    private function transformContentForExport($data)
+    {
+        if (!is_array($data) || !isset($data['slides']) || !is_array($data['slides'])) {
+            return $data;
+        }
+
+        // Transform each slide's content field from string to array if needed
+        foreach ($data['slides'] as &$slide) {
+            if (!isset($slide['content'])) {
+                // If content is missing, create empty array
+                $slide['content'] = [];
+                continue;
+            }
+
+            // If content is already an array, keep it as-is
+            if (is_array($slide['content'])) {
+                continue;
+            }
+
+            // If content is a string, convert to array of bullet points
+            if (is_string($slide['content'])) {
+                $slide['content'] = $this->convertStringContentToArray($slide['content']);
+            }
+        }
+
+        return $data;
+    }
+
+    /**
+     * Convert string content to array of bullet points
+     * Handles various formats: newlines, bullet markers, paragraphs
+     */
+    private function convertStringContentToArray($content)
+    {
+        if (empty($content)) {
+            return [];
+        }
+
+        $lines = [];
+        
+        // Split by double newlines (paragraphs)
+        $paragraphs = preg_split('/\n\s*\n/', $content);
+        
+        foreach ($paragraphs as $paragraph) {
+            $paragraph = trim($paragraph);
+            if (empty($paragraph)) {
+                continue;
+            }
+
+            // Check if paragraph contains bullet markers
+            if (preg_match('/^[•\-\*]\s+/', $paragraph) || preg_match('/^\d+\.\s+/', $paragraph)) {
+                // Already has bullet markers, split by newlines
+                $bulletLines = preg_split('/\n/', $paragraph);
+                foreach ($bulletLines as $line) {
+                    $line = trim($line);
+                    if (!empty($line)) {
+                        // Remove bullet markers if present
+                        $line = preg_replace('/^[•\-\*]\s+/', '', $line);
+                        $line = preg_replace('/^\d+\.\s+/', '', $line);
+                        $lines[] = $line;
+                    }
+                }
+            } else {
+                // No bullet markers, try to split by single newlines
+                $singleLines = preg_split('/\n/', $paragraph);
+                if (count($singleLines) > 1) {
+                    // Multiple lines, treat each as a bullet point
+                    foreach ($singleLines as $line) {
+                        $line = trim($line);
+                        if (!empty($line)) {
+                            $lines[] = $line;
+                        }
+                    }
+                } else {
+                    // Single paragraph, try to split by sentences if too long
+                    $paragraph = trim($paragraph);
+                    if (strlen($paragraph) > 200) {
+                        // Long paragraph, split by sentences
+                        $sentences = preg_split('/(?<=[.!?])\s+/', $paragraph);
+                        foreach ($sentences as $sentence) {
+                            $sentence = trim($sentence);
+                            if (!empty($sentence)) {
+                                $lines[] = $sentence;
+                            }
+                        }
+                    } else {
+                        // Short paragraph, use as single bullet point
+                        $lines[] = $paragraph;
+                    }
+                }
+            }
+        }
+
+        // If no lines were created, use the original content as a single item
+        if (empty($lines)) {
+            $lines[] = $content;
+        }
+
+        return $lines;
+    }
+
+    /**
+     * Validate content structure (for export)
+     */
+    private function validateContentStructure($content)
+    {
+        if (!is_array($content)) {
+            return ['valid' => false, 'error' => 'Content must be an array'];
+        }
+
+        if (!isset($content['title']) || empty($content['title'])) {
+            return ['valid' => false, 'error' => 'Content must have a title'];
+        }
+
+        if (!isset($content['slides']) || !is_array($content['slides'])) {
+            return ['valid' => false, 'error' => 'Content must have a slides array'];
+        }
+
+        if (empty($content['slides'])) {
+            return ['valid' => false, 'error' => 'Content must have at least one slide'];
+        }
+
+        foreach ($content['slides'] as $index => $slide) {
+            if (!is_array($slide)) {
+                return ['valid' => false, 'error' => "Slide at index {$index} must be an array"];
+            }
+
+            if (!isset($slide['header']) || empty($slide['header'])) {
+                return ['valid' => false, 'error' => "Slide at index {$index} must have a header"];
+            }
+
+            // Content field is optional and can be string or array
+            // Validation will pass regardless of content format
+            // Transformation happens in controller before validation
+        }
+
+        return ['valid' => true];
     }
 
     /**

@@ -38,6 +38,9 @@ class ProcessUniversalJob extends Command
      */
     public function handle()
     {
+        // Increase memory limit for long-running jobs
+        ini_set('memory_limit', '1024M');
+        
         $jobId = $this->argument('jobId');
         
         $this->info("Processing universal job: {$jobId}");

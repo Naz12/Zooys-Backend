@@ -1173,7 +1173,7 @@
 										"generate-outline"
 									]
 								},
-								"description": "Generate presentation outline from text input"
+								"description": "Generate presentation outline from text input (returns job_id for async processing)"
 							},
 							"response": []
 						},
@@ -1205,7 +1205,7 @@
 										"generate-outline"
 									]
 								},
-								"description": "Generate presentation outline from uploaded file"
+								"description": "Generate presentation outline from uploaded file (returns job_id for async processing)"
 							},
 							"response": []
 						},
@@ -1237,7 +1237,7 @@
 										"generate-outline"
 									]
 								},
-								"description": "Generate presentation outline from URL"
+								"description": "Generate presentation outline from URL (returns job_id for async processing)"
 							},
 							"response": []
 						},
@@ -1269,44 +1269,7 @@
 										"generate-outline"
 									]
 								},
-								"description": "Generate presentation outline from YouTube video"
-							},
-							"response": []
-						},
-						{
-							"name": "Update Outline",
-							"request": {
-								"method": "PUT",
-								"header": [
-									{
-										"key": "Authorization",
-										"value": "Bearer {{auth_token}}"
-									},
-									{
-										"key": "Content-Type",
-										"value": "application/json"
-									},
-									{
-										"key": "Accept",
-										"value": "application/json"
-									}
-								],
-								"body": {
-									"mode": "raw",
-									"raw": "{\n  \"outline\": {\n    \"title\": \"Updated Presentation Title\",\n    \"slides\": [\n      {\n        \"slide_number\": 1,\n        \"header\": \"Introduction\",\n        \"subheaders\": [\"What is ML?\", \"Why ML?\"],\n        \"slide_type\": \"title\"\n      }\n    ]\n  }\n}"
-								},
-								"url": {
-									"raw": "{{base_url}}/presentations/{{ai_result_id}}/update-outline",
-									"host": [
-										"{{base_url}}"
-									],
-									"path": [
-										"presentations",
-										"{{ai_result_id}}",
-										"update-outline"
-									]
-								},
-								"description": "Update presentation outline"
+								"description": "Generate presentation outline from YouTube video (returns job_id for async processing)"
 							},
 							"response": []
 						}
@@ -1331,20 +1294,19 @@
 								],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n  \"language\": \"English\",\n  \"tone\": \"Professional\",\n  \"detail_level\": \"detailed\"\n}"
+									"raw": "{\n  \"outline\": {\n    \"title\": \"Introduction to Machine Learning\",\n    \"slides\": [\n      {\n        \"slide_number\": 1,\n        \"header\": \"Introduction\",\n        \"subheaders\": [\"What is ML?\", \"Why ML?\"],\n        \"slide_type\": \"title\"\n      },\n      {\n        \"slide_number\": 2,\n        \"header\": \"Types of Machine Learning\",\n        \"subheaders\": [\"Supervised Learning\", \"Unsupervised Learning\", \"Reinforcement Learning\"],\n        \"slide_type\": \"content\"\n      }\n    ]\n  },\n  \"language\": \"English\",\n  \"tone\": \"Professional\",\n  \"detail_level\": \"detailed\"\n}"
 								},
 								"url": {
-									"raw": "{{base_url}}/presentations/{{ai_result_id}}/generate-content",
+									"raw": "{{base_url}}/presentations/generate-content",
 									"host": [
 										"{{base_url}}"
 									],
 									"path": [
 										"presentations",
-										"{{ai_result_id}}",
 										"generate-content"
 									]
 								},
-								"description": "Generate detailed content for presentation slides"
+								"description": "Generate detailed content for presentation slides from outline (edited or original) - Returns job_id for async processing"
 							},
 							"response": []
 						}
@@ -1369,32 +1331,27 @@
 								],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n  \"template\": \"corporate_blue\",\n  \"color_scheme\": \"blue\",\n  \"font_style\": \"modern\"\n}"
+									"raw": "{\n  \"content\": {\n    \"title\": \"Introduction to Machine Learning: A Foundational Overview\",\n    \"slides\": [\n      {\n        \"slide_number\": 1,\n        \"header\": \"Introduction to Machine Learning\",\n        \"subheaders\": [\"A Professional Overview\", \"Defining the Future of Technology\"],\n        \"slide_type\": \"title\",\n        \"content\": \"A Professional Overview\\nMachine learning represents a transformative branch of artificial intelligence where computer systems learn and improve from data without explicit programming. This overview will establish the core principles, explore key methodologies, and examine the profound impact this technology is having across global industries.\\n\\nDefining the Future of Technology\\nBy enabling computers to identify patterns and make data-driven decisions, machine learning is the engine behind innovations from personalized medicine to autonomous systems.\"\n      },\n      {\n        \"slide_number\": 2,\n        \"header\": \"What is Machine Learning?\",\n        \"subheaders\": [\"A Subset of Artificial Intelligence (AI)\", \"Systems That Learn from Data\"],\n        \"slide_type\": \"content\",\n        \"content\": \"Machine learning is a core discipline within artificial intelligence, focused on enabling computers to perform tasks without relying on predetermined rules. Instead of being explicitly programmed for every scenario, ML systems use algorithms to identify patterns and make data-driven decisions.\\n\\nThese systems learn and improve from experience by processing large amounts of data. The core principle is that through iterative exposure to data, the model's algorithm adjusts its internal parameters to enhance its performance on a specific task.\"\n      }\n    ]\n  },\n  \"template\": \"corporate_blue\",\n  \"color_scheme\": \"blue\",\n  \"font_style\": \"modern\"\n}"
 								},
 								"url": {
-									"raw": "{{base_url}}/presentations/{{ai_result_id}}/export",
+									"raw": "{{base_url}}/presentations/export",
 									"host": [
 										"{{base_url}}"
 									],
 									"path": [
 										"presentations",
-										"{{ai_result_id}}",
 										"export"
 									]
 								},
-								"description": "Export presentation to PowerPoint format"
+								"description": "Export presentation to PowerPoint format (returns job_id for async processing).\n\n**Accepts both formats:**\n- `content` (from content generation endpoint) - content field can be string or array\n- `presentation_data` (legacy format) - content field must be array\n\n**Automatic Transformation:**\n- String content is automatically converted to array format\n- Supports paragraphs, bullet points, and sentence splitting\n- You can pass content generation output directly to this endpoint"
 							},
 							"response": []
 						},
 						{
-							"name": "Generate PowerPoint",
+							"name": "Export Presentation (Legacy Format)",
 							"request": {
 								"method": "POST",
 								"header": [
-									{
-										"key": "Authorization",
-										"value": "Bearer {{auth_token}}"
-									},
 									{
 										"key": "Content-Type",
 										"value": "application/json"
@@ -1406,40 +1363,176 @@
 								],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n  \"template\": \"corporate_blue\",\n  \"color_scheme\": \"blue\",\n  \"font_style\": \"modern\"\n}"
+									"raw": "{\n  \"presentation_data\": {\n    \"title\": \"Introduction to Machine Learning\",\n    \"slides\": [\n      {\n        \"slide_number\": 1,\n        \"header\": \"Introduction\",\n        \"subheaders\": [\"What is ML?\", \"Why ML?\"],\n        \"content\": [\"Machine Learning is a subset of AI\", \"It enables systems to learn from data\"],\n        \"slide_type\": \"title\"\n      },\n      {\n        \"slide_number\": 2,\n        \"header\": \"Types of Machine Learning\",\n        \"subheaders\": [\"Supervised Learning\", \"Unsupervised Learning\"],\n        \"content\": [\"Supervised learning uses labeled data\", \"Unsupervised learning finds patterns\"],\n        \"slide_type\": \"content\"\n      }\n    ]\n  },\n  \"template\": \"corporate_blue\",\n  \"color_scheme\": \"blue\",\n  \"font_style\": \"modern\"\n}"
 								},
 								"url": {
-									"raw": "{{base_url}}/presentations/{{ai_result_id}}/generate-powerpoint",
+									"raw": "{{base_url}}/presentations/export",
 									"host": [
 										"{{base_url}}"
 									],
 									"path": [
 										"presentations",
-										"{{ai_result_id}}",
-										"generate-powerpoint"
+										"export"
 									]
 								},
-								"description": "Generate PowerPoint file (authenticated)"
+								"description": "Export presentation using legacy format (presentation_data with array content). Still supported for backward compatibility."
 							},
 							"response": []
 						},
 						{
-							"name": "Download Presentation",
+							"name": "Check Presentation Job Status",
 							"request": {
 								"method": "GET",
-								"header": [],
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
 								"url": {
-									"raw": "{{base_url}}/files/download/{{filename}}",
+									"raw": "{{base_url}}/presentations/status?job_id={{job_id}}",
 									"host": [
 										"{{base_url}}"
 									],
 									"path": [
-										"files",
-										"download",
-										"{{filename}}"
+										"presentations",
+										"status"
+									],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}",
+											"description": "Job ID from outline/content/export response"
+										}
 									]
 								},
-								"description": "Download presentation file"
+								"description": "Check status of presentation job (outline, content, or export) - Returns stage, progress, and user-friendly messages"
+							},
+							"response": []
+						},
+						{
+							"name": "Get Presentation Job Result",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/presentations/result?job_id={{job_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"presentations",
+										"result"
+									],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}",
+											"description": "Job ID from outline/content/export response"
+										}
+									]
+								},
+								"description": "Get result of presentation job (outline, content, or export) - Returns result data when job is completed"
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "File Management",
+					"item": [
+						{
+							"name": "List Presentation Files",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/presentations/files?per_page=15&search=",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"presentations",
+										"files"
+									],
+									"query": [
+										{
+											"key": "per_page",
+											"value": "15",
+											"description": "Number of files per page"
+										},
+										{
+											"key": "search",
+											"value": "",
+											"description": "Search term (optional)"
+										}
+									]
+								},
+								"description": "Get list of all presentation files for authenticated user"
+							},
+							"response": []
+						},
+						{
+							"name": "Delete Presentation File",
+							"request": {
+								"method": "DELETE",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/presentations/files/{{file_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"presentations",
+										"files",
+										"{{file_id}}"
+									]
+								},
+								"description": "Delete a presentation file"
+							},
+							"response": []
+						},
+						{
+							"name": "Download Presentation File",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/presentations/files/{{file_id}}/download",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"presentations",
+										"files",
+										"{{file_id}}",
+										"download"
+									]
+								},
+								"description": "Download a presentation file (protected - authentication required)"
 							},
 							"response": []
 						}
@@ -1470,151 +1563,12 @@
 								"description": "Get list of all presentations"
 							},
 							"response": []
-						},
-						{
-							"name": "Get Presentation Data",
-							"request": {
-								"method": "GET",
-								"header": [
-									{
-										"key": "Accept",
-										"value": "application/json"
-									}
-								],
-								"url": {
-									"raw": "{{base_url}}/presentations/{{ai_result_id}}/data",
-									"host": [
-										"{{base_url}}"
-									],
-									"path": [
-										"presentations",
-										"{{ai_result_id}}",
-										"data"
-									]
-								},
-								"description": "Get presentation data for editing"
-							},
-							"response": []
-						},
-						{
-							"name": "Get Presentation",
-							"request": {
-								"method": "GET",
-								"header": [
-									{
-										"key": "Authorization",
-										"value": "Bearer {{auth_token}}"
-									},
-									{
-										"key": "Accept",
-										"value": "application/json"
-									}
-								],
-								"url": {
-									"raw": "{{base_url}}/presentations/{{ai_result_id}}",
-									"host": [
-										"{{base_url}}"
-									],
-									"path": [
-										"presentations",
-										"{{ai_result_id}}"
-									]
-								},
-								"description": "Get specific presentation details (authenticated)"
-							},
-							"response": []
-						},
-						{
-							"name": "Save Presentation",
-							"request": {
-								"method": "POST",
-								"header": [
-									{
-										"key": "Content-Type",
-										"value": "application/json"
-									},
-									{
-										"key": "Accept",
-										"value": "application/json"
-									}
-								],
-								"body": {
-									"mode": "raw",
-									"raw": "{\n  \"title\": \"Updated Presentation Title\",\n  \"slides\": [\n    {\n      \"slide_number\": 1,\n      \"header\": \"Introduction\",\n      \"content\": \"Updated content here\"\n    }\n  ]\n}"
-								},
-								"url": {
-									"raw": "{{base_url}}/presentations/{{ai_result_id}}/save",
-									"host": [
-										"{{base_url}}"
-									],
-									"path": [
-										"presentations",
-										"{{ai_result_id}}",
-										"save"
-									]
-								},
-								"description": "Save presentation changes"
-							},
-							"response": []
-						},
-						{
-							"name": "Delete Presentation",
-							"request": {
-								"method": "DELETE",
-								"header": [
-									{
-										"key": "Accept",
-										"value": "application/json"
-									}
-								],
-								"url": {
-									"raw": "{{base_url}}/presentations/{{ai_result_id}}",
-									"host": [
-										"{{base_url}}"
-									],
-									"path": [
-										"presentations",
-										"{{ai_result_id}}"
-									]
-								},
-								"description": "Delete a presentation"
-							},
-							"response": []
 						}
 					]
 				},
 				{
 					"name": "Status & Health",
 					"item": [
-						{
-							"name": "Get Progress Status",
-							"request": {
-								"method": "GET",
-								"header": [
-									{
-										"key": "Authorization",
-										"value": "Bearer {{auth_token}}"
-									},
-									{
-										"key": "Accept",
-										"value": "application/json"
-									}
-								],
-								"url": {
-									"raw": "{{base_url}}/presentations/{{ai_result_id}}/status",
-									"host": [
-										"{{base_url}}"
-									],
-									"path": [
-										"presentations",
-										"{{ai_result_id}}",
-										"status"
-									]
-								},
-								"description": "Get presentation generation progress"
-							},
-							"response": []
-						},
 						{
 							"name": "Check Microservice Status",
 							"request": {
@@ -1640,146 +1594,6 @@
 									]
 								},
 								"description": "Check if presentation microservice is available"
-							},
-							"response": []
-						},
-						{
-							"name": "Get Text Job Status",
-							"request": {
-								"method": "GET",
-								"header": [
-									{
-										"key": "Authorization",
-										"value": "Bearer {{auth_token}}"
-									},
-									{
-										"key": "Accept",
-										"value": "application/json"
-									}
-								],
-								"url": {
-									"raw": "{{base_url}}/status/presentations/text?job_id={{job_id}}",
-									"host": [
-										"{{base_url}}"
-									],
-									"path": [
-										"status",
-										"presentations",
-										"text"
-									],
-									"query": [
-										{
-											"key": "job_id",
-											"value": "{{job_id}}"
-										}
-									]
-								},
-								"description": "Get status of text-based presentation job"
-							},
-							"response": []
-						},
-						{
-							"name": "Get Text Job Result",
-							"request": {
-								"method": "GET",
-								"header": [
-									{
-										"key": "Authorization",
-										"value": "Bearer {{auth_token}}"
-									},
-									{
-										"key": "Accept",
-										"value": "application/json"
-									}
-								],
-								"url": {
-									"raw": "{{base_url}}/result/presentations/text?job_id={{job_id}}",
-									"host": [
-										"{{base_url}}"
-									],
-									"path": [
-										"result",
-										"presentations",
-										"text"
-									],
-									"query": [
-										{
-											"key": "job_id",
-											"value": "{{job_id}}"
-										}
-									]
-								},
-								"description": "Get result of text-based presentation job"
-							},
-							"response": []
-						},
-						{
-							"name": "Get File Job Status",
-							"request": {
-								"method": "GET",
-								"header": [
-									{
-										"key": "Authorization",
-										"value": "Bearer {{auth_token}}"
-									},
-									{
-										"key": "Accept",
-										"value": "application/json"
-									}
-								],
-								"url": {
-									"raw": "{{base_url}}/status/presentations/file?job_id={{job_id}}",
-									"host": [
-										"{{base_url}}"
-									],
-									"path": [
-										"status",
-										"presentations",
-										"file"
-									],
-									"query": [
-										{
-											"key": "job_id",
-											"value": "{{job_id}}"
-										}
-									]
-								},
-								"description": "Get status of file-based presentation job"
-							},
-							"response": []
-						},
-						{
-							"name": "Get File Job Result",
-							"request": {
-								"method": "GET",
-								"header": [
-									{
-										"key": "Authorization",
-										"value": "Bearer {{auth_token}}"
-									},
-									{
-										"key": "Accept",
-										"value": "application/json"
-									}
-								],
-								"url": {
-									"raw": "{{base_url}}/result/presentations/file?job_id={{job_id}}",
-									"host": [
-										"{{base_url}}"
-									],
-									"path": [
-										"result",
-										"presentations",
-										"file"
-									],
-									"query": [
-										{
-											"key": "job_id",
-											"value": "{{job_id}}"
-										}
-									]
-								},
-								"description": "Get result of file-based presentation job"
 							},
 							"response": []
 						}

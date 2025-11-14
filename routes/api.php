@@ -41,39 +41,38 @@ Route::post('/login', [AuthController::class, 'login']);
 // 🔹 Public Presentation Routes (for testing)
 Route::get('/presentations/templates', [PresentationController::class, 'getTemplates']);
 Route::post('/presentations/generate-outline', [PresentationController::class, 'generateOutline']);
-Route::post('/presentations/{aiResultId}/generate-content', [PresentationController::class, 'generateContent']);
-Route::post('/presentations/{aiResultId}/export', [PresentationController::class, 'exportPresentation']);
-Route::get('/presentations/{aiResultId}/data', [PresentationController::class, 'getPresentationData']);
-Route::post('/presentations/{aiResultId}/save', [PresentationController::class, 'savePresentation']);
-Route::get('/files/download/{filename}', [PresentationController::class, 'downloadPresentation']);
+Route::post('/presentations/generate-content', [PresentationController::class, 'generateContent']);
+Route::post('/presentations/export', [PresentationController::class, 'exportPresentation']);
+Route::get('/presentations/files', [PresentationController::class, 'getPresentationFiles']);
+Route::get('/presentations/files/{fileId}/content', [PresentationController::class, 'getFileContent']);
+Route::delete('/presentations/files/{fileId}', [PresentationController::class, 'deletePresentationFile']);
+Route::get('/presentations/files/{fileId}/download', [PresentationController::class, 'downloadPresentationFile']);
+Route::get('/presentations/status', [PresentationController::class, 'getJobStatus']);
+Route::get('/presentations/result', [PresentationController::class, 'getJobResult']);
 
 // 🔹 PDF Edit public status/result (manual bearer validation not strictly required; keep open for polling)
 Route::get('/pdf/edit/{operation}/status', [PdfEditController::class, 'status']);
 Route::get('/pdf/edit/{operation}/result', [PdfEditController::class, 'result']);
 
-// 🔹 Public Presentation Management Routes
-Route::get('/presentations', [PresentationController::class, 'getPresentations']);
-Route::delete('/presentations/{aiResultId}', [PresentationController::class, 'deletePresentation']);
-
 // CORS OPTIONS for public presentation routes
-Route::options('/presentations/{aiResultId}/export', function () { 
+Route::options('/presentations/status', function () { 
     return response('', 200)
         ->header('Access-Control-Allow-Origin', 'http://localhost:3000')
-        ->header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        ->header('Access-Control-Allow-Methods', 'GET, OPTIONS')
         ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
         ->header('Access-Control-Allow-Credentials', 'true');
 });
-Route::options('/presentations', function () { 
+Route::options('/presentations/result', function () { 
     return response('', 200)
         ->header('Access-Control-Allow-Origin', 'http://localhost:3000')
-        ->header('Access-Control-Allow-Methods', 'GET, DELETE, OPTIONS')
+        ->header('Access-Control-Allow-Methods', 'GET, OPTIONS')
         ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
         ->header('Access-Control-Allow-Credentials', 'true');
 });
-Route::options('/presentations/{aiResultId}', function () { 
+Route::options('/presentations/files/{fileId}/content', function () { 
     return response('', 200)
         ->header('Access-Control-Allow-Origin', 'http://localhost:3000')
-        ->header('Access-Control-Allow-Methods', 'DELETE, OPTIONS')
+        ->header('Access-Control-Allow-Methods', 'GET, OPTIONS')
         ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
         ->header('Access-Control-Allow-Credentials', 'true');
 });
@@ -942,113 +941,6 @@ Route::get('/result/flashcards/file', function (Request $request) use ($authenti
 
 // 📊 PRESENTATIONS TOOL ENDPOINTS
 
-// Presentations Text Status
-Route::get('/status/presentations/text', function (Request $request) use ($authenticateUser, $getJobForTool) {
-    $authResult = $authenticateUser($request);
-    if ($authResult) return $authResult;
-    
-    $jobId = $request->query('job_id');
-    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
-    
-    $result = $getJobForTool($jobId, 'presentations', 'text');
-    if (isset($result['error'])) {
-        return response()->json(['error' => $result['error']], $result['code']);
-    }
-    
-    $job = $result['job'];
-    return response()->json([
-        'job_id' => $job['id'],
-        'tool_type' => 'presentations',
-        'input_type' => 'text',
-        'status' => $job['status'] ?? 'unknown',
-        'progress' => $job['progress'] ?? 0,
-        'stage' => $job['stage'] ?? null,
-        'error' => $job['error'] ?? null,
-        'created_at' => $job['created_at'] ?? null,
-        'updated_at' => $job['updated_at'] ?? null
-    ]);
-});
-
-// Presentations Text Result
-Route::get('/result/presentations/text', function (Request $request) use ($authenticateUser, $getJobForTool) {
-    $authResult = $authenticateUser($request);
-    if ($authResult) return $authResult;
-    
-    $jobId = $request->query('job_id');
-    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
-    
-    $result = $getJobForTool($jobId, 'presentations', 'text');
-    if (isset($result['error'])) {
-        return response()->json(['error' => $result['error']], $result['code']);
-    }
-    
-    $job = $result['job'];
-    if (($job['status'] ?? '') !== 'completed') {
-        return response()->json(['error' => 'Job not completed', 'status' => $job['status'] ?? 'unknown'], 409);
-    }
-    
-    return response()->json([
-        'success' => true,
-        'job_id' => $job['id'],
-        'tool_type' => 'presentations',
-        'input_type' => 'text',
-        'data' => $job['result'] ?? null
-    ]);
-});
-
-// Presentations File Status
-Route::get('/status/presentations/file', function (Request $request) use ($authenticateUser, $getJobForTool) {
-    $authResult = $authenticateUser($request);
-    if ($authResult) return $authResult;
-    
-    $jobId = $request->query('job_id');
-    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
-    
-    $result = $getJobForTool($jobId, 'presentations', 'file');
-    if (isset($result['error'])) {
-        return response()->json(['error' => $result['error']], $result['code']);
-    }
-    
-    $job = $result['job'];
-    return response()->json([
-        'job_id' => $job['id'],
-        'tool_type' => 'presentations',
-        'input_type' => 'file',
-        'status' => $job['status'] ?? 'unknown',
-        'progress' => $job['progress'] ?? 0,
-        'stage' => $job['stage'] ?? null,
-        'error' => $job['error'] ?? null,
-        'created_at' => $job['created_at'] ?? null,
-        'updated_at' => $job['updated_at'] ?? null
-    ]);
-});
-
-// Presentations File Result
-Route::get('/result/presentations/file', function (Request $request) use ($authenticateUser, $getJobForTool) {
-    $authResult = $authenticateUser($request);
-    if ($authResult) return $authResult;
-    
-    $jobId = $request->query('job_id');
-    if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
-    
-    $result = $getJobForTool($jobId, 'presentations', 'file');
-    if (isset($result['error'])) {
-        return response()->json(['error' => $result['error']], $result['code']);
-    }
-    
-    $job = $result['job'];
-    if (($job['status'] ?? '') !== 'completed') {
-        return response()->json(['error' => 'Job not completed', 'status' => $job['status'] ?? 'unknown'], 409);
-    }
-    
-    return response()->json([
-        'success' => true,
-        'job_id' => $job['id'],
-        'tool_type' => 'presentations',
-        'input_type' => 'file',
-        'data' => $job['result'] ?? null
-    ]);
-});
 
 // 📊 DIAGRAM TOOL ENDPOINTS
 
@@ -1899,42 +1791,35 @@ Route::middleware(['auth:sanctum'])->prefix('admin')->group(function () {
             ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
             ->header('Access-Control-Allow-Credentials', 'true');
     });
-    Route::options('/presentations/{aiResultId}/generate-content', function () { 
+    Route::options('/presentations/generate-content', function () { 
         return response('', 200)
             ->header('Access-Control-Allow-Origin', 'http://localhost:3000')
             ->header('Access-Control-Allow-Methods', 'POST, OPTIONS')
             ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
             ->header('Access-Control-Allow-Credentials', 'true');
     });
-    Route::options('/presentations/{aiResultId}/generate-powerpoint', function () { 
+    Route::options('/presentations/export', function () { 
         return response('', 200)
             ->header('Access-Control-Allow-Origin', 'http://localhost:3000')
             ->header('Access-Control-Allow-Methods', 'POST, OPTIONS')
             ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
             ->header('Access-Control-Allow-Credentials', 'true');
     });
-    Route::options('/presentations/{aiResultId}/save', function () { 
-        return response('', 200)
-            ->header('Access-Control-Allow-Origin', 'http://localhost:3000')
-            ->header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-            ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
-            ->header('Access-Control-Allow-Credentials', 'true');
-    });
-    Route::options('/presentations/{aiResultId}/data', function () { 
+    Route::options('/presentations/files', function () { 
         return response('', 200)
             ->header('Access-Control-Allow-Origin', 'http://localhost:3000')
             ->header('Access-Control-Allow-Methods', 'GET, OPTIONS')
             ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
             ->header('Access-Control-Allow-Credentials', 'true');
     });
-    Route::options('/presentations/{aiResultId}', function () { 
+    Route::options('/presentations/files/{fileId}', function () { 
         return response('', 200)
             ->header('Access-Control-Allow-Origin', 'http://localhost:3000')
             ->header('Access-Control-Allow-Methods', 'GET, DELETE, OPTIONS')
             ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
             ->header('Access-Control-Allow-Credentials', 'true');
     });
-    Route::options('/presentations', function () { 
+    Route::options('/presentations/files/{fileId}/download', function () { 
         return response('', 200)
             ->header('Access-Control-Allow-Origin', 'http://localhost:3000')
             ->header('Access-Control-Allow-Methods', 'GET, OPTIONS')
@@ -1948,22 +1833,35 @@ Route::middleware(['auth:sanctum'])->prefix('admin')->group(function () {
             ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
             ->header('Access-Control-Allow-Credentials', 'true');
     });
-    Route::options('/presentations/{aiResultId}/update-outline', function () { 
+    Route::options('/presentations/status', function () { 
         return response('', 200)
             ->header('Access-Control-Allow-Origin', 'http://localhost:3000')
-            ->header('Access-Control-Allow-Methods', 'PUT, OPTIONS')
+            ->header('Access-Control-Allow-Methods', 'GET, OPTIONS')
+            ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
+            ->header('Access-Control-Allow-Credentials', 'true');
+    });
+    Route::options('/presentations/result', function () { 
+        return response('', 200)
+            ->header('Access-Control-Allow-Origin', 'http://localhost:3000')
+            ->header('Access-Control-Allow-Methods', 'GET, OPTIONS')
             ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
             ->header('Access-Control-Allow-Credentials', 'true');
     });
 
-    // AI Presentation Generator
-    Route::put('/presentations/{aiResultId}/update-outline', [PresentationController::class, 'updateOutline']);
-    Route::post('/presentations/{aiResultId}/generate-content', [PresentationController::class, 'generateContent']);
-    Route::post('/presentations/{aiResultId}/generate-powerpoint', [PresentationController::class, 'generatePowerPoint']);
-    Route::get('/presentations/{aiResultId}', [PresentationController::class, 'getPresentation']);
+    // AI Presentation Generator - New Data Flow
+    Route::post('/presentations/generate-content', [PresentationController::class, 'generateContent']);
+    Route::post('/presentations/export', [PresentationController::class, 'exportPresentation']);
     
-    // Frontend Editing Endpoints (JSON-based)
-    Route::get('/presentations/{aiResultId}/status', [PresentationController::class, 'getProgressStatus']);
+    // Presentation File Management
+    Route::get('/presentations/files', [PresentationController::class, 'getPresentationFiles']);
+    Route::delete('/presentations/files/{fileId}', [PresentationController::class, 'deletePresentationFile']);
+    Route::get('/presentations/files/{fileId}/download', [PresentationController::class, 'downloadPresentationFile']);
+    
+    // Presentation Job Status & Result (for polling)
+    Route::get('/presentations/status', [PresentationController::class, 'getJobStatus']);
+    Route::get('/presentations/result', [PresentationController::class, 'getJobResult']);
+    
+    // Status & Health
     Route::get('/presentations/microservice-status', [PresentationController::class, 'checkMicroserviceStatus']);
 });
 

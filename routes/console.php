@@ -10,3 +10,6 @@ Artisan::command('inspire', function () {
 
 // Schedule the monthly usage reset command to run daily
 Schedule::command('subscriptions:reset-usage')->daily();
+
+// Schedule cleanup of expired presentation files to run daily
+Schedule::command('presentations:cleanup-expired')->daily();
