@@ -92,4 +92,10 @@ return [
         'timeout' => env('DIAGRAM_MICROSERVICE_TIMEOUT', 120),
     ],
 
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect' => env('GOOGLE_REDIRECT_URI', env('APP_URL') . '/api/auth/google/callback'),
+    ],
+
 ];

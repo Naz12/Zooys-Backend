@@ -22,6 +22,9 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'google_id',
+        'avatar',
+        'provider',
         'is_active',
         'status',
         'suspended_at',
@@ -70,6 +73,11 @@ class User extends Authenticatable
     public function paymentHistory()
     {
         return $this->hasMany(PaymentHistory::class);
+    }
+
+    public function visitorTracking()
+    {
+        return $this->hasMany(VisitorTracking::class);
     }
 
     public function getActiveSubscription()

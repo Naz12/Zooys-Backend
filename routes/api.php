@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\Client\PresentationController;
 use App\Http\Controllers\Api\Client\FileExtractionController;
 use App\Http\Controllers\Api\Client\PdfEditController;
 use App\Http\Controllers\Api\Client\DocumentIntelligenceController;
+use App\Http\Controllers\Api\Client\VisitorTrackingController;
 
 // Admin Controllers
 use App\Http\Controllers\Api\Admin\AdminAuthController;
@@ -32,11 +33,19 @@ use App\Http\Controllers\Api\Admin\PlanController as AdminPlanController;
 use App\Http\Controllers\Api\Admin\SubscriptionController as AdminSubscriptionController;
 use App\Http\Controllers\Api\Admin\ToolUsageController;
 use App\Http\Controllers\Api\Admin\VisitorController;
+use App\Http\Controllers\Api\Admin\VisitorTrackingController as AdminVisitorTrackingController;
 
 // 🔹 Public
 Route::get('/plans', [PlanController::class, 'index']);
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
+
+// 🔹 Google OAuth (Public)
+Route::get('/auth/google/redirect', [AuthController::class, 'redirectToGoogle'])->name('google.redirect');
+Route::get('/auth/google/callback', [AuthController::class, 'handleGoogleCallback'])->name('google.callback');
+
+// 🔹 Visitor Tracking (Public - optional auth)
+Route::post('/visitor-tracking', [VisitorTrackingController::class, 'trackVisit']);
 
 // 🔹 Public Presentation Routes (for testing)
 Route::get('/presentations/templates', [PresentationController::class, 'getTemplates']);
@@ -2018,6 +2027,18 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'admin.auth'])->group(functi
         Route::get('/sources', [VisitorController::class, 'sources'])->name('admin.visitors.sources');
         Route::get('/devices', [VisitorController::class, 'devices'])->name('admin.visitors.devices');
         Route::get('/export', [VisitorController::class, 'export'])->name('admin.visitors.export');
+    });
+
+    // ========================================
+    // 📊 VISITOR TRACKING ROUTES (Admin Only)
+    // ========================================
+    Route::prefix('visitor-tracking')->group(function () {
+        Route::get('/', [AdminVisitorTrackingController::class, 'index'])->name('admin.visitor-tracking.index');
+        Route::get('/statistics', [AdminVisitorTrackingController::class, 'statistics'])->name('admin.visitor-tracking.statistics');
+        Route::get('/{id}', [AdminVisitorTrackingController::class, 'show'])->name('admin.visitor-tracking.show');
+        Route::put('/{id}', [AdminVisitorTrackingController::class, 'update'])->name('admin.visitor-tracking.update');
+        Route::patch('/{id}', [AdminVisitorTrackingController::class, 'update'])->name('admin.visitor-tracking.update');
+        Route::delete('/{id}', [AdminVisitorTrackingController::class, 'destroy'])->name('admin.visitor-tracking.destroy');
     });
 
     // ========================================

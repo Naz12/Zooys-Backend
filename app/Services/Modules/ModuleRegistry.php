@@ -11,6 +11,7 @@ use App\Services\Modules\TranscriberModule;
 use App\Services\Modules\FileOperationsModule;
 use App\Services\Modules\DocumentIntelligenceModule;
 use App\Services\Modules\FlashcardModule;
+use App\Services\Modules\VisitorTrackingModule;
 
 class ModuleRegistry
 {
@@ -271,6 +272,21 @@ class ModuleRegistry
                 'providers' => ['twilio', 'local'],
                 'idempotency_enabled' => true,
                 'multi_app' => ['zooys', 'akili', 'dagu'],
+            ]
+        ]);
+
+        // Register Visitor Tracking Module
+        self::registerModule('visitor_tracking', [
+            'class' => VisitorTrackingModule::class,
+            'description' => 'Visitor tracking and analytics: track visits, sessions, locations, and user behavior',
+            'dependencies' => [],
+            'config' => [
+                'track_ip_address' => true,
+                'track_user_agent' => true,
+                'track_device_info' => true,
+                'supported_tools' => ['dashboard', 'ai_chat', 'pdf_editor', 'math', 'flashcards', 'presentations', 'diagrams'],
+                'location_tracking' => true,
+                'session_tracking' => true,
             ]
         ]);
     }
