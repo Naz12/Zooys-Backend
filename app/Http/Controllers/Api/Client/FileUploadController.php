@@ -104,6 +104,12 @@ class FileUploadController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'File uploaded successfully',
+                'data' => [
+                    'file_upload' => $result['file_upload'],
+                    'file_url' => $result['file_url'],
+                    'file_id' => $result['file_upload']->id,
+                ],
+                // Backward compatibility - keep top-level properties
                 'file_upload' => $result['file_upload'],
                 'file_url' => $result['file_url']
             ], 201);

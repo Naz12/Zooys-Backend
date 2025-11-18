@@ -75,6 +75,32 @@ class UniversalJobService
         // Store job in cache
         Cache::put("universal_job_{$jobId}", $job, 7200); // 2 hours TTL
         
+        // Also persist to database for long-term storage
+        try {
+            \Illuminate\Support\Facades\DB::table('universal_jobs')->insert([
+                'job_id' => $jobId,
+                'tool_type' => $toolType,
+                'input' => json_encode($input),
+                'options' => json_encode($options),
+                'user_id' => $userId,
+                'status' => 'pending',
+                'stage' => 'initializing',
+                'progress' => 0,
+                'logs' => json_encode([]),
+                'result' => null,
+                'error' => null,
+                'metadata' => json_encode($job['metadata']),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } catch (\Exception $e) {
+            // If database insert fails, log but don't fail the job creation
+            Log::warning("Failed to persist job to database", [
+                'job_id' => $jobId,
+                'error' => $e->getMessage()
+            ]);
+        }
+        
         Log::info("Universal job created", [
             'job_id' => $jobId,
             'tool_type' => $toolType,
@@ -89,7 +115,43 @@ class UniversalJobService
      */
     public function getJob($jobId)
     {
-        return Cache::get("universal_job_{$jobId}");
+        // First, try to get from cache
+        $job = Cache::get("universal_job_{$jobId}");
+        if ($job) {
+            return $job;
+        }
+        
+        // If not in cache, try to get from database
+        $dbJob = \Illuminate\Support\Facades\DB::table('universal_jobs')
+            ->where('job_id', $jobId)
+            ->first();
+            
+        if ($dbJob) {
+            // Convert database record to job array format
+            $job = [
+                'id' => $dbJob->job_id,
+                'tool_type' => $dbJob->tool_type,
+                'input' => is_string($dbJob->input) ? json_decode($dbJob->input, true) : $dbJob->input,
+                'options' => is_string($dbJob->options) ? json_decode($dbJob->options, true) : $dbJob->options,
+                'user_id' => $dbJob->user_id,
+                'status' => $dbJob->status,
+                'stage' => $dbJob->stage,
+                'progress' => $dbJob->progress,
+                'created_at' => $dbJob->created_at ? date('c', strtotime($dbJob->created_at)) : null,
+                'updated_at' => $dbJob->updated_at ? date('c', strtotime($dbJob->updated_at)) : null,
+                'logs' => is_string($dbJob->logs) ? json_decode($dbJob->logs, true) : $dbJob->logs,
+                'result' => is_string($dbJob->result) ? json_decode($dbJob->result, true) : $dbJob->result,
+                'error' => $dbJob->error,
+                'metadata' => is_string($dbJob->metadata) ? json_decode($dbJob->metadata, true) : $dbJob->metadata,
+            ];
+            
+            // Restore to cache for faster access
+            Cache::put("universal_job_{$jobId}", $job, 7200);
+            
+            return $job;
+        }
+        
+        return null;
     }
 
     /**
@@ -106,6 +168,31 @@ class UniversalJobService
         $job['updated_at'] = now()->toISOString();
         
         Cache::put("universal_job_{$jobId}", $job, 7200);
+        
+        // Also update database
+        try {
+            $dbUpdates = [];
+            if (isset($updates['status'])) $dbUpdates['status'] = $updates['status'];
+            if (isset($updates['stage'])) $dbUpdates['stage'] = $updates['stage'];
+            if (isset($updates['progress'])) $dbUpdates['progress'] = $updates['progress'];
+            if (isset($updates['result'])) $dbUpdates['result'] = json_encode($updates['result']);
+            if (isset($updates['error'])) $dbUpdates['error'] = $updates['error'];
+            if (isset($updates['metadata'])) $dbUpdates['metadata'] = json_encode($updates['metadata']);
+            if (isset($updates['logs'])) $dbUpdates['logs'] = json_encode($updates['logs']);
+            if (isset($updates['processing_started_at'])) $dbUpdates['processing_started_at'] = $updates['processing_started_at'];
+            if (isset($updates['processing_completed_at'])) $dbUpdates['processing_completed_at'] = $updates['processing_completed_at'];
+            
+            $dbUpdates['updated_at'] = now();
+            
+            \Illuminate\Support\Facades\DB::table('universal_jobs')
+                ->where('job_id', $jobId)
+                ->update($dbUpdates);
+        } catch (\Exception $e) {
+            Log::warning("Failed to update job in database", [
+                'job_id' => $jobId,
+                'error' => $e->getMessage()
+            ]);
+        }
         
         return true;
     }

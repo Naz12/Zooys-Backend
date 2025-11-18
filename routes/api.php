@@ -1173,6 +1173,7 @@ Route::get('/result/document_conversion/file', function (Request $request) use (
     ]);
 });
 
+
 // 🔹 Test route to manually authenticate and upload file (bypasses auth middleware)
 Route::post('/test-upload-manual', function (Request $request) {
     $token = $request->bearerToken();
@@ -1568,6 +1569,52 @@ Route::middleware(['auth:sanctum'])->group(function () {
     
     // File Processing and Conversion
     Route::post('/file-processing/convert', [FileExtractionController::class, 'convertDocument']);
+    Route::get('/file-processing/convert/status', function (Request $request) {
+        $jobId = $request->query('job_id');
+        if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+        
+        $service = app(\App\Services\UniversalJobService::class);
+        $job = $service->getJob($jobId);
+        if (!$job) return response()->json(['error' => 'Job not found'], 404);
+        if ($job['tool_type'] !== 'document_conversion') {
+            return response()->json(['error' => 'Job tool type mismatch'], 400);
+        }
+        
+        return response()->json([
+            'job_id' => $job['id'],
+            'tool_type' => 'document_conversion',
+            'input_type' => 'file',
+            'status' => $job['status'] ?? 'unknown',
+            'progress' => $job['progress'] ?? 0,
+            'stage' => $job['stage'] ?? null,
+            'error' => $job['error'] ?? null,
+            'created_at' => $job['created_at'] ?? null,
+            'updated_at' => $job['updated_at'] ?? null
+        ]);
+    });
+    Route::get('/file-processing/convert/result', function (Request $request) {
+        $jobId = $request->query('job_id');
+        if (!$jobId) return response()->json(['error' => 'job_id parameter is required'], 400);
+        
+        $service = app(\App\Services\UniversalJobService::class);
+        $job = $service->getJob($jobId);
+        if (!$job) return response()->json(['error' => 'Job not found'], 404);
+        if ($job['tool_type'] !== 'document_conversion') {
+            return response()->json(['error' => 'Job tool type mismatch'], 400);
+        }
+        
+        if (($job['status'] ?? '') !== 'completed') {
+            return response()->json(['error' => 'Job not completed', 'status' => $job['status'] ?? 'unknown'], 409);
+        }
+        
+        return response()->json([
+            'success' => true,
+            'job_id' => $job['id'],
+            'tool_type' => 'document_conversion',
+            'input_type' => 'file',
+            'data' => $job['result'] ?? null
+        ]);
+    });
     Route::post('/file-processing/extract', [FileExtractionController::class, 'extractContent']);
     // PDF Edit operations (uses universal file IDs and job scheduler)
     Route::post('/pdf/edit/{operation}', [PdfEditController::class, 'start']);

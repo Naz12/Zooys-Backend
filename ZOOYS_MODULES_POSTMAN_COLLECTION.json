@@ -5,7 +5,190 @@
 		"description": "Complete API collection for all Zooys modules: Diagram, Math, Presentation, Summarize, PDF Operations, and Flashcards",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{auth_token}}",
+				"type": "string"
+			}
+		]
+	},
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Auto-set auth_token if not set",
+					"if (!pm.environment.get('auth_token') || pm.environment.get('auth_token') === '') {",
+					"    console.log('auth_token not set in environment');",
+					"}"
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Auto-save token from login response",
+					"if (pm.response.code === 200) {",
+					"    var jsonData = pm.response.json();",
+					"    if (jsonData.token) {",
+					"        pm.environment.set('auth_token', jsonData.token);",
+					"        console.log('Token saved to environment');",
+					"    }",
+					"}"
+				]
+			}
+		}
+	],
 	"item": [
+		{
+			"name": "🔐 Authentication",
+			"item": [
+				{
+					"name": "Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.token) {",
+									"        pm.environment.set('auth_token', jsonData.token);",
+									"        pm.environment.set('bearer_token', jsonData.token);",
+									"        console.log('✅ Token saved: ' + jsonData.token.substring(0, 20) + '...');",
+									"    }",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/login",
+							"host": ["{{base_url}}"],
+							"path": ["login"]
+						},
+						"description": "Login to get authentication token. Token will be automatically saved to environment."
+					},
+					"response": []
+				},
+				{
+					"name": "Register",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.token) {",
+									"        pm.environment.set('auth_token', jsonData.token);",
+									"        pm.environment.set('bearer_token', jsonData.token);",
+									"        console.log('✅ Token saved: ' + jsonData.token.substring(0, 20) + '...');",
+									"    }",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Test User\",\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/register",
+							"host": ["{{base_url}}"],
+							"path": ["register"]
+						},
+						"description": "Register a new user. Token will be automatically saved to environment."
+					},
+					"response": []
+				},
+				{
+					"name": "Test Token Validation",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/test-token-validation",
+							"host": ["{{base_url}}"],
+							"path": ["test-token-validation"]
+						},
+						"description": "Test if your authentication token is valid"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Current User",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/user",
+							"host": ["{{base_url}}"],
+							"path": ["user"]
+						},
+						"description": "Get current authenticated user information"
+					},
+					"response": []
+				}
+			]
+		},
 		{
 			"name": "📊 Diagram Module",
 			"item": [
@@ -2031,7 +2214,18 @@
 							"name": "Upload Single File",
 							"request": {
 								"method": "POST",
-								"header": [],
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}",
+										"type": "text"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
 								"body": {
 									"mode": "formdata",
 									"formdata": [
@@ -2039,6 +2233,12 @@
 											"key": "file",
 											"type": "file",
 											"src": []
+										},
+										{
+											"key": "metadata",
+											"value": "{}",
+											"type": "text",
+											"disabled": true
 										}
 									]
 								},
@@ -2047,7 +2247,127 @@
 									"host": ["{{base_url}}"],
 									"path": ["files", "upload"]
 								},
-								"description": "Upload a file for PDF operations"
+								"description": "Upload a file for PDF operations. Requires authentication token."
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Document Conversion",
+					"item": [
+						{
+							"name": "Submit Convert Job",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"type": "text/javascript",
+										"exec": [
+											"if (pm.response.code === 202) {",
+											"    var jsonData = pm.response.json();",
+											"    if (jsonData.job_id) {",
+											"        pm.environment.set('job_id', jsonData.job_id);",
+											"        console.log('✅ Job ID saved: ' + jsonData.job_id);",
+											"    }",
+											"}"
+										]
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"file_id\": \"{{file_id}}\",\n  \"target_format\": \"pdf\",\n  \"options\": {}\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/file-processing/convert",
+									"host": ["{{base_url}}"],
+									"path": ["file-processing", "convert"]
+								},
+								"description": "Convert a document to specified format. Supported formats: pdf, png, jpg, jpeg, docx, txt, html. Job ID will be automatically saved to environment."
+							},
+							"response": []
+						},
+						{
+							"name": "Check Convert Status",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}",
+										"type": "text"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/file-processing/convert/status?job_id={{job_id}}",
+									"host": ["{{base_url}}"],
+									"path": ["file-processing", "convert", "status"],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}",
+											"description": "Job ID from convert request"
+										}
+									]
+								},
+								"description": "Check status of document conversion job. Poll this endpoint every 2-5 seconds until status is 'completed' or 'failed'."
+							},
+							"response": []
+						},
+						{
+							"name": "Get Convert Result",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}",
+										"type": "text"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/file-processing/convert/result?job_id={{job_id}}",
+									"host": ["{{base_url}}"],
+									"path": ["file-processing", "convert", "result"],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}",
+											"description": "Job ID from convert request"
+										}
+									]
+								},
+								"description": "Get result of completed document conversion job. Only works when status is 'completed'."
 							},
 							"response": []
 						}

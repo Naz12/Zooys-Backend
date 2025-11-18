@@ -1,0 +1,63 @@
+{
+  "supported_inputs": [
+    "bmp", "doc", "docx", "gif", "htm", "html", "jpeg", "jpg", 
+    "md", "pdf", "png", "ppt", "pptx", "txt", "xls", "xlsx"
+  ],
+  "supported_outputs": [
+    "doc", "docx", "html", "jpg", "md", "pdf", "png", 
+    "ppt", "pptx", "xls", "xlsx"
+  ],
+  "conversion_matrix": {
+    "bmp": ["jpg", "pdf", "png"],
+    "doc": ["html", "jpg", "md", "pdf", "png", "pptx", "xlsx"],
+    "docx": ["html", "jpg", "md", "pdf", "png", "pptx", "xlsx"],
+    "gif": ["jpg", "pdf", "png"],
+    "htm": ["docx", "jpg", "md", "pdf", "png"],
+    "html": ["doc", "docx", "jpg", "md", "pdf", "png", "ppt", "pptx", "xls", "xlsx"],
+    "jpeg": ["jpg", "pdf", "png"],
+    "jpg": ["jpg", "pdf", "png"],
+    "md": ["doc", "docx", "html", "jpg", "pdf", "png", "ppt", "pptx", "xls", "xlsx"],
+    "pdf": ["doc", "docx", "html", "jpg", "md", "png", "ppt", "pptx", "xls", "xlsx"],
+    "png": ["jpg", "pdf", "png"],
+    "ppt": ["docx", "html", "jpg", "md", "pdf", "png", "xlsx"],
+    "pptx": ["docx", "html", "jpg", "md", "pdf", "png", "xlsx"],
+    "txt": ["doc", "docx", "html", "jpg", "md", "pdf", "png", "ppt", "pptx", "xls", "xlsx"],
+    "xls": ["docx", "html", "jpg", "md", "pdf", "png", "pptx"],
+    "xlsx": ["docx", "html", "jpg", "md", "pdf", "png", "pptx"]
+  },
+  "file_limits": {
+    "max_file_size_mb": 500,
+    "max_pages": 150000,
+    "job_ttl_hours": 24
+  },
+  "restrictions": {
+    "same_format_conversion": false,
+    "message": "Converting a file to the same format is not supported"
+  },
+  "format_categories": {
+    "images": ["bmp", "gif", "jpeg", "jpg", "png"],
+    "documents": ["doc", "docx", "pdf"],
+    "presentations": ["ppt", "pptx"],
+    "spreadsheets": ["xls", "xlsx"],
+    "text": ["txt", "md", "html", "htm"]
+  },
+  "format_display_names": {
+    "bmp": "Bitmap Image",
+    "doc": "Microsoft Word (Legacy)",
+    "docx": "Microsoft Word",
+    "gif": "GIF Image",
+    "htm": "HTML File",
+    "html": "HTML Document",
+    "jpeg": "JPEG Image",
+    "jpg": "JPEG Image",
+    "md": "Markdown",
+    "pdf": "PDF Document",
+    "png": "PNG Image",
+    "ppt": "PowerPoint (Legacy)",
+    "pptx": "PowerPoint",
+    "txt": "Plain Text",
+    "xls": "Excel (Legacy)",
+    "xlsx": "Excel"
+  }
+}
+

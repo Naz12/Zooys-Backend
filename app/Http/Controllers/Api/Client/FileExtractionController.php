@@ -35,7 +35,7 @@ class FileExtractionController extends Controller
             // Validate request
             $validator = Validator::make($request->all(), [
                 'file_id' => 'required|string|exists:file_uploads,id',
-                'target_format' => 'required|string|in:pdf,png,jpg,jpeg,docx,txt,html',
+                'target_format' => 'required|string|in:pdf,png,jpg,jpeg,docx,doc,txt,html,md,pptx,ppt,xlsx,xls',
                 'options' => 'sometimes|array'
             ]);
 
