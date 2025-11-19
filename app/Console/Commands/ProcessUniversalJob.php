@@ -61,15 +61,38 @@ class ProcessUniversalJob extends Command
             $this->line("- Progress: {$job['progress']}%");
             $this->line("- Created: {$job['created_at']}");
 
+            // Check if job is already running/completed/failed before processing
+            if ($job['status'] === 'running') {
+                $this->warn("Job is already being processed. Skipping to prevent duplicate execution.");
+                return 0;
+            }
+            
+            if ($job['status'] === 'completed') {
+                $this->info("Job already completed.");
+                return 0;
+            }
+            
+            if ($job['status'] === 'failed') {
+                $this->warn("Job already failed: " . ($job['error'] ?? 'Unknown error'));
+                return 0;
+            }
+
             // Process the job
             $this->info("Starting job processing...");
             $result = $this->universalJobService->processJob($jobId);
             
             if ($result['success']) {
                 $this->info("Job completed successfully!");
-                $this->line("Result: " . json_encode($result['data'], JSON_PRETTY_PRINT));
+                if (isset($result['data'])) {
+                    $this->line("Result: " . json_encode($result['data'], JSON_PRETTY_PRINT));
+                }
             } else {
-                $this->error("Job failed: " . $result['error']);
+                // Check if it's just a duplicate processing attempt
+                if (isset($result['status']) && $result['status'] === 'running') {
+                    $this->warn("Job is already being processed by another instance.");
+                    return 0;
+                }
+                $this->error("Job failed: " . ($result['error'] ?? 'Unknown error'));
                 return 1;
             }
 

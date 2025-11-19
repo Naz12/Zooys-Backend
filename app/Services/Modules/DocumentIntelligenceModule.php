@@ -110,7 +110,7 @@ class DocumentIntelligenceModule
             Log::info('DocumentIntelligenceModule: Generating answer', [
                 'query' => $query,
                 'doc_ids' => $options['doc_ids'] ?? [],
-                'llm_model' => $options['llm_model'] ?? 'llama3'
+                'llm_model' => $options['llm_model'] ?? 'deepseek-chat'
             ]);
 
             // Ensure force_fallback is always true
@@ -172,7 +172,7 @@ class DocumentIntelligenceModule
                 'query' => $query,
                 'conversation_id' => $options['conversation_id'] ?? null,
                 'doc_ids' => $options['doc_ids'] ?? [],
-                'llm_model' => $options['llm_model'] ?? 'llama3'
+                'llm_model' => $options['llm_model'] ?? 'deepseek-chat'
             ]);
 
             // Ensure force_fallback is always true
@@ -349,16 +349,27 @@ class DocumentIntelligenceModule
      *   - lang: Language code (default: 'eng')
      *   - metadata: Custom metadata array
      *   - force_fallback: Skip local LLM (default: true)
-     *   - llm_model: LLM model to use (default: 'llama3')
+     *   - llm_model: LLM model to use (default: 'deepseek-chat')
      * @return array Ingestion result
      */
     public function ingestText(string $text, array $options = [])
     {
         try {
+            // First, verify service is accessible
+            $healthCheck = $this->docIntelligenceService->healthCheck();
+            if (!$healthCheck['ok']) {
+                Log::warning('DocumentIntelligenceModule: Service health check failed before ingestion', [
+                    'health_status' => $healthCheck
+                ]);
+                // Continue anyway - health check might be flaky but service could still work
+            }
+            
             Log::info('DocumentIntelligenceModule: Ingesting text content', [
                 'text_length' => strlen($text),
                 'filename' => $options['filename'] ?? 'summary.txt',
-                'options' => $options
+                'options' => $options,
+                'service_url' => config('services.document_intelligence.url'),
+                'service_healthy' => $healthCheck['ok'] ?? false
             ]);
 
             // Ensure force_fallback is always true
@@ -378,15 +389,64 @@ class DocumentIntelligenceModule
                 'data' => $result
             ];
 
-        } catch (\Exception $e) {
-            Log::error('DocumentIntelligenceModule: Text ingestion failed', [
+        } catch (\InvalidArgumentException $e) {
+            // Handle validation errors (empty text, etc.)
+            Log::error('DocumentIntelligenceModule: Text ingestion validation failed', [
                 'error' => $e->getMessage(),
                 'text_length' => strlen($text)
             ]);
 
             return [
                 'success' => false,
-                'error' => $e->getMessage()
+                'error' => 'Invalid input: ' . $e->getMessage(),
+                'error_type' => 'validation_error'
+            ];
+        } catch (\RuntimeException $e) {
+            // Handle service errors
+            $errorMessage = $e->getMessage();
+            
+            // Check for common error patterns
+            $errorType = 'service_error';
+            $userFriendlyMessage = $errorMessage;
+            
+            if (strpos($errorMessage, 'endpoint not found') !== false || strpos($errorMessage, '404') !== false) {
+                $errorType = 'endpoint_not_found';
+                $userFriendlyMessage = "Document Intelligence service endpoint is not available. Please check the service configuration and ensure the '/v1/ingest/text' endpoint exists.";
+            } elseif (strpos($errorMessage, 'authentication') !== false || strpos($errorMessage, '401') !== false || strpos($errorMessage, '403') !== false) {
+                $errorType = 'authentication_error';
+                $userFriendlyMessage = "Document Intelligence authentication failed. Please verify your API credentials are correct.";
+            } elseif (strpos($errorMessage, 'temporarily unavailable') !== false || strpos($errorMessage, '500') !== false || strpos($errorMessage, '503') !== false) {
+                $errorType = 'service_unavailable';
+                $userFriendlyMessage = "Document Intelligence service is temporarily unavailable. Please try again in a few moments.";
+            } elseif (strpos($errorMessage, 'timeout') !== false || strpos($errorMessage, 'Connection') !== false) {
+                $errorType = 'connection_error';
+                $userFriendlyMessage = "Unable to connect to Document Intelligence service. Please check your network connection and service configuration.";
+            }
+            
+            Log::error('DocumentIntelligenceModule: Text ingestion failed', [
+                'error' => $errorMessage,
+                'error_type' => $errorType,
+                'text_length' => strlen($text),
+                'filename' => $options['filename'] ?? 'summary.txt'
+            ]);
+
+            return [
+                'success' => false,
+                'error' => $userFriendlyMessage,
+                'error_type' => $errorType,
+                'original_error' => $errorMessage
+            ];
+        } catch (\Exception $e) {
+            Log::error('DocumentIntelligenceModule: Text ingestion exception', [
+                'error' => $e->getMessage(),
+                'exception_type' => get_class($e),
+                'text_length' => strlen($text)
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'An unexpected error occurred while ingesting text: ' . $e->getMessage(),
+                'error_type' => 'unexpected_error'
             ];
         }
     }

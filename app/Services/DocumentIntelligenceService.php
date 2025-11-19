@@ -234,7 +234,7 @@ class DocumentIntelligenceService
      *   - lang: Language code (default: 'eng')
      *   - metadata: Custom metadata array (tags, source, etc.)
      *   - force_fallback: Skip local LLM, use remote immediately (default: true)
-     *   - llm_model: LLM model to use (default: 'llama3')
+     *   - llm_model: LLM model to use (default: 'deepseek-chat')
      * @return array Ingestion result with doc_id and job_id
      */
     public function ingestText(string $text, array $options = []): array
@@ -250,7 +250,7 @@ class DocumentIntelligenceService
         $lang = $options['lang'] ?? 'eng';
         $metadata = $options['metadata'] ?? [];
         $forceFallback = $options['force_fallback'] ?? true;
-        $llmModel = $options['llm_model'] ?? 'llama3';
+        $llmModel = $options['llm_model'] ?? 'deepseek-chat';
 
         $payload = [
             'text' => $text,
@@ -282,12 +282,75 @@ class DocumentIntelligenceService
                 return $data;
             }
 
+            $statusCode = $response->status();
+            $errorBody = $response->body();
+            $errorData = null;
+            
+            // Try to parse error response as JSON
+            try {
+                $errorData = json_decode($errorBody, true);
+            } catch (\Exception $e) {
+                // If JSON parsing fails, use raw body
+            }
+            
+            // Extract meaningful error message
+            $errorMessage = 'Unknown error';
+            if ($errorData && isset($errorData['detail'])) {
+                $errorMessage = $errorData['detail'];
+            } elseif ($errorData && isset($errorData['error'])) {
+                $errorMessage = $errorData['error'];
+            } elseif ($errorData && isset($errorData['message'])) {
+                $errorMessage = $errorData['message'];
+            } elseif (!empty($errorBody)) {
+                $errorMessage = $errorBody;
+            }
+            
+            // Provide descriptive error messages based on status code
+            $descriptiveError = '';
+            switch ($statusCode) {
+                case 404:
+                    $descriptiveError = "Document Intelligence service endpoint not found. The service may be misconfigured or the endpoint '/v1/ingest/text' does not exist. ";
+                    break;
+                case 401:
+                case 403:
+                    $descriptiveError = "Document Intelligence authentication failed. Please check your API credentials. ";
+                    break;
+                case 422:
+                    $descriptiveError = "Document Intelligence validation error. The request data may be invalid. ";
+                    break;
+                case 500:
+                case 502:
+                case 503:
+                    $descriptiveError = "Document Intelligence service is temporarily unavailable. Please try again later. ";
+                    break;
+                default:
+                    $descriptiveError = "Document Intelligence service returned an error (HTTP {$statusCode}). ";
+            }
+            
+            $fullErrorMessage = $descriptiveError . "Details: " . $errorMessage;
+            
+            $fullUrl = $this->baseUrl . $resource;
+            
             Log::error('Text ingestion failed', [
-                'status' => $response->status(),
-                'body' => $response->body()
+                'status' => $statusCode,
+                'body' => $errorBody,
+                'error_data' => $errorData,
+                'filename' => $filename,
+                'text_length' => strlen($text),
+                'base_url' => $this->baseUrl,
+                'resource' => $resource,
+                'full_url' => $fullUrl,
+                'tenant' => $this->tenantId,
+                'client_id' => $this->clientId
             ]);
+            
+            // For 404 errors, provide additional troubleshooting info
+            if ($statusCode === 404) {
+                $fullErrorMessage .= " Full URL attempted: {$fullUrl}. ";
+                $fullErrorMessage .= "Please verify: 1) The Document Intelligence service is running, 2) The endpoint '/v1/ingest/text' exists on the microservice, 3) Your service URL configuration is correct (currently: {$this->baseUrl}).";
+            }
 
-            throw new \RuntimeException("Text ingestion failed: {$response->body()}");
+            throw new \RuntimeException($fullErrorMessage);
         } catch (\Exception $e) {
             Log::error('Text ingestion exception', [
                 'filename' => $filename,

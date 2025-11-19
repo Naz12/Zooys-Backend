@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\Client\ChatMessageController;
 use App\Http\Controllers\Api\Client\SummarizeController;
 use App\Http\Controllers\Api\Client\DocumentChatController;
 use App\Http\Controllers\Api\Client\PresentationController;
+use App\Http\Controllers\Api\Client\ContentController;
 use App\Http\Controllers\Api\Client\FileExtractionController;
 use App\Http\Controllers\Api\Client\PdfEditController;
 use App\Http\Controllers\Api\Client\DocumentIntelligenceController;
@@ -1718,6 +1719,12 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Document Chat
     Route::post('/chat/document', [DocumentChatController::class, 'chat']);
     Route::get('/chat/document/{documentId}/history', [DocumentChatController::class, 'history']);
+    
+    // AI Content Writer
+    Route::post('/content/write', [ContentController::class, 'write']);
+    Route::post('/content/rewrite', [ContentController::class, 'rewrite']);
+    Route::get('/content/status', [ContentController::class, 'getStatus']);
+    Route::get('/content/result', [ContentController::class, 'getResult']);
     
     // Document Intelligence
     Route::post('/documents/ingest', [DocumentIntelligenceController::class, 'ingest']);

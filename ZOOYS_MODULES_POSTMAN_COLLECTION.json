@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "zooys-modules-collection",
 		"name": "Zooys Modules - Complete API Collection",
-		"description": "Complete API collection for all Zooys modules: Diagram, Math, Presentation, Summarize, PDF Operations, and Flashcards",
+		"description": "Complete API collection for all Zooys modules: Diagram, Math, Presentation, Summarize, PDF Operations, Flashcards, and Content Writer",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"auth": {
@@ -3562,6 +3562,194 @@
 									]
 								},
 								"description": "Get list of public flashcard sets from all users"
+							},
+							"response": []
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "✍️ Content Writer Module",
+			"item": [
+				{
+					"name": "Write Content",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.job_id) {",
+									"        pm.environment.set('job_id', jsonData.job_id);",
+									"        pm.collectionVariables.set('job_id', jsonData.job_id);",
+									"        console.log('✅ Job ID saved: ' + jsonData.job_id);",
+									"    }",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"prompt\": \"Write a blog post about the benefits of freelancing\",\n  \"mode\": \"professional\",\n  \"length\": \"medium\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/content/write",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"content",
+								"write"
+							]
+						},
+						"description": "Generate new content based on a prompt. Returns job_id for async processing. Writing modes: creative, professional, academic. Length options: short, medium, long."
+					},
+					"response": []
+				},
+				{
+					"name": "Rewrite Content",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.job_id) {",
+									"        pm.environment.set('job_id', jsonData.job_id);",
+									"        pm.collectionVariables.set('job_id', jsonData.job_id);",
+									"        console.log('✅ Job ID saved: ' + jsonData.job_id);",
+									"    }",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"previous_content\": \"Original blog content here. This is the content that needs to be rewritten based on new instructions.\",\n  \"prompt\": \"Make it more engaging and add specific examples\",\n  \"mode\": \"creative\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/content/rewrite",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"content",
+								"rewrite"
+							]
+						},
+						"description": "Rewrite existing content based on new instructions. Returns job_id for async processing. Requires previous_content and a new prompt."
+					},
+					"response": []
+				},
+				{
+					"name": "Job Status & Results",
+					"item": [
+						{
+							"name": "Get Job Status",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/content/status?job_id={{job_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"content",
+										"status"
+									],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}",
+											"description": "Job ID from write/rewrite response"
+										}
+									]
+								},
+								"description": "Poll the status of a content writing or rewriting job. Poll every 2-5 seconds until status is 'completed' or 'failed'."
+							},
+							"response": []
+						},
+						{
+							"name": "Get Job Result",
+							"request": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Authorization",
+										"value": "Bearer {{auth_token}}"
+									},
+									{
+										"key": "Accept",
+										"value": "application/json"
+									}
+								],
+								"url": {
+									"raw": "{{base_url}}/content/result?job_id={{job_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"content",
+										"result"
+									],
+									"query": [
+										{
+											"key": "job_id",
+											"value": "{{job_id}}",
+											"description": "Job ID from write/rewrite response"
+										}
+									]
+								},
+								"description": "Retrieve the completed content from a finished job. Only works when status is 'completed'."
 							},
 							"response": []
 						}

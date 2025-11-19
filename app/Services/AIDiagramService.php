@@ -29,6 +29,7 @@ class AIDiagramService
      * @param array $inputData Input data including:
      *   - prompt: Description/instruction for the diagram
      *   - diagram_type: Type of diagram to generate
+     *   - output_format: Output format (svg, pdf, png) - default: "svg"
      *   - language: Language code (optional, default: "en")
      * @param int $userId User ID
      * @return array Response with job_id from microservice
@@ -38,14 +39,15 @@ class AIDiagramService
         try {
             Log::info('AIDiagramService: Generating diagram', [
                 'diagram_type' => $inputData['diagram_type'] ?? 'unknown',
+                'output_format' => $inputData['output_format'] ?? 'svg',
                 'user_id' => $userId
             ]);
 
             // Prepare request data for microservice
             $requestData = [
-                'prompt' => $inputData['prompt'],
                 'diagram_type' => $inputData['diagram_type'],
-                'language' => $inputData['language'] ?? 'en'
+                'prompt' => $inputData['prompt'],
+                'output_format' => $inputData['output_format'] ?? 'svg'
             ];
 
             // Prepare headers with API key
@@ -103,10 +105,12 @@ class AIDiagramService
                     'microservice_job_id' => $microserviceJobId,
                     'status' => 'queued',
                     'diagram_type' => $inputData['diagram_type'],
-                    'prompt' => $inputData['prompt']
+                    'prompt' => $inputData['prompt'],
+                    'output_format' => $inputData['output_format'] ?? 'svg'
                 ],
                 [
                     'diagram_type' => $inputData['diagram_type'],
+                    'output_format' => $inputData['output_format'] ?? 'svg',
                     'language' => $inputData['language'] ?? 'en',
                     'microservice_url' => $this->microserviceUrl
                 ]
@@ -254,8 +258,17 @@ class AIDiagramService
                 ];
             }
 
+            // Get output format from AI result metadata
+            $aiResult = AIResult::find($aiResultId);
+            $outputFormat = 'svg'; // Default
+            if ($aiResult && isset($aiResult->metadata['output_format'])) {
+                $outputFormat = $aiResult->metadata['output_format'];
+            } elseif ($aiResult && isset($aiResult->result_data['output_format'])) {
+                $outputFormat = $aiResult->result_data['output_format'];
+            }
+
             // Download image from microservice
-            $imageData = $this->downloadAndStoreImage($downloadUrl, $microserviceJobId, $aiResultId);
+            $imageData = $this->downloadAndStoreImage($downloadUrl, $microserviceJobId, $aiResultId, $outputFormat);
 
             if (!$imageData['success']) {
                 return [
@@ -273,12 +286,14 @@ class AIDiagramService
                 $resultData['image_filename'] = $imageData['filename'];
                 $resultData['status'] = 'completed';
                 $resultData['download_url'] = $downloadUrl;
+                $resultData['output_format'] = $outputFormat;
 
                 $aiResult->update([
                     'result_data' => $resultData,
                     'metadata' => array_merge($aiResult->metadata ?? [], [
                         'image_downloaded_at' => now()->toISOString(),
-                        'image_size' => $imageData['size'] ?? 0
+                        'image_size' => $imageData['size'] ?? 0,
+                        'output_format' => $outputFormat
                     ])
                 ]);
             }
@@ -317,9 +332,10 @@ class AIDiagramService
      * @param string $downloadUrl Download URL from microservice
      * @param string $jobId Job ID for filename
      * @param int $aiResultId AI Result ID
+     * @param string $outputFormat Output format (svg, pdf, png) - default: "svg"
      * @return array Storage information
      */
-    private function downloadAndStoreImage(string $downloadUrl, string $jobId, int $aiResultId)
+    private function downloadAndStoreImage(string $downloadUrl, string $jobId, int $aiResultId, string $outputFormat = 'svg')
     {
         try {
             // Download image from microservice (public endpoint, no auth needed)
@@ -329,8 +345,16 @@ class AIDiagramService
                 throw new \Exception('Failed to download image: ' . $response->status());
             }
 
+            // Determine file extension based on output format
+            $extension = match($outputFormat) {
+                'pdf' => 'pdf',
+                'png' => 'png',
+                'svg' => 'svg',
+                default => 'svg'
+            };
+
             // Generate unique filename
-            $filename = 'diagram_' . substr($jobId, 0, 8) . '_' . $aiResultId . '.png';
+            $filename = 'diagram_' . substr($jobId, 0, 8) . '_' . $aiResultId . '.' . $extension;
             $storagePath = 'diagrams/' . date('Y-m-d') . '/' . $filename;
 
             // Store image in Laravel storage

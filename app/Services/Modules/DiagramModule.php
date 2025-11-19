@@ -20,6 +20,7 @@ class DiagramModule
      * @param array $inputData Input data including:
      *   - prompt: Description/instruction for the diagram
      *   - diagram_type: Type of diagram to generate
+     *   - output_format: Output format (svg, pdf, png) - optional, default: "svg"
      *   - language: Language code (optional, default: "en")
      * @param int $userId User ID
      * @return array Response with job_id

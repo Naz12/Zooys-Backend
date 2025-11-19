@@ -37,6 +37,7 @@ class DiagramController extends Controller
         $validator = Validator::make($request->all(), [
             'prompt' => 'required|string|max:2000',
             'diagram_type' => 'required|string|in:flowchart,sequence,class,state,er,user_journey,block,mindmap,pie,quadrant,timeline,sankey,xy',
+            'output_format' => 'nullable|string|in:svg,pdf,png',
             'language' => 'nullable|string|max:10'
         ]);
 
@@ -60,6 +61,7 @@ class DiagramController extends Controller
             $inputData = [
                 'prompt' => $request->input('prompt'),
                 'diagram_type' => $request->input('diagram_type'),
+                'output_format' => $request->input('output_format', 'svg'),
                 'language' => $request->input('language', 'en')
             ];
 

@@ -12,6 +12,7 @@ use App\Services\Modules\FileOperationsModule;
 use App\Services\Modules\DocumentIntelligenceModule;
 use App\Services\Modules\FlashcardModule;
 use App\Services\Modules\VisitorTrackingModule;
+use App\Services\Modules\WriterModule;
 
 class ModuleRegistry
 {
@@ -287,6 +288,19 @@ class ModuleRegistry
                 'supported_tools' => ['dashboard', 'ai_chat', 'pdf_editor', 'math', 'flashcards', 'presentations', 'diagrams'],
                 'location_tracking' => true,
                 'session_tracking' => true,
+            ]
+        ]);
+
+        // Register Content Writer Module
+        self::registerModule('content', [
+            'class' => WriterModule::class,
+            'description' => 'AI-powered content writing and rewriting',
+            'dependencies' => ['ai_processing'],
+            'config' => [
+                'supported_modes' => ['creative', 'professional', 'academic'],
+                'default_mode' => 'professional',
+                'max_prompt_length' => 5000,
+                'max_content_length' => 10000
             ]
         ]);
     }
