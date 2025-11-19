@@ -1548,6 +1548,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/files/test-upload', [FileUploadController::class, 'testUpload']); // Test endpoint
     Route::get('/files', [FileUploadController::class, 'index']);
     Route::get('/files/{id}', [FileUploadController::class, 'show']);
+    Route::get('/files/{id}/download', [FileUploadController::class, 'download']);
     Route::delete('/files/{id}', [FileUploadController::class, 'destroy']);
     Route::get('/files/{id}/content', [FileUploadController::class, 'content']);
     

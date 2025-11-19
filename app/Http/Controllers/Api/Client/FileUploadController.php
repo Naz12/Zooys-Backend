@@ -132,8 +132,15 @@ class FileUploadController extends Controller
 
         $files = $this->fileUploadService->getUserFiles($user->id, $perPage, $search);
 
+        // Add download_url to each file
+        $filesData = collect($files->items())->map(function ($file) {
+            $fileArray = $file->toArray();
+            $fileArray['download_url'] = url('/api/files/' . $file->id . '/download');
+            return $fileArray;
+        });
+
         return response()->json([
-            'files' => $files->items(),
+            'files' => $filesData,
             'pagination' => [
                 'current_page' => $files->currentPage(),
                 'last_page' => $files->lastPage(),
@@ -157,8 +164,11 @@ class FileUploadController extends Controller
             ], 404);
         }
 
+        $fileData = $file->toArray();
+        $fileData['download_url'] = url('/api/files/' . $file->id . '/download');
+
         return response()->json([
-            'file' => $file
+            'file' => $fileData
         ]);
     }
 
@@ -215,6 +225,33 @@ class FileUploadController extends Controller
         return response()->json([
             'error' => $result['error']
         ], 400);
+    }
+
+    /**
+     * Download a file
+     */
+    public function download(Request $request, $id)
+    {
+        $user = $request->user();
+        $file = \App\Models\FileUpload::where('user_id', $user->id)->find($id);
+
+        if (!$file) {
+            return response()->json([
+                'error' => 'File not found'
+            ], 404);
+        }
+
+        $filePath = storage_path('app/' . $file->file_path);
+
+        if (!file_exists($filePath)) {
+            return response()->json([
+                'error' => 'File not found on server'
+            ], 404);
+        }
+
+        return response()->download($filePath, $file->original_name, [
+            'Content-Type' => $file->mime_type,
+        ]);
     }
 
     /**
