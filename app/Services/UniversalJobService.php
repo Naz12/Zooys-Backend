@@ -988,14 +988,23 @@ class UniversalJobService
             $docIntelligenceModule = app(\App\Services\Modules\DocumentIntelligenceModule::class);
             
             // Note: filename must be "summary.txt" as per Document Intelligence API requirements
+            // Prepare metadata - match the working Postman example format exactly
+            $metadata = [
+                'tags' => ['summary', 'text'],
+                'source' => 'text',
+            ];
+            
+            if ($userId) {
+                $metadata['user_id'] = (string) $userId;
+            }
+            
+            $metadata['date'] = date('Y-m-d');
+            
             $ingestResult = $docIntelligenceModule->ingestText($text, [
                 'filename' => 'summary.txt',
-                'metadata' => [
-                    'source' => 'text',
-                    'user_id' => $userId
-                ],
+                'metadata' => $metadata,
                 'force_fallback' => true,
-                'llm_model' => $options['llm_model'] ?? 'llama3'
+                'llm_model' => 'deepseek-chat'
             ]);
             
             if (!$ingestResult['success'] || empty($ingestResult['doc_id'])) {
@@ -1297,16 +1306,44 @@ class UniversalJobService
             }
 
             // Get article text for ingestion (prefer article_text from bundle, fallback to transcript)
-            $articleText = $transcriptionResult['article_text'] ?? $transcript;
+            // Handle case where article_text might be an array (from bundle format)
+            $articleTextRaw = $transcriptionResult['article_text'] ?? $transcript;
+            
+            // Convert to string if it's an array
+            if (is_array($articleTextRaw)) {
+                // If it's an array, try to extract text from it or fallback to transcript
+                if (isset($articleTextRaw['text'])) {
+                    $articleText = $articleTextRaw['text'];
+                } elseif (isset($articleTextRaw['content'])) {
+                    $articleText = $articleTextRaw['content'];
+                } elseif (is_array($articleTextRaw) && !empty($articleTextRaw)) {
+                    // If it's a simple array, try to join it
+                    $articleText = is_array($articleTextRaw) ? implode("\n", array_filter($articleTextRaw, 'is_string')) : $transcript;
+                } else {
+                    $articleText = $transcript;
+                }
+            } else {
+                $articleText = is_string($articleTextRaw) ? $articleTextRaw : $transcript;
+            }
+            
+            // Ensure articleText is a string (final safety check)
+            if (!is_string($articleText)) {
+                $this->addLog($jobId, "Article text is not a string, using transcript instead", 'warning', [
+                    'article_text_type' => gettype($articleText),
+                    'article_text_value' => is_array($articleText) ? json_encode($articleText) : (string) $articleText
+                ]);
+                $articleText = $transcript;
+            }
             
             // Ensure we have actual content before proceeding
             $articleTextTrimmed = trim($articleText);
             if (empty($articleTextTrimmed)) {
-                $errorMessage = "No article text or transcript available for ingestion. Transcript length: " . strlen($transcript) . ", Article text length: " . strlen($transcriptionResult['article_text'] ?? '');
+                $errorMessage = "No article text or transcript available for ingestion. Transcript length: " . strlen($transcript) . ", Article text length: " . strlen($articleText);
                 $this->addLog($jobId, $errorMessage, 'error', [
                     'transcription_result' => $transcriptionResult,
                     'transcript' => substr($transcript, 0, 100),
-                    'article_text' => substr($transcriptionResult['article_text'] ?? '', 0, 100)
+                    'article_text' => substr($articleText, 0, 100),
+                    'article_text_type' => gettype($articleText)
                 ]);
                 $this->failJob($jobId, $errorMessage);
                 return [
@@ -1353,18 +1390,38 @@ class UniversalJobService
             $docIntelligenceModule = app(\App\Services\Modules\DocumentIntelligenceModule::class);
             $videoId = $transcriptionResult['video_id'] ?? 'unknown';
             
+            // Prepare metadata - match the working Postman example format exactly
+            // Working example uses: { "tags": ["summary", "external"], "business_unit": "ops", "date": "2024-06-01" }
+            // Use tags array format like the working example
+            $metadata = [
+                'tags' => ['summary', 'youtube'],
+                'source' => 'youtube',
+                'video_id' => (string) $videoId,
+            ];
+            
+            // Only add user_id if userId is valid and cast to string to avoid type issues
+            if (!empty($userId) && is_numeric($userId)) {
+                $metadata['user_id'] = (string) $userId;
+            }
+            
+            // Add date like working example
+            $metadata['date'] = date('Y-m-d');
+            
+            // Determine language code - convert 'auto' to 'eng', use detected language if valid
+            $lang = 'eng'; // Default
+            if (!empty($transcriptionResult['language']) && $transcriptionResult['language'] !== 'auto') {
+                // Use detected language if it's a valid code (not 'auto')
+                $lang = (string) $transcriptionResult['language'];
+            }
+            
             // Use trimmed content for ingestion
-            // Note: filename must be "summary.txt" as per Document Intelligence API requirements
+            // Note: filename must always be "summary.txt", force_fallback must always be true, llm_model must always be "deepseek-chat"
             $ingestResult = $docIntelligenceModule->ingestText($articleTextTrimmed, [
                 'filename' => 'summary.txt',
-                'metadata' => [
-                    'source' => 'youtube',
-                    'video_id' => $videoId,
-                    'user_id' => $userId,
-                    'language' => $transcriptionResult['language'] ?? null
-                ],
+                'lang' => $lang,
+                'metadata' => $metadata,
                 'force_fallback' => true,
-                'llm_model' => $options['llm_model'] ?? 'llama3'
+                'llm_model' => 'deepseek-chat'
             ]);
             
             if (!$ingestResult['success'] || empty($ingestResult['doc_id'])) {
@@ -1617,13 +1674,24 @@ class UniversalJobService
             
             $docIntelligenceModule = app(\App\Services\Modules\DocumentIntelligenceModule::class);
             
+            // Prepare metadata - match the working Postman example format exactly
+            $metadata = [
+                'tags' => ['summary', 'web'],
+                'source' => 'web',
+                'url' => $url,
+            ];
+            
+            if ($userId) {
+                $metadata['user_id'] = (string) $userId;
+            }
+            
+            $metadata['date'] = date('Y-m-d');
+            
             $ingestResult = $docIntelligenceModule->ingestText($content, [
                 'filename' => 'web_content.txt',
-                'metadata' => [
-                    'source' => 'web',
-                    'url' => $url,
-                    'user_id' => $userId
-                ]
+                'metadata' => $metadata,
+                'force_fallback' => true,
+                'llm_model' => 'deepseek-chat'
             ]);
             
             if (!$ingestResult['success'] || empty($ingestResult['doc_id'])) {
@@ -2019,17 +2087,25 @@ class UniversalJobService
             $userId = $file->user_id ?? null;
             
             // Use trimmed content for ingestion
-            // Note: filename must be "summary.txt" as per Document Intelligence API requirements
+            // Note: filename must always be "summary.txt", force_fallback must always be true, llm_model must always be "deepseek-chat"
+            // Prepare metadata - match the working Postman example format exactly
+            $metadata = [
+                'tags' => ['summary', $file->file_type],
+                'source' => $file->file_type,
+                'file_id' => (string) $file->id,
+            ];
+            
+            if ($userId) {
+                $metadata['user_id'] = (string) $userId;
+            }
+            
+            $metadata['date'] = date('Y-m-d');
+            
             $ingestResult = $docIntelligenceModule->ingestText($articleTextTrimmed, [
                 'filename' => 'summary.txt',
-                'metadata' => [
-                    'source' => $file->file_type,
-                    'file_id' => $file->id,
-                    'user_id' => $userId,
-                    'language' => $transcriptionResult['language'] ?? null
-                ],
+                'metadata' => $metadata,
                 'force_fallback' => true,
-                'llm_model' => $options['llm_model'] ?? 'llama3'
+                'llm_model' => 'deepseek-chat'
             ]);
             
             if (!$ingestResult['success'] || empty($ingestResult['doc_id'])) {
@@ -2797,7 +2873,7 @@ class UniversalJobService
                 // Cap parameters to prevent service errors
                 $maxTokens = min($options['max_tokens'] ?? 512, 512);
                 $topK = min($options['top_k'] ?? 3, 3);
-                $llmModel = $options['llm_model'] ?? 'llama3';
+                $llmModel = $options['llm_model'] ?? 'deepseek-chat';
                 $temperature = $options['temperature'] ?? 0.7;
                 $forceFallback = true; // Always true for Document Intelligence microservice
                 
@@ -4266,7 +4342,7 @@ class UniversalJobService
                 $ingestionOptions = [
                     'filename' => $params['filename'] ?? 'summary.txt',
                     'lang' => $params['lang'] ?? 'eng',
-                    'llm_model' => $params['llm_model'] ?? 'llama3',
+                    'llm_model' => $params['llm_model'] ?? 'deepseek-chat',
                     'force_fallback' => $params['force_fallback'] ?? true,
                     'metadata' => $params['metadata'] ?? []
                 ];
@@ -4381,7 +4457,7 @@ class UniversalJobService
 
                 $answerOptions = [
                     'doc_ids' => $docIds,
-                    'llm_model' => $params['llm_model'] ?? 'llama3',
+                    'llm_model' => $params['llm_model'] ?? 'deepseek-chat',
                     'max_tokens' => $params['max_tokens'] ?? 512,
                     'top_k' => $params['top_k'] ?? 3,
                     'temperature' => $params['temperature'] ?? null,
@@ -4427,7 +4503,7 @@ class UniversalJobService
                 $chatOptions = [
                     'doc_ids' => $docIds,
                     'conversation_id' => $params['conversation_id'] ?? null,
-                    'llm_model' => $params['llm_model'] ?? 'llama3',
+                    'llm_model' => $params['llm_model'] ?? 'deepseek-chat',
                     'max_tokens' => $params['max_tokens'] ?? 512,
                     'top_k' => $params['top_k'] ?? 3,
                     'filters' => $params['filters'] ?? []

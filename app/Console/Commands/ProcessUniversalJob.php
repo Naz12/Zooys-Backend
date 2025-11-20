@@ -84,7 +84,7 @@ class ProcessUniversalJob extends Command
             if ($result['success']) {
                 $this->info("Job completed successfully!");
                 if (isset($result['data'])) {
-                    $this->line("Result: " . json_encode($result['data'], JSON_PRETTY_PRINT));
+                $this->line("Result: " . json_encode($result['data'], JSON_PRETTY_PRINT));
                 }
             } else {
                 // Check if it's just a duplicate processing attempt

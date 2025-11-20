@@ -261,25 +261,108 @@ class DocumentIntelligenceService
         ];
 
         if (!empty($metadata)) {
-            $payload['metadata'] = $metadata;
+            // Ensure metadata values are all strings or arrays of strings (no integers, no nested objects)
+            $cleanMetadata = [];
+            foreach ($metadata as $key => $value) {
+                if (is_array($value)) {
+                    // Keep arrays as-is (like tags array in working example)
+                    $cleanMetadata[$key] = $value;
+                } elseif (is_scalar($value)) {
+                    // Convert all scalar values to strings
+                    $cleanMetadata[$key] = (string) $value;
+                }
+                // Skip null, objects, etc.
+            }
+            $payload['metadata'] = $cleanMetadata;
         }
 
+        // Log the exact payload being sent for debugging
+        Log::debug('DocumentIntelligenceService: Sending ingestText payload', [
+            'text_length' => strlen($text),
+            'filename' => $filename,
+            'lang' => $lang,
+            'force_fallback' => $forceFallback,
+            'llm_model' => $llmModel,
+            'metadata' => $payload['metadata'] ?? null,
+            'payload_json' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+        ]);
+
         try {
-            $response = Http::timeout($this->timeout)
-                ->withHeaders(array_merge($headers, [
-                    'Content-Type' => 'application/json'
-                ]))
-                ->post($this->baseUrl . $resource, $payload);
+            // Explicitly JSON encode the payload to ensure proper serialization
+            // This matches the working direct test approach
+            $jsonPayload = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            
+            // Validate JSON encoding succeeded
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                throw new \RuntimeException('Failed to encode payload as JSON: ' . json_last_error_msg());
+            }
+            
+            // Log the exact request being sent
+            Log::debug('DocumentIntelligenceService: Sending HTTP request', [
+                'method' => 'POST',
+                'url' => $this->baseUrl . $resource,
+                'headers' => array_merge($headers, ['Content-Type' => 'application/json']),
+                'body_length' => strlen($jsonPayload),
+                'body_preview' => substr($jsonPayload, 0, 500),
+            ]);
+            
+            // Try as form data (like document ingestion endpoint)
+            // The service might expect form data instead of JSON
+            $request = Http::timeout($this->timeout)
+                ->withHeaders($headers)
+                ->asMultipart()
+                ->attach('text', $text)
+                ->attach('filename', $filename)
+                ->attach('lang', $lang)
+                ->attach('force_fallback', $forceFallback ? 'true' : 'false')
+                ->attach('llm_model', $llmModel);
+            
+            if (!empty($cleanMetadata)) {
+                $request = $request->attach('metadata', json_encode($cleanMetadata));
+            }
+            
+            $response = $request->post($this->baseUrl . $resource);
+            
+            // Log response details immediately
+            Log::debug('DocumentIntelligenceService: Received HTTP response', [
+                'status_code' => $response->status(),
+                'successful' => $response->successful(),
+                'response_body_preview' => substr($response->body(), 0, 500),
+                'response_body_length' => strlen($response->body()),
+                'response_headers' => $response->headers(),
+            ]);
 
             if ($response->successful()) {
-                $data = $response->json();
-                Log::info('Text ingestion started', [
-                    'filename' => $filename,
-                    'text_length' => strlen($text),
-                    'doc_id' => $data['doc_id'] ?? null,
-                    'job_id' => $data['job_id'] ?? null
-                ]);
-                return $data;
+                try {
+                    $data = $response->json();
+                    
+                    // Check if response contains an error even though HTTP status is 200
+                    if (isset($data['error']) || isset($data['message']) && strpos(strtolower($data['message'] ?? ''), 'error') !== false) {
+                        Log::warning('DocumentIntelligenceService: Response marked as successful but contains error', [
+                            'http_status' => $response->status(),
+                            'response_data' => $data,
+                            'response_body' => $response->body(),
+                        ]);
+                    }
+                    
+                    Log::info('Text ingestion started', [
+                        'filename' => $filename,
+                        'text_length' => strlen($text),
+                        'doc_id' => $data['doc_id'] ?? null,
+                        'job_id' => $data['job_id'] ?? null,
+                        'full_response' => $data
+                    ]);
+                    return $data;
+                } catch (\Exception $jsonException) {
+                    // If JSON parsing fails, log the raw response
+                    Log::error('DocumentIntelligenceService: Failed to parse successful response as JSON', [
+                        'http_status' => $response->status(),
+                        'response_body' => $response->body(),
+                        'response_body_length' => strlen($response->body()),
+                        'json_error' => $jsonException->getMessage(),
+                    ]);
+                    throw new \RuntimeException('Failed to parse response from Document Intelligence service: ' . $jsonException->getMessage());
+                }
             }
 
             $statusCode = $response->status();
@@ -293,16 +376,21 @@ class DocumentIntelligenceService
                 // If JSON parsing fails, use raw body
             }
             
-            // Extract meaningful error message
+            // Extract meaningful error message - ensure it's always a string
             $errorMessage = 'Unknown error';
             if ($errorData && isset($errorData['detail'])) {
-                $errorMessage = $errorData['detail'];
+                // Handle detail as array (FastAPI validation errors) or string
+                if (is_array($errorData['detail'])) {
+                    $errorMessage = json_encode($errorData['detail'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                } else {
+                    $errorMessage = (string) $errorData['detail'];
+                }
             } elseif ($errorData && isset($errorData['error'])) {
-                $errorMessage = $errorData['error'];
+                $errorMessage = is_array($errorData['error']) ? json_encode($errorData['error']) : (string) $errorData['error'];
             } elseif ($errorData && isset($errorData['message'])) {
-                $errorMessage = $errorData['message'];
+                $errorMessage = is_array($errorData['message']) ? json_encode($errorData['message']) : (string) $errorData['message'];
             } elseif (!empty($errorBody)) {
-                $errorMessage = $errorBody;
+                $errorMessage = (string) $errorBody;
             }
             
             // Provide descriptive error messages based on status code
@@ -331,17 +419,38 @@ class DocumentIntelligenceService
             
             $fullUrl = $this->baseUrl . $resource;
             
-            Log::error('Text ingestion failed', [
-                'status' => $statusCode,
-                'body' => $errorBody,
-                'error_data' => $errorData,
-                'filename' => $filename,
-                'text_length' => strlen($text),
-                'base_url' => $this->baseUrl,
-                'resource' => $resource,
-                'full_url' => $fullUrl,
-                'tenant' => $this->tenantId,
-                'client_id' => $this->clientId
+            // Enhanced error logging with full request/response details
+            Log::error('Text ingestion failed - Detailed Error', [
+                'http_status' => $statusCode,
+                'response_body' => $errorBody,
+                'response_body_length' => strlen($errorBody),
+                'error_data_parsed' => $errorData,
+                'error_data_keys' => $errorData ? array_keys($errorData) : [],
+                'request_details' => [
+                    'filename' => $filename,
+                    'lang' => $lang,
+                    'force_fallback' => $forceFallback,
+                    'llm_model' => $llmModel,
+                    'text_length' => strlen($text),
+                    'text_preview' => substr($text, 0, 200),
+                    'metadata' => $payload['metadata'] ?? null,
+                    'metadata_type' => gettype($payload['metadata'] ?? null),
+                    'metadata_keys' => !empty($payload['metadata']) ? array_keys($payload['metadata']) : [],
+                    'metadata_values_types' => !empty($payload['metadata']) ? array_map('gettype', $payload['metadata']) : [],
+                ],
+                'payload_json' => $jsonPayload ?? json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'payload_json_length' => strlen($jsonPayload ?? json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)),
+                'service_config' => [
+                    'base_url' => $this->baseUrl,
+                    'resource' => $resource,
+                    'full_url' => $fullUrl,
+                    'tenant' => $this->tenantId,
+                    'client_id' => $this->clientId,
+                    'key_id' => $this->keyId,
+                ],
+                'headers_sent' => array_merge($headers, [
+                    'Content-Type' => 'application/json'
+                ]),
             ]);
             
             // For 404 errors, provide additional troubleshooting info
@@ -352,9 +461,29 @@ class DocumentIntelligenceService
 
             throw new \RuntimeException($fullErrorMessage);
         } catch (\Exception $e) {
+            // Enhanced error logging with full context
             Log::error('Text ingestion exception', [
                 'filename' => $filename,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'exception_type' => get_class($e),
+                'exception_code' => $e->getCode(),
+                'exception_file' => $e->getFile(),
+                'exception_line' => $e->getLine(),
+                'exception_trace' => $e->getTraceAsString(),
+                'text_length' => strlen($text),
+                'text_preview' => substr($text, 0, 200),
+                'payload_sent' => [
+                    'filename' => $filename,
+                    'lang' => $lang,
+                    'force_fallback' => $forceFallback,
+                    'llm_model' => $llmModel,
+                    'metadata' => $payload['metadata'] ?? null,
+                    'has_metadata' => !empty($payload['metadata']),
+                    'metadata_keys' => !empty($payload['metadata']) ? array_keys($payload['metadata']) : [],
+                ],
+                'base_url' => $this->baseUrl,
+                'resource' => $resource,
+                'full_url' => $this->baseUrl . $resource,
             ]);
             throw $e;
         }

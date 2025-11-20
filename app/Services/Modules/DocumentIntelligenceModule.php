@@ -437,16 +437,38 @@ class DocumentIntelligenceModule
                 'original_error' => $errorMessage
             ];
         } catch (\Exception $e) {
-            Log::error('DocumentIntelligenceModule: Text ingestion exception', [
+            // Enhanced error logging with full exception details
+            $exceptionDetails = [
                 'error' => $e->getMessage(),
                 'exception_type' => get_class($e),
-                'text_length' => strlen($text)
-            ]);
+                'exception_code' => $e->getCode(),
+                'exception_file' => $e->getFile(),
+                'exception_line' => $e->getLine(),
+                'text_length' => strlen($text),
+                'text_preview' => substr($text, 0, 200),
+                'options' => $options,
+                'service_url' => config('services.document_intelligence.url'),
+            ];
+            
+            // If it's a RuntimeException, try to extract more details
+            if ($e instanceof \RuntimeException) {
+                $exceptionDetails['runtime_error'] = $e->getMessage();
+                $exceptionDetails['full_trace'] = $e->getTraceAsString();
+            }
+            
+            Log::error('DocumentIntelligenceModule: Text ingestion exception - Full Details', $exceptionDetails);
 
             return [
                 'success' => false,
                 'error' => 'An unexpected error occurred while ingesting text: ' . $e->getMessage(),
-                'error_type' => 'unexpected_error'
+                'error_type' => 'unexpected_error',
+                'original_error' => $e->getMessage(),
+                'exception_type' => get_class($e),
+                'exception_details' => [
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                    'code' => $e->getCode()
+                ]
             ];
         }
     }
